@@ -1,45 +1,76 @@
 # SRE Agent (`sre.kubebee.com`)
 
-An intelligent, proactive Kubernetes SRE Agent written in Go that autonomously detects cluster anomalies, triages root causes using external LLMs or agent harnesses (Claude, Codex/GPT-4o, DeepSeek, or CLI agent harness), and proposes safe remediations that execute **strictly with explicit human permission**.
+An intelligent, proactive Kubernetes SRE Agent written in Go that provides full **K8sGPT-compatible anomaly scanning & analyzers**, **cluster hygiene & error pod clean up**, **multi-LLM triage** (Claude, Codex/GPT-4o, DeepSeek, or CLI agent harness), an **interactive dark-mode Web UI**, and **rich notifications with approval actions for Slack, Discord, and Microsoft Teams**.
+
+All remediation actions execute **strictly with explicit human permission**.
 
 ---
 
-## Key Highlights
+## Complete Feature Matrix
 
-- **Proactive Cluster Telemetry Scanning:**
-  Continuously monitors Kubernetes workloads for anomalies:
-  - `CrashLoopBackOff` & high restart frequency
-  - `OOMKilled` (exit code 137 / cgroup memory limits)
-  - `ImagePullBackOff` & `ErrImagePull`
-  - Container configuration errors & probe failures
-  - Unschedulable / Pending pods & PVC volume claims
-  - Node conditions & resource pressures (`DiskPressure`, `MemoryPressure`, `PIDPressure`)
-  - Services with 0 ready endpoints
-  - Warning events and tail log capture
+### 1. K8sGPT-Compatible Analyzers
 
-- **Multi-Model Triage Engine (No Ollama):**
-  - **Claude** (Anthropic `claude-3-7-sonnet`, `claude-3-5-sonnet`)
-  - **Codex / OpenAI** (`gpt-4o`, `o1`, `gpt-4-turbo`)
-  - **DeepSeek** (`deepseek-chat`, `deepseek-reasoner` V3/R1)
-  - **External Agent Harness** (Executes modular CLI harnesses like Claude Code or DeepSeek CLI)
-  - **Rule-Based SRE Engine** (Offline, zero-API fallback with deterministic diagnoses)
+| Analyzer | Resource | Failure Modes Detected |
+|---|---|---|
+| **`PodAnalyzer`** | Pod | `CrashLoopBackOff`, `OOMKilled` (exit 137), `ImagePullBackOff`, `CreateContainerConfigError`, `Evicted`, `StuckTerminating` (> 5m), High Restarts (> 5), probe failures, and unschedulable pending states. |
+| **`DeploymentAnalyzer`** | Deployment | Ready replica deficits (`status.readyReplicas < spec.replicas`), unavailable replicas, and rollout progress deadline failures. |
+| **`StatefulSetAnalyzer`** | StatefulSet | Partition blocks, ready replica mismatches, and unready stateful pods. |
+| **`DaemonSetAnalyzer`** | DaemonSet | Desired vs scheduled discrepancies, unready daemon pods across eligible nodes. |
+| **`ReplicaSetAnalyzer`** | ReplicaSet | Failing pod templates, quota exhaustion, and stuck replica provisionings. |
+| **`JobAnalyzer`** | Job | Backoff limits exceeded, active deadlines exceeded, and failed batch pods. |
+| **`CronJobAnalyzer`** | CronJob | Missing or invalid cron schedule expressions, suspended cron executions. |
+| **`ServiceAnalyzer`** | Service | Pod selector matching 0 ready endpoints, port/targetPort mismatches. |
+| **`IngressAnalyzer`** | Ingress | Backend service not found in namespace, missing TLS secret (e.g. pending cert-manager), missing ingress class. |
+| **`NetworkPolicyAnalyzer`**| NetworkPolicy | Orphaned policies matching 0 pods in target namespace. |
+| **`PVCAnalyzer`** | PVC / PV | Stuck `Pending` PVCs, missing StorageClasses, `ClaimLost`, and `Failed`/`Released` PersistentVolumes. |
+| **`NodeAnalyzer`** | Node | `NodeNotReady`, `DiskPressure`, `MemoryPressure`, `PIDPressure`, and network degradation. |
+| **`HPAAnalyzer`** | HPA | Metrics server unavailable (`ScalingActive: False`) and `ScalingLimited: True` (maxReplicas reached). |
+| **`PDBAnalyzer`** | PDB | `0` disruptions allowed blocking node maintenance, upgrades, and drains. |
 
-- **Strict Permission-Gated Remediation:**
-  - **Zero blind mutations**: All diagnoses start in `PENDING_APPROVAL` status.
-  - Remediation actions (pod restart, node cordon, pod cleanup, gitops PR proposals) are **blocked** until an SRE approves them via the Web Dashboard or REST API.
-  - Full audit trail of approvals, rejections, timestamps, and execution output.
+---
 
-- **Automated Credential Sanitizer:**
-  Logs, events, and configuration snippets are scrubbed before sending to LLM APIs. Automatically redacts:
-  - Private keys (`-----BEGIN RSA PRIVATE KEY-----`)
-  - Bearer tokens and JWTs
-  - Passwords, API keys, and auth secrets (`token=`, `password=`, `api_key=`)
-  - Sensitive environment variables (`*SECRET*`, `*KEY*`, `*PASSWORD*`)
+### 2. Cluster Hygiene & Error Pod Auto-Cleaner
 
-- **Built-in Web Dashboard & Notification Webhooks:**
-  - Embedded responsive dark-mode Tailwind UI served directly from the single binary.
-  - Real-time cluster health summary, anomaly browser, pod log inspector, and pending approval action center.
-  - Dispatches Slack/Discord notifications with direct approval links on critical incidents.
+Integrated directly from cluster-maintainer operational patterns:
+- **Evicted Pods**: Scans and cleans up pods terminated due to node disk or memory pressure (`Reason: Evicted`).
+- **Failed Pods**: Cleans up failed non-restartable workloads (`Phase: Failed`).
+- **Completed Batch Jobs**: Prunes legacy job pods older than 1 hour (`Phase: Succeeded`).
+- **Stuck Terminating Pods**: Detects pods stuck terminating for > 5 minutes with finalizers or unreachable runtimes, supporting safe or grace-period=0 force cleanups.
+- **One-Click Batch Execution**: Clean single pods or multi-select pods with dry-run support via Web UI or `POST /api/clean/pods`.
+
+---
+
+### 3. Multi-LLM Triage & Interactive Assistant (No Ollama)
+
+- **Anthropic Claude**: `claude-3-7-sonnet`, `claude-3-5-sonnet`
+- **OpenAI / Codex**: `gpt-4o`, `o1`, `gpt-4-turbo`
+- **DeepSeek**: `deepseek-chat`, `deepseek-reasoner` (V3 / R1)
+- **External Agent Harness**: Executes external CLI agent harnesses via stdin/stdout contract
+- **Deterministic Rule-Based SRE Engine**: Offline, zero-API fallback with deterministic diagnoses and recommended commands
+- **Interactive SRE Chat**: Interactive terminal in Web UI (`/api/chat`) where engineers can ask follow-up questions about anomalies, log traces, and remediation advice.
+
+---
+
+### 4. Supported Instant Messaging (IM) Integrations
+
+Real-time alert dispatching with instant approval links:
+- **Slack**: Formatted using Slack Block Kit with severity badges, root cause summary, proposed commands, and direct link to approve.
+- **Discord**: Dispatches native Discord Rich Embeds with color bars (`#E53E3E` for Critical, `#DD6B20` for High), field breakdown, and one-click review button.
+- **Microsoft Teams**: Dispatches Adaptive MessageCards with action buttons.
+- **Test Alert Verification**: One-click webhook test ping directly from the Web UI (`POST /api/notify/test`).
+
+---
+
+### 5. Permission-Gated Remediation Workflow
+
+- **Status starts in `PENDING_APPROVAL`**: Zero mutations occur autonomously.
+- **Remediation Actions Supported**:
+  - `RestartPod`: Safe deletion allowing controllers to restart container cleanly.
+  - `RolloutRestart`: Strategic merge patch (`kubectl.kubernetes.io/restartedAt`) triggering zero-downtime rolling update of Deployments.
+  - `CordonNode`: Safely marks degraded nodes as unschedulable.
+  - `DeleteFailedPod`: Removes dead or stuck terminating pods.
+  - `GitOpsPR`: Emits declarative YAML modifications (e.g. bumping memory limits for OOMKilled workloads) to avoid cluster drift.
+  - `Manual`: Action plan with exact troubleshooting kubectl commands.
 
 ---
 
@@ -53,14 +84,14 @@ An intelligent, proactive Kubernetes SRE Agent written in Go that autonomously d
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │   Telemetry Scanner     │
-                    │  (Deterministic Rules)  │
+                    │   14+ K8sGPT Analyzers  │
+                    │   + Pod Cleaner Engine  │
                     └────────────┬────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
                     │   Sensitive Sanitizer   │
-                    │ (Redact Keys, Tokens)   │
+                    │ (Redacts Keys & Tokens) │
                     └────────────┬────────────┘
                                  │
                                  ▼
@@ -72,14 +103,14 @@ An intelligent, proactive Kubernetes SRE Agent written in Go that autonomously d
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │  Remediation Engine     │
+                    │   Remediation Engine    │
                     │ (Status: PENDING_APPR)  │
                     └────────────┬────────────┘
                                  │
          ┌───────────────────────┴───────────────────────┐
          ▼                                               ▼
 ┌─────────────────────────┐                     ┌─────────────────────────┐
-│ Webhook (Slack/Discord) │                     │  Web UI & Approval API  │
+│ Slack / Discord / Teams │                     │  Web UI & Approval API  │
 │  "Incident Detected!"   │                     │  (sre.kubebee.com)      │
 └─────────────────────────┘                     └────────────┬────────────┘
                                                              │
@@ -87,81 +118,56 @@ An intelligent, proactive Kubernetes SRE Agent written in Go that autonomously d
                                                              │
                                                              ▼
                                                 ┌─────────────────────────┐
-                                                │   Permission-Gated      │
+                                                │    Permission-Gated     │
                                                 │    Action Executor      │
                                                 └─────────────────────────┘
 ```
 
 ---
 
-## Configuration
+## Web Dashboard Tabs (`sre.kubebee.com`)
 
-| Flag | Environment Variable | Default | Description |
-|---|---|---|---|
-| `-llm-provider` | `LLM_PROVIDER` | `claude` | LLM provider: `claude`, `codex`, `deepseek`, `harness`, `rule-based` |
-| `-llm-api-key` | `LLM_API_KEY` | `""` | API key for Anthropic, OpenAI, or DeepSeek |
-| `-llm-model` | `LLM_MODEL` | `""` | Model override (e.g. `claude-3-7-sonnet`, `gpt-4o`, `deepseek-chat`) |
-| `-llm-base-url` | `LLM_BASE_URL` | `""` | Custom API endpoint for OpenAI or DeepSeek compatible endpoints |
-| `-harness-command` | `HARNESS_COMMAND` | `""` | CLI command path when using external agent harness |
-| `-scan-interval` | `SCAN_INTERVAL` | `2m` | Interval between proactive cluster scans |
-| `-namespace` | `SCAN_NAMESPACE` | `""` | Target namespace (empty for all namespaces) |
-| `-public-url` | `PUBLIC_URL` | `https://sre.kubebee.com` | Public URL for approval action links in alerts |
-| `-webhook-url` | `WEBHOOK_URL` | `""` | Slack or Discord incoming webhook URL |
-| `-port` | `PORT` | `8080` | HTTP dashboard and API server port |
-| `-kubeconfig` | `KUBECONFIG` | `""` | Kubeconfig file path (empty for in-cluster ServiceAccount) |
+1. **Pending Approvals**: Review triage diagnosis, AI confidence, proposed command, with **[Approve & Execute]** and **[Reject]** buttons.
+2. **Cluster Anomalies**: Interactive issue browser with filter by severity, namespace, and resource kind, plus log viewer modals.
+3. **Analyzers Matrix**: Health card grid of all 14 K8sGPT analyzers with real-time issue counters.
+4. **Pod Hygiene & Cleanup**: Table of Evicted, Failed, and Stuck Terminating pods with batch selection and **[Clean Selected Pods]**.
+5. **SRE AI Assistant (Chat)**: Conversational chat interface for SRE troubleshooting and cluster queries.
+6. **Integrations & IM**: Webhook configuration for Slack, Discord, and Teams with an instant test alert trigger.
 
 ---
 
-## Getting Started
+## API Reference
 
-### Local Development
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/status` | GET | Current cluster health, active LLM provider, scan timestamps, and pending counts. |
+| `/api/issues` | GET | Active cluster anomalies with severity, logs, and events. |
+| `/api/proposals` | GET | Remediation proposals awaiting authorization or completed. |
+| `/api/proposals/{id}/approve` | POST | Authorize and execute remediation. |
+| `/api/proposals/{id}/reject` | POST | Reject proposal with reason. |
+| `/api/analyzers` | GET | List all 14 analyzers with status and active issue counts. |
+| `/api/clean/pods` | GET / POST | List cleanable pods / execute batch pod cleanup (with dry-run option). |
+| `/api/chat` | POST | Interactive conversation with SRE AI assistant. |
+| `/api/notify/test` | POST | Test webhook alert delivery (Slack, Discord, Teams). |
+| `/api/config` | GET / POST | Read or update webhook URLs and runtime settings. |
+| `/api/scan` | POST | Trigger on-demand cluster telemetry scan. |
+
+---
+
+## Deployment & Configuration
 
 ```bash
-# Build binary
+# Test & build locally
+make test
 make build
 
-# Run unit tests
-make test
-
-# Run locally with offline rule-based triage
+# Run locally with rule-based engine
 ./bin/sre-agent -kubeconfig ~/.kube/config -llm-provider rule-based -port 8080
 
-# Run locally with Claude 3.7 Sonnet
+# Run with Claude
 export LLM_API_KEY="sk-ant-..."
 ./bin/sre-agent -kubeconfig ~/.kube/config -llm-provider claude -llm-model claude-3-7-sonnet-20250219
-```
 
-Access the dashboard at `http://localhost:8080`.
-
----
-
-## Deployment to Kubernetes
-
-Manifests are provided under `deploy/k8s/`:
-
-```bash
-# 1. Create secrets with your LLM API Key
-kubectl create secret generic sre-agent-secrets -n sre \
-  --from-literal=LLM_API_KEY="sk-..." \
-  --from-literal=WEBHOOK_URL="https://hooks.slack.com/services/..."
-
-# 2. Deploy all resources via Kustomize
+# Deploy to Kubernetes
 kubectl apply -k deploy/k8s/
 ```
-
-This sets up:
-- Dedicated `sre` namespace
-- Least-privilege RBAC `ServiceAccount`, `ClusterRole`, and `ClusterRoleBinding`
-- `Deployment` with non-root security context and resource bounds
-- `Service` & `Ingress` with automatic Let's Encrypt TLS for `sre.kubebee.com`
-
----
-
-## API Endpoints
-
-- `GET /api/status`: System status, active provider, scan timestamps, and pending approval count.
-- `GET /api/issues`: List of active cluster anomalies detected in latest scan.
-- `GET /api/proposals`: List of triage diagnoses and remediation proposals.
-- `POST /api/proposals/{id}/approve`: Explicitly authorize and trigger execution of remediation.
-- `POST /api/proposals/{id}/reject`: Reject proposal and record rationale.
-- `POST /api/scan`: Trigger an on-demand cluster telemetry scan.

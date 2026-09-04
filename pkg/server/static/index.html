@@ -12,27 +12,31 @@
     .badge-critical { background-color: #f8514933; color: #f85149; border: 1px solid #f8514966; }
     .badge-high { background-color: #d2992233; color: #d29922; border: 1px solid #d2992266; }
     .badge-medium { background-color: #388bfd33; color: #58a6ff; border: 1px solid #388bfd66; }
+    .badge-low { background-color: #8b949e33; color: #8b949e; border: 1px solid #8b949e66; }
     .badge-success { background-color: #23863633; color: #3fb950; border: 1px solid #23863666; }
     pre { background-color: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
+    .nav-tab.active { border-bottom: 2px solid #388bfd; color: #58a6ff; font-weight: 600; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen flex flex-col">
   <!-- Top Navigation -->
-  <header class="border-b border-[#30363d] px-6 py-4 flex items-center justify-between bg-[#161b22]">
+  <header class="border-b border-[#30363d] px-6 py-4 flex items-center justify-between bg-[#161b22] sticky top-0 z-30">
     <div class="flex items-center space-x-3">
-      <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400">
-        <i class="fa-solid fa-shield-halved"></i>
+      <div class="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400">
+        <i class="fa-solid fa-shield-halved text-lg"></i>
       </div>
       <div>
-        <h1 class="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+        <h1 class="text-base font-bold text-white tracking-wide flex items-center gap-2">
           Kubebee SRE Agent
-          <span class="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">v1.0.0</span>
+          <span class="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">v1.2.0</span>
         </h1>
-        <p class="text-xs text-gray-400">Autonomous Telemetry Scanner & Permission-Gated Remediation Engine (<span id="domain-label">sre.kubebee.com</span>)</p>
+        <p class="text-xs text-gray-400">K8sGPT-compatible Analyzers & Permission-Gated Remediation (<span id="domain-label" class="text-blue-400">sre.kubebee.com</span>)</p>
       </div>
     </div>
-    <div class="flex items-center space-x-3">
-      <span class="text-xs text-gray-400">LLM Provider: <strong id="llm-provider-label" class="text-gray-200">Loading...</strong></span>
+    <div class="flex items-center space-x-4">
+      <div class="text-xs text-gray-400 hidden sm:block">
+        Provider: <strong id="llm-provider-label" class="text-gray-200">Loading...</strong>
+      </div>
       <button onclick="triggerScan()" id="btn-scan" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition">
         <i class="fa-solid fa-arrows-rotate" id="scan-spinner"></i>
         <span>Scan Cluster</span>
@@ -40,11 +44,12 @@
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+  <!-- Main Container -->
+  <main class="max-w-7xl w-full mx-auto px-6 py-6 space-y-6 flex-1">
     <!-- Stats Row -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div class="card p-4">
-        <div class="text-xs text-gray-400 font-medium">Active Issues</div>
+        <div class="text-xs text-gray-400 font-medium">Active Anomalies</div>
         <div class="text-2xl font-bold text-white mt-1" id="stat-issues">0</div>
         <div class="text-xs text-amber-400 mt-1 flex items-center gap-1">
           <i class="fa-solid fa-triangle-exclamation"></i>
@@ -59,89 +64,223 @@
       <div class="card p-4">
         <div class="text-xs text-gray-400 font-medium">Remediations Completed</div>
         <div class="text-2xl font-bold text-emerald-400 mt-1" id="stat-completed">0</div>
-        <div class="text-xs text-emerald-400/80 mt-1">Executed after approval</div>
+        <div class="text-xs text-gray-400 mt-1">Executed safely</div>
       </div>
       <div class="card p-4">
-        <div class="text-xs text-gray-400 font-medium">Scanner Health</div>
-        <div class="text-2xl font-bold text-emerald-400 mt-1 flex items-center gap-2">
-          <span class="inline-block w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Online</span>
-        </div>
-        <div class="text-xs text-gray-400 mt-1" id="last-scan-time">Last scan: just now</div>
+        <div class="text-xs text-gray-400 font-medium">Active Analyzers</div>
+        <div class="text-2xl font-bold text-blue-400 mt-1" id="stat-analyzers">14</div>
+        <div class="text-xs text-gray-400 mt-1">K8sGPT-compatible</div>
       </div>
     </div>
 
-    <!-- Permission Gated Approvals Section -->
-    <section class="space-y-4">
+    <!-- Navigation Tabs -->
+    <div class="border-b border-[#30363d] flex space-x-6 text-sm">
+      <button onclick="switchTab('approvals')" id="tab-approvals" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition active flex items-center gap-2">
+        <i class="fa-solid fa-stamp"></i>
+        <span>Pending Approvals</span>
+        <span id="tab-badge-pending" class="px-1.5 py-0.2 rounded-full text-xs bg-amber-500/20 text-amber-300 font-mono hidden">0</span>
+      </button>
+      <button onclick="switchTab('anomalies')" id="tab-anomalies" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Cluster Anomalies</span>
+      </button>
+      <button onclick="switchTab('analyzers')" id="tab-analyzers" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-cubes"></i>
+        <span>Analyzers Matrix</span>
+      </button>
+      <button onclick="switchTab('hygiene')" id="tab-hygiene" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-broom"></i>
+        <span>Pod Hygiene & Cleanup</span>
+      </button>
+      <button onclick="switchTab('chat')" id="tab-chat" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i>
+        <span>SRE AI Assistant</span>
+      </button>
+      <button onclick="switchTab('settings')" id="tab-settings" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-gear"></i>
+        <span>Integrations & IM</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: PENDING APPROVALS -->
+    <div id="section-approvals" class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
-          <h2 class="text-base font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-user-shield text-amber-400"></i>
-            <span>Pending Remediation Proposals (Action Required)</span>
-          </h2>
-          <p class="text-xs text-gray-400 mt-0.5">The AI agent has triaged these issues and formulated fixes. No modifications occur without explicit approval.</p>
+          <h2 class="text-base font-semibold text-white">Pending Remediation Approvals</h2>
+          <p class="text-xs text-gray-400">Human-in-the-Loop: No write actions will execute without explicit SRE authorization.</p>
         </div>
-        <span class="text-xs text-gray-400" id="pending-count-tag">0 pending</span>
       </div>
-
       <div id="proposals-container" class="space-y-4">
-        <!-- Dynamic Proposals inserted here -->
-        <div class="card p-8 text-center text-gray-500 text-sm">
-          <i class="fa-solid fa-circle-check text-2xl text-emerald-500 mb-2 block"></i>
-          No pending approvals required. All cluster workloads operating within expected limits.
-        </div>
+        <!-- Injected via JavaScript -->
+        <div class="card p-6 text-center text-gray-500 text-sm">Loading proposals...</div>
       </div>
-    </section>
+    </div>
 
-    <!-- Active Cluster Anomalies Section -->
-    <section class="space-y-4">
-      <div class="flex items-center justify-between">
+    <!-- TAB 2: CLUSTER ANOMALIES -->
+    <div id="section-anomalies" class="space-y-4 hidden">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 class="text-base font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-list-check text-blue-400"></i>
-            <span>Scanned Anomalies & Diagnostic Context</span>
-          </h2>
-          <p class="text-xs text-gray-400 mt-0.5">Live anomalies detected by the telemetry engine, enriched with logs and warning events.</p>
+          <h2 class="text-base font-semibold text-white">Detected Cluster Anomalies</h2>
+          <p class="text-xs text-gray-400">Telemetry aggregated from pods, nodes, PVCs, services, and workloads.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="text" id="filter-search" oninput="applyAnomalyFilters()" placeholder="Search name/namespace..." class="px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500 w-48">
+          <select id="filter-severity" onchange="applyAnomalyFilters()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+            <option value="">All Severities</option>
+            <option value="CRITICAL">Critical</option>
+            <option value="HIGH">High</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LOW">Low</option>
+          </select>
         </div>
       </div>
-
       <div id="issues-container" class="space-y-3">
-        <!-- Dynamic Issues inserted here -->
-        <div class="card p-6 text-center text-gray-500 text-sm">
-          Scanning cluster for issues...
+        <!-- Injected via JavaScript -->
+        <div class="card p-6 text-center text-gray-500 text-sm">Loading anomalies...</div>
+      </div>
+    </div>
+
+    <!-- TAB 3: ANALYZERS MATRIX -->
+    <div id="section-analyzers" class="space-y-4 hidden">
+      <div>
+        <h2 class="text-base font-semibold text-white">K8sGPT Analyzer Coverage</h2>
+        <p class="text-xs text-gray-400">All built-in analyzers inspecting cluster resources against health criteria.</p>
+      </div>
+      <div id="analyzers-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Injected via JavaScript -->
+      </div>
+    </div>
+
+    <!-- TAB 4: POD HYGIENE & CLEANUP -->
+    <div id="section-hygiene" class="space-y-4 hidden">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-white">Cluster Pod Hygiene & Auto-Cleaner</h2>
+          <p class="text-xs text-gray-400">Prune Evicted, Failed, Completed, and Stuck Terminating pods to keep nodes and etcd lean.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="loadCleanablePods()" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs rounded-md font-semibold transition">
+            <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh Candidates
+          </button>
+          <button onclick="cleanSelectedPods(false)" class="px-3 py-1.5 bg-red-700 hover:bg-red-600 text-white text-xs rounded-md font-semibold transition">
+            <i class="fa-solid fa-trash-can mr-1"></i> Clean Selected Pods
+          </button>
         </div>
       </div>
-    </section>
-
-    <!-- Remediation Audit History -->
-    <section class="space-y-4">
-      <h2 class="text-base font-bold text-white flex items-center gap-2">
-        <i class="fa-solid fa-clock-rotate-left text-purple-400"></i>
-        <span>Remediation Execution History</span>
-      </h2>
       <div class="card overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-gray-300">
-            <thead class="bg-[#21262d] text-gray-400 uppercase text-[10px] tracking-wider border-b border-[#30363d]">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-[#21262d] text-gray-400 uppercase tracking-wider font-semibold">
               <tr>
-                <th class="px-4 py-3">Timestamp</th>
-                <th class="px-4 py-3">Target</th>
-                <th class="px-4 py-3">Action Type</th>
-                <th class="px-4 py-3">Status</th>
-                <th class="px-4 py-3">Approved By</th>
-                <th class="px-4 py-3">Result</th>
+                <th class="p-3 w-10"><input type="checkbox" id="check-all-pods" onchange="toggleSelectAllPods()"></th>
+                <th class="p-3">Namespace</th>
+                <th class="p-3">Pod Name</th>
+                <th class="p-3">Phase / Reason</th>
+                <th class="p-3">Restarts</th>
+                <th class="p-3">Age</th>
+                <th class="p-3 text-right">Action</th>
               </tr>
             </thead>
-            <tbody id="history-table-body" class="divide-y divide-[#30363d]">
-              <tr>
-                <td colspan="6" class="px-4 py-4 text-center text-gray-500">No executed remediations recorded yet.</td>
-              </tr>
+            <tbody id="cleanable-pods-tbody" class="divide-y divide-[#30363d]">
+              <tr><td colspan="7" class="p-4 text-center text-gray-500">Loading cleanable candidates...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
-    </section>
+    </div>
+
+    <!-- TAB 5: SRE AI ASSISTANT CHAT -->
+    <div id="section-chat" class="space-y-4 hidden">
+      <div>
+        <h2 class="text-base font-semibold text-white">Interactive SRE AI Assistant</h2>
+        <p class="text-xs text-gray-400">Chat with the LLM triage agent regarding cluster anomalies, diagnostic logs, and kubectl commands.</p>
+      </div>
+      <div class="card flex flex-col h-[520px]">
+        <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
+          <div class="flex gap-2">
+            <div class="w-6 h-6 rounded bg-blue-600/30 text-blue-400 flex items-center justify-center flex-shrink-0 font-bold">AI</div>
+            <div class="bg-[#21262d] p-3 rounded-lg max-w-xl text-gray-300">
+              Hello! I am your Kubebee SRE Assistant. Ask me anything about cluster health, specific pod crashes, OOMKill root causes, or ask for recommended remediation steps.
+            </div>
+          </div>
+        </div>
+        <div class="p-3 border-t border-[#30363d] bg-[#161b22] flex gap-2">
+          <input type="text" id="chat-input" onkeydown="if(event.key==='Enter') sendChatMessage()" placeholder="Ask SRE AI (e.g. 'Why is local-path-provisioner crashing?' or 'How do I scale coredns?')..." class="flex-1 px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500">
+          <button onclick="sendChatMessage()" id="btn-chat-send" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5">
+            <span>Send</span>
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: SETTINGS & IM INTEGRATIONS -->
+    <div id="section-settings" class="space-y-6 hidden">
+      <div>
+        <h2 class="text-base font-semibold text-white">Supported Instant Messaging (IM) Integrations</h2>
+        <p class="text-xs text-gray-400">Send real-time alerts with direct approval buttons to your DevOps channels.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded bg-[#4A154B]/30 border border-[#E01E5A] flex items-center justify-center text-[#E01E5A] text-xl">
+            <i class="fa-brands fa-slack"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white">Slack</div>
+            <div class="text-xs text-gray-400">Block Kit alerts with approval links</div>
+          </div>
+        </div>
+        <div class="card p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded bg-[#5865F2]/20 border border-[#5865F2] flex items-center justify-center text-[#5865F2] text-xl">
+            <i class="fa-brands fa-discord"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white">Discord</div>
+            <div class="text-xs text-gray-400">Color-coded rich embeds & buttons</div>
+          </div>
+        </div>
+        <div class="card p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded bg-[#5059C9]/20 border border-[#5059C9] flex items-center justify-center text-[#5059C9] text-xl">
+            <i class="fa-brands fa-microsoft"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white">Microsoft Teams</div>
+            <div class="text-xs text-gray-400">Adaptive cards with deep actions</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-6 space-y-4 max-w-2xl">
+        <h3 class="text-sm font-semibold text-white">Configure Incoming Webhook URL</h3>
+        <p class="text-xs text-gray-400">Paste your Slack, Discord, or Microsoft Teams webhook endpoint below:</p>
+        <div class="flex gap-2">
+          <input type="text" id="settings-webhook-url" placeholder="https://hooks.slack.com/services/... or https://discord.com/api/webhooks/..." class="flex-1 px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500">
+          <button onclick="saveWebhookConfig()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-md transition">Save</button>
+        </div>
+        <div>
+          <button onclick="testWebhookAlert()" id="btn-test-alert" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs font-semibold rounded-md transition flex items-center gap-1.5">
+            <i class="fa-solid fa-paper-plane"></i>
+            <span>Send Test Alert Notification</span>
+          </button>
+          <div id="test-alert-status" class="mt-2 text-xs"></div>
+        </div>
+      </div>
+    </div>
   </main>
+
+  <!-- Modal for Logs & Details -->
+  <div id="modal-backdrop" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#161b22] border border-[#30363d] rounded-lg max-w-3xl w-full max-h-[80vh] flex flex-col shadow-2xl">
+      <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2" id="modal-title">Resource Logs</h3>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-base"></i></button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1 font-mono text-xs text-gray-300">
+        <pre id="modal-content" class="p-3 text-xs leading-relaxed whitespace-pre-wrap"></pre>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>

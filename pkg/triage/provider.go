@@ -12,6 +12,7 @@ import (
 type TriageProvider interface {
 	Name() string
 	Diagnose(ctx context.Context, issue *scanner.Issue) (*Diagnosis, error)
+	Explain(ctx context.Context, query string, issue *scanner.Issue) (string, error)
 }
 
 const SystemPrompt = `You are a Principal Kubernetes Site Reliability Engineer (SRE).
@@ -28,10 +29,14 @@ RULES:
   "root_cause": "Detailed technical root cause based on logs and events",
   "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
   "remediation_plan": "Step-by-step description of how to fix this issue",
-  "action_type": "RestartPod" | "DeleteFailedPod" | "ScaleWorkload" | "CordonNode" | "GitOpsPR" | "Manual",
+  "action_type": "RestartPod" | "DeleteFailedPod" | "ScaleWorkload" | "RolloutRestart" | "CordonNode" | "GitOpsPR" | "Manual",
   "proposed_command": "kubectl or git command to run",
   "confidence_score": 0.95
 }`
+
+const ChatSystemPrompt = `You are Kubebee SRE AI, an expert Kubernetes Site Reliability Engineering assistant.
+Help the user understand cluster incidents, pod crashes, logs, events, metrics, and remediation workflows.
+Provide direct, concise, and technically accurate responses with copy-pasteable kubectl or GitOps commands where appropriate.`
 
 func BuildPrompt(issue *scanner.Issue) string {
 	var b strings.Builder
@@ -39,6 +44,10 @@ func BuildPrompt(issue *scanner.Issue) string {
 	b.WriteString(fmt.Sprintf("Category: %s\n", issue.Category))
 	b.WriteString(fmt.Sprintf("Initial Summary: %s\n", issue.Summary))
 	b.WriteString(fmt.Sprintf("Details: %s\n", issue.Details))
+
+	if issue.SpecSnippet != "" {
+		b.WriteString(fmt.Sprintf("\nResource Spec Snippet:\n%s\n", issue.SpecSnippet))
+	}
 
 	if len(issue.Events) > 0 {
 		b.WriteString("\nRecent Warning Events:\n")
@@ -48,37 +57,37 @@ func BuildPrompt(issue *scanner.Issue) string {
 	}
 
 	if issue.LogsSnippet != "" {
-		b.WriteString("\nRecent Container Logs (last lines):\n")
+		b.WriteString("\nSanitized Tail Logs (last 30 lines):\n")
 		b.WriteString("```\n")
 		b.WriteString(issue.LogsSnippet)
 		b.WriteString("\n```\n")
 	}
 
-	b.WriteString("\nPlease analyze the above data and provide the JSON diagnosis and proposed remediation.")
+	b.WriteString("\nProvide diagnosis and remediation plan in strict JSON format.")
 	return b.String()
 }
 
-func parseJSONResponse(issueID, raw, providerName string) (*Diagnosis, error) {
-	// Clean markdown fences if present
+func ParseDiagnosisJSON(raw string, issueID, providerName string) (*Diagnosis, error) {
 	clean := strings.TrimSpace(raw)
 	if strings.HasPrefix(clean, "```json") {
 		clean = strings.TrimPrefix(clean, "```json")
 		clean = strings.TrimSuffix(clean, "```")
+		clean = strings.TrimSpace(clean)
 	} else if strings.HasPrefix(clean, "```") {
 		clean = strings.TrimPrefix(clean, "```")
 		clean = strings.TrimSuffix(clean, "```")
-	}
-	clean = strings.TrimSpace(clean)
-
-	var diag Diagnosis
-	if err := json.Unmarshal([]byte(clean), &diag); err != nil {
-		return nil, fmt.Errorf("unmarshal LLM JSON response: %w (raw: %s)", err, raw)
+		clean = strings.TrimSpace(clean)
 	}
 
-	diag.IssueID = issueID
-	diag.ProviderName = providerName
-	if diag.ConfidenceScore == 0 {
-		diag.ConfidenceScore = 0.85
+	var d Diagnosis
+	if err := json.Unmarshal([]byte(clean), &d); err != nil {
+		return nil, fmt.Errorf("failed to parse diagnosis JSON: %w (raw: %s)", err, raw)
 	}
-	return &diag, nil
+
+	d.IssueID = issueID
+	d.ProviderName = providerName
+	if d.ActionType == "" {
+		d.ActionType = ActionManual
+	}
+	return &d, nil
 }

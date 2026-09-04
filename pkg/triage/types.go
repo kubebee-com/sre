@@ -10,7 +10,9 @@ const (
 	ActionRestartPod       ActionType = "RestartPod"
 	ActionDeleteFailedPod  ActionType = "DeleteFailedPod"
 	ActionScaleWorkload    ActionType = "ScaleWorkload"
+	ActionRolloutRestart   ActionType = "RolloutRestart"
 	ActionCordonNode       ActionType = "CordonNode"
+	ActionCleanupPods      ActionType = "CleanupPods"
 	ActionGitOpsPR         ActionType = "GitOpsPR"
 	ActionManual           ActionType = "Manual"
 )

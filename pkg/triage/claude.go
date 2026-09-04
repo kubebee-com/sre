@@ -71,14 +71,41 @@ func (p *ClaudeProvider) Diagnose(ctx context.Context, issue *scanner.Issue) (*D
 		},
 	}
 
-	payloadBytes, err := json.Marshal(reqBody)
+	raw, err := p.sendRequest(ctx, reqBody)
 	if err != nil {
 		return nil, err
 	}
 
+	return ParseDiagnosisJSON(raw, issue.ID, p.Name())
+}
+
+func (p *ClaudeProvider) Explain(ctx context.Context, query string, issue *scanner.Issue) (string, error) {
+	userContent := query
+	if issue != nil {
+		userContent = fmt.Sprintf("Cluster Anomaly Context:\n%s\n\nUser Question:\n%s", BuildPrompt(issue), query)
+	}
+
+	reqBody := anthropicRequest{
+		Model:     p.model,
+		MaxTokens: 2048,
+		System:    ChatSystemPrompt,
+		Messages: []anthropicMessage{
+			{Role: "user", Content: userContent},
+		},
+	}
+
+	return p.sendRequest(ctx, reqBody)
+}
+
+func (p *ClaudeProvider) sendRequest(ctx context.Context, reqBody anthropicRequest) (string, error) {
+	payloadBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/messages", bytes.NewReader(payloadBytes))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -87,27 +114,27 @@ func (p *ClaudeProvider) Diagnose(ctx context.Context, issue *scanner.Issue) (*D
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("claude api call: %w", err)
+		return "", fmt.Errorf("claude api call: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("claude api error (%d): %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("claude api error (%d): %s", resp.StatusCode, string(body))
 	}
 
 	var anthropicResp anthropicResponse
 	if err := json.Unmarshal(body, &anthropicResp); err != nil {
-		return nil, fmt.Errorf("unmarshal claude response: %w", err)
+		return "", fmt.Errorf("unmarshal claude response: %w", err)
 	}
 
 	if len(anthropicResp.Content) == 0 {
-		return nil, fmt.Errorf("claude returned empty content")
+		return "", fmt.Errorf("claude returned empty content")
 	}
 
-	return parseJSONResponse(issue.ID, anthropicResp.Content[0].Text, p.Name())
+	return anthropicResp.Content[0].Text, nil
 }

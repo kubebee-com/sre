@@ -76,14 +76,40 @@ func (p *CodexProvider) Diagnose(ctx context.Context, issue *scanner.Issue) (*Di
 		ResponseFormat: &responseFormat{Type: "json_object"},
 	}
 
-	payloadBytes, err := json.Marshal(reqBody)
+	raw, err := p.sendRequest(ctx, reqBody)
 	if err != nil {
 		return nil, err
 	}
 
+	return ParseDiagnosisJSON(raw, issue.ID, p.Name())
+}
+
+func (p *CodexProvider) Explain(ctx context.Context, query string, issue *scanner.Issue) (string, error) {
+	userContent := query
+	if issue != nil {
+		userContent = fmt.Sprintf("Cluster Anomaly Context:\n%s\n\nUser Question:\n%s", BuildPrompt(issue), query)
+	}
+
+	reqBody := openAIRequest{
+		Model: p.model,
+		Messages: []openAIMessage{
+			{Role: "system", Content: ChatSystemPrompt},
+			{Role: "user", Content: userContent},
+		},
+	}
+
+	return p.sendRequest(ctx, reqBody)
+}
+
+func (p *CodexProvider) sendRequest(ctx context.Context, reqBody openAIRequest) (string, error) {
+	payloadBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewReader(payloadBytes))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -91,27 +117,31 @@ func (p *CodexProvider) Diagnose(ctx context.Context, issue *scanner.Issue) (*Di
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("openai api call: %w", err)
+		return "", fmt.Errorf("openai api call: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("openai api error (%d): %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("openai api error (%d): %s", resp.StatusCode, string(body))
 	}
 
-	var aiResp openAIResponse
-	if err := json.Unmarshal(body, &aiResp); err != nil {
-		return nil, fmt.Errorf("unmarshal openai response: %w", err)
+	var openAIResp openAIResponse
+	if err := json.Unmarshal(body, &openAIResp); err != nil {
+		return "", fmt.Errorf("unmarshal openai response: %w", err)
 	}
 
-	if len(aiResp.Choices) == 0 {
-		return nil, fmt.Errorf("openai returned empty choices")
+	if openAIResp.Error != nil {
+		return "", fmt.Errorf("openai returned error: %s", openAIResp.Error.Message)
 	}
 
-	return parseJSONResponse(issue.ID, aiResp.Choices[0].Message.Content, p.Name())
+	if len(openAIResp.Choices) == 0 {
+		return "", fmt.Errorf("openai returned no choices")
+	}
+
+	return openAIResp.Choices[0].Message.Content, nil
 }

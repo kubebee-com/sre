@@ -17,43 +17,128 @@ import (
 )
 
 type ClusterScanner struct {
-	client kubernetes.Interface
+	client  kubernetes.Interface
+	cleaner *PodCleaner
 }
 
 func NewClusterScanner(client kubernetes.Interface) *ClusterScanner {
-	return &ClusterScanner{client: client}
+	return &ClusterScanner{
+		client:  client,
+		cleaner: NewPodCleaner(client),
+	}
 }
 
+func (s *ClusterScanner) GetPodCleaner() *PodCleaner {
+	return s.cleaner
+}
+
+// GetAnalyzers returns metadata for all supported K8sGPT-compatible analyzers
+func (s *ClusterScanner) GetAnalyzers() []AnalyzerInfo {
+	return []AnalyzerInfo{
+		{Name: "PodAnalyzer", Resource: "Pod", Description: "Checks for CrashLoopBackOff, OOMKilled, ImagePullBackOff, Evicted, and High Restarts", Enabled: true},
+		{Name: "DeploymentAnalyzer", Resource: "Deployment", Description: "Checks for replica mismatches, unavailable replicas, and rollout progress failures", Enabled: true},
+		{Name: "StatefulSetAnalyzer", Resource: "StatefulSet", Description: "Checks for unready StatefulSet replicas, partitions, and rolling update blocks", Enabled: true},
+		{Name: "DaemonSetAnalyzer", Resource: "DaemonSet", Description: "Checks for unscheduled or unready daemon pods across eligible cluster nodes", Enabled: true},
+		{Name: "ReplicaSetAnalyzer", Resource: "ReplicaSet", Description: "Detects ReplicaSets failing to satisfy desired replica count", Enabled: true},
+		{Name: "JobAnalyzer", Resource: "Job", Description: "Detects failed batch Jobs, deadline exceeded, and backoff limits", Enabled: true},
+		{Name: "CronJobAnalyzer", Resource: "CronJob", Description: "Detects invalid schedules and suspended cron executions", Enabled: true},
+		{Name: "ServiceAnalyzer", Resource: "Service", Description: "Verifies service selectors and flags services with 0 active endpoints", Enabled: true},
+		{Name: "IngressAnalyzer", Resource: "Ingress", Description: "Validates backend target services, paths, and TLS secret availability", Enabled: true},
+		{Name: "NetworkPolicyAnalyzer", Resource: "NetworkPolicy", Description: "Detects orphaned network policies matching 0 workloads in namespace", Enabled: true},
+		{Name: "PersistentVolumeClaimAnalyzer", Resource: "PersistentVolumeClaim", Description: "Flags PVCs stuck in Pending or Lost status", Enabled: true},
+		{Name: "NodeAnalyzer", Resource: "Node", Description: "Checks for NotReady conditions and Disk, Memory, or PID pressure", Enabled: true},
+		{Name: "HPAAnalyzer", Resource: "HorizontalPodAutoscaler", Description: "Checks for missing metric sources and scaling limit traps", Enabled: true},
+		{Name: "PDBAnalyzer", Resource: "PodDisruptionBudget", Description: "Checks for 0 allowed disruptions blocking node drains", Enabled: true},
+	}
+}
+
+// Scan executes all registered analyzers across the target namespace (or all namespaces)
 func (s *ClusterScanner) Scan(ctx context.Context, namespace string) ([]*Issue, error) {
 	var allIssues []*Issue
 
-	// 1. Scan Pods
+	// 1. Pods (Core)
 	podIssues, err := s.scanPods(ctx, namespace)
-	if err != nil {
-		return nil, fmt.Errorf("scan pods: %w", err)
+	if err == nil {
+		allIssues = append(allIssues, podIssues...)
 	}
-	allIssues = append(allIssues, podIssues...)
 
-	// 2. Scan Nodes (cluster-wide)
-	nodeIssues, err := s.scanNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("scan nodes: %w", err)
+	// 2. Deployments
+	deplIssues, err := s.scanDeployments(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, deplIssues...)
 	}
-	allIssues = append(allIssues, nodeIssues...)
 
-	// 3. Scan PVCs
-	pvcIssues, err := s.scanPVCs(ctx, namespace)
-	if err != nil {
-		return nil, fmt.Errorf("scan pvcs: %w", err)
+	// 3. StatefulSets
+	ssIssues, err := s.scanStatefulSets(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, ssIssues...)
 	}
-	allIssues = append(allIssues, pvcIssues...)
 
-	// 4. Scan Services
+	// 4. DaemonSets
+	dsIssues, err := s.scanDaemonSets(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, dsIssues...)
+	}
+
+	// 5. ReplicaSets
+	rsIssues, err := s.scanReplicaSets(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, rsIssues...)
+	}
+
+	// 6. Batch Jobs
+	jobIssues, err := s.scanJobs(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, jobIssues...)
+	}
+
+	// 7. CronJobs
+	cronIssues, err := s.scanCronJobs(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, cronIssues...)
+	}
+
+	// 8. Services
 	svcIssues, err := s.scanServices(ctx, namespace)
-	if err != nil {
-		return nil, fmt.Errorf("scan services: %w", err)
+	if err == nil {
+		allIssues = append(allIssues, svcIssues...)
 	}
-	allIssues = append(allIssues, svcIssues...)
+
+	// 9. Ingresses
+	ingIssues, err := s.scanIngresses(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, ingIssues...)
+	}
+
+	// 10. Network Policies
+	netpolIssues, err := s.scanNetworkPolicies(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, netpolIssues...)
+	}
+
+	// 11. PVCs
+	pvcIssues, err := s.scanPVCs(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, pvcIssues...)
+	}
+
+	// 12. Nodes (Cluster-wide)
+	nodeIssues, err := s.scanNodes(ctx)
+	if err == nil {
+		allIssues = append(allIssues, nodeIssues...)
+	}
+
+	// 13. HPAs
+	hpaIssues, err := s.scanHPAs(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, hpaIssues...)
+	}
+
+	// 14. PDBs
+	pdbIssues, err := s.scanPDBs(ctx, namespace)
+	if err == nil {
+		allIssues = append(allIssues, pdbIssues...)
+	}
 
 	return allIssues, nil
 }
@@ -66,14 +151,14 @@ func (s *ClusterScanner) scanPods(ctx context.Context, namespace string) ([]*Iss
 
 	var issues []*Issue
 	for _, pod := range pods.Items {
-		// Ignore Completed or successfully terminating pods
+		// Ignore Succeeded/Completed pods from normal anomaly alert (handled by Cleaner)
 		if pod.Status.Phase == corev1.PodSucceeded {
 			continue
 		}
 
 		issue := s.analyzePod(&pod)
 		if issue != nil {
-			// Enrich with logs & warning events
+			// Enrich with tail logs & warning events
 			issue.LogsSnippet = s.fetchPodLogsSnippet(ctx, pod.Namespace, pod.Name)
 			issue.Events = s.fetchPodWarningEvents(ctx, pod.Namespace, pod.Name)
 			issues = append(issues, issue)
@@ -85,7 +170,42 @@ func (s *ClusterScanner) scanPods(ctx context.Context, namespace string) ([]*Iss
 func (s *ClusterScanner) analyzePod(pod *corev1.Pod) *Issue {
 	now := time.Now()
 
-	// Check container statuses (CrashLoopBackOff, OOMKilled, ImagePullBackOff, etc.)
+	// 1. Check if Pod is Evicted
+	if pod.Status.Reason == "Evicted" {
+		return &Issue{
+			ID:            makeID(pod.Namespace, "Pod", pod.Name, "Evicted"),
+			Namespace:     pod.Namespace,
+			Kind:          "Pod",
+			Name:          pod.Name,
+			Severity:      SeverityMedium,
+			Category:      CategoryPodEvicted,
+			Summary:       fmt.Sprintf("Pod was evicted: %s", pod.Status.Message),
+			Details:       fmt.Sprintf("Node evicted pod due to resource constraints. Message: %s", pod.Status.Message),
+			FirstObserved: now,
+			LastObserved:  now,
+		}
+	}
+
+	// 2. Check if Pod is Stuck in Terminating
+	if pod.DeletionTimestamp != nil {
+		if now.Sub(pod.DeletionTimestamp.Time) > 5*time.Minute {
+			return &Issue{
+				ID:            makeID(pod.Namespace, "Pod", pod.Name, "StuckTerminating"),
+				Namespace:     pod.Namespace,
+				Kind:          "Pod",
+				Name:          pod.Name,
+				Severity:      SeverityHigh,
+				Category:      CategoryPodStuckTerminating,
+				Summary:       "Pod is stuck in Terminating status (> 5 minutes)",
+				Details:       fmt.Sprintf("Pod deletion was requested at %s but container runtime/finalizers have not terminated.", pod.DeletionTimestamp.Time.Format(time.RFC3339)),
+				FirstObserved: pod.DeletionTimestamp.Time,
+				LastObserved:  now,
+			}
+		}
+		return nil
+	}
+
+	// 3. Check container statuses
 	for _, cs := range append(pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses...) {
 		// Waiting state checks
 		if cs.State.Waiting != nil {
@@ -133,7 +253,7 @@ func (s *ClusterScanner) analyzePod(pod *corev1.Pod) *Issue {
 			}
 		}
 
-		// Terminated state checks (OOMKilled, non-zero exit code)
+		// Terminated state checks (OOMKilled, exit 137)
 		if cs.State.Terminated != nil {
 			if cs.State.Terminated.Reason == "OOMKilled" || cs.State.Terminated.ExitCode == 137 {
 				return &Issue{
@@ -143,30 +263,16 @@ func (s *ClusterScanner) analyzePod(pod *corev1.Pod) *Issue {
 					Name:          pod.Name,
 					Severity:      SeverityCritical,
 					Category:      CategoryOOMKilled,
-					Summary:       fmt.Sprintf("Container '%s' was OOMKilled (ExitCode 137)", cs.Name),
-					Details:       fmt.Sprintf("Memory limit exceeded for container %s in pod %s", cs.Name, pod.Name),
-					FirstObserved: now,
-					LastObserved:  now,
-				}
-			}
-			if cs.State.Terminated.ExitCode != 0 {
-				return &Issue{
-					ID:            makeID(pod.Namespace, "Pod", pod.Name, fmt.Sprintf("ExitCode%d", cs.State.Terminated.ExitCode)),
-					Namespace:     pod.Namespace,
-					Kind:          "Pod",
-					Name:          pod.Name,
-					Severity:      SeverityHigh,
-					Category:      CategoryPodFailed,
-					Summary:       fmt.Sprintf("Container '%s' exited with code %d", cs.Name, cs.State.Terminated.ExitCode),
-					Details:       cs.State.Terminated.Message,
-					FirstObserved: now,
+					Summary:       fmt.Sprintf("Container '%s' was OOMKilled (Exit 137)", cs.Name),
+					Details:       "Container process exceeded memory limits configured in resource spec and was terminated by Linux kernel OOM killer.",
+					FirstObserved: cs.State.Terminated.FinishedAt.Time,
 					LastObserved:  now,
 				}
 			}
 		}
 
-		// Frequent restart count
-		if cs.RestartCount > 10 {
+		// High restart counts (> 5)
+		if cs.RestartCount > 5 {
 			return &Issue{
 				ID:            makeID(pod.Namespace, "Pod", pod.Name, "HighRestarts"),
 				Namespace:     pod.Namespace,
@@ -175,24 +281,44 @@ func (s *ClusterScanner) analyzePod(pod *corev1.Pod) *Issue {
 				Severity:      SeverityHigh,
 				Category:      CategoryHighRestarts,
 				Summary:       fmt.Sprintf("Container '%s' has restarted %d times", cs.Name, cs.RestartCount),
-				Details:       "High container restart frequency indicates workload instability or memory pressure.",
+				Details:       "High container restart frequency indicates workload instability, memory pressure, or liveness probe failures.",
 				FirstObserved: now,
 				LastObserved:  now,
 			}
 		}
 	}
 
-	// Pod Pending for > 5 minutes
-	if pod.Status.Phase == corev1.PodPending && time.Since(pod.CreationTimestamp.Time) > 5*time.Minute {
+	// 4. Pending / Unschedulable
+	if pod.Status.Phase == corev1.PodPending {
+		for _, cond := range pod.Status.Conditions {
+			if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse {
+				return &Issue{
+					ID:            makeID(pod.Namespace, "Pod", pod.Name, "FailedScheduling"),
+					Namespace:     pod.Namespace,
+					Kind:          "Pod",
+					Name:          pod.Name,
+					Severity:      SeverityHigh,
+					Category:      CategoryFailedScheduling,
+					Summary:       fmt.Sprintf("Pod is unschedulable: %s", cond.Reason),
+					Details:       cond.Message,
+					FirstObserved: cond.LastTransitionTime.Time,
+					LastObserved:  now,
+				}
+			}
+		}
+	}
+
+	// 5. Phase Failed
+	if pod.Status.Phase == corev1.PodFailed {
 		return &Issue{
-			ID:            makeID(pod.Namespace, "Pod", pod.Name, "PendingTooLong"),
+			ID:            makeID(pod.Namespace, "Pod", pod.Name, "PodFailed"),
 			Namespace:     pod.Namespace,
 			Kind:          "Pod",
 			Name:          pod.Name,
-			Severity:      SeverityMedium,
-			Category:      CategoryFailedScheduling,
-			Summary:       fmt.Sprintf("Pod '%s' has been Pending for %v", pod.Name, time.Since(pod.CreationTimestamp.Time).Round(time.Minute)),
-			Details:       "Pod unscheduled, possibly due to resource shortage, taint/toleration mismatch, or node affinity constraints.",
+			Severity:      SeverityHigh,
+			Category:      CategoryPodFailed,
+			Summary:       fmt.Sprintf("Pod is in Failed phase: %s", pod.Status.Reason),
+			Details:       pod.Status.Message,
 			FirstObserved: now,
 			LastObserved:  now,
 		}
@@ -209,44 +335,37 @@ func (s *ClusterScanner) scanNodes(ctx context.Context) ([]*Issue, error) {
 
 	var issues []*Issue
 	now := time.Now()
+
 	for _, node := range nodes.Items {
 		for _, cond := range node.Status.Conditions {
+			// Check Ready condition
 			if cond.Type == corev1.NodeReady && cond.Status != corev1.ConditionTrue {
 				issues = append(issues, &Issue{
-					ID:            makeID("", "Node", node.Name, "NotReady"),
+					ID:            makeID("", "Node", node.Name, "NodeNotReady"),
+					Namespace:     "",
+					Kind:          "Node",
+					Name:          node.Name,
+					Severity:      SeverityCritical,
+					Category:      CategoryNodeNotReady,
+					Summary:       fmt.Sprintf("Node %s is NotReady (%s)", node.Name, cond.Reason),
+					Details:       cond.Message,
+					FirstObserved: cond.LastTransitionTime.Time,
+					LastObserved:  now,
+				})
+			}
+
+			// Check Pressure conditions (DiskPressure, MemoryPressure, PIDPressure)
+			if (cond.Type == corev1.NodeDiskPressure || cond.Type == corev1.NodeMemoryPressure || cond.Type == corev1.NodePIDPressure) && cond.Status == corev1.ConditionTrue {
+				issues = append(issues, &Issue{
+					ID:            makeID("", "Node", node.Name, string(cond.Type)),
+					Namespace:     "",
 					Kind:          "Node",
 					Name:          node.Name,
 					Severity:      SeverityCritical,
 					Category:      CategoryNodePressure,
-					Summary:       fmt.Sprintf("Node '%s' is NotReady", node.Name),
-					Details:       fmt.Sprintf("Node status condition Ready=%s: %s", cond.Status, cond.Message),
-					FirstObserved: now,
-					LastObserved:  now,
-				})
-			}
-			if cond.Type == corev1.NodeDiskPressure && cond.Status == corev1.ConditionTrue {
-				issues = append(issues, &Issue{
-					ID:            makeID("", "Node", node.Name, "DiskPressure"),
-					Kind:          "Node",
-					Name:          node.Name,
-					Severity:      SeverityHigh,
-					Category:      CategoryNodePressure,
-					Summary:       fmt.Sprintf("Node '%s' is under DiskPressure", node.Name),
-					Details:       cond.Message,
-					FirstObserved: now,
-					LastObserved:  now,
-				})
-			}
-			if cond.Type == corev1.NodeMemoryPressure && cond.Status == corev1.ConditionTrue {
-				issues = append(issues, &Issue{
-					ID:            makeID("", "Node", node.Name, "MemoryPressure"),
-					Kind:          "Node",
-					Name:          node.Name,
-					Severity:      SeverityHigh,
-					Category:      CategoryNodePressure,
-					Summary:       fmt.Sprintf("Node '%s' is under MemoryPressure", node.Name),
-					Details:       cond.Message,
-					FirstObserved: now,
+					Summary:       fmt.Sprintf("Node %s is under %s", node.Name, cond.Type),
+					Details:       fmt.Sprintf("Node %s condition %s is True: %s", node.Name, cond.Type, cond.Message),
+					FirstObserved: cond.LastTransitionTime.Time,
 					LastObserved:  now,
 				})
 			}
@@ -263,18 +382,33 @@ func (s *ClusterScanner) scanPVCs(ctx context.Context, namespace string) ([]*Iss
 
 	var issues []*Issue
 	now := time.Now()
+
 	for _, pvc := range pvcs.Items {
-		if pvc.Status.Phase == corev1.ClaimLost || (pvc.Status.Phase == corev1.ClaimPending && time.Since(pvc.CreationTimestamp.Time) > 3*time.Minute) {
+		if pvc.Status.Phase == corev1.ClaimPending {
 			issues = append(issues, &Issue{
-				ID:            makeID(pvc.Namespace, "PersistentVolumeClaim", pvc.Name, string(pvc.Status.Phase)),
+				ID:            makeID(pvc.Namespace, "PersistentVolumeClaim", pvc.Name, "Pending"),
 				Namespace:     pvc.Namespace,
 				Kind:          "PersistentVolumeClaim",
 				Name:          pvc.Name,
 				Severity:      SeverityHigh,
 				Category:      CategoryPVCPending,
-				Summary:       fmt.Sprintf("PVC '%s' is %s", pvc.Name, pvc.Status.Phase),
-				Details:       fmt.Sprintf("Storage claim has not bound. StorageClass: %v", pvc.Spec.StorageClassName),
-				FirstObserved: now,
+				Summary:       fmt.Sprintf("PVC %s is stuck in Pending state", pvc.Name),
+				Details:       fmt.Sprintf("PVC %s in namespace %s has not bound to any PersistentVolume. Check StorageClass provisioning.", pvc.Name, pvc.Namespace),
+				FirstObserved: pvc.CreationTimestamp.Time,
+				LastObserved:  now,
+			})
+		}
+		if pvc.Status.Phase == corev1.ClaimLost {
+			issues = append(issues, &Issue{
+				ID:            makeID(pvc.Namespace, "PersistentVolumeClaim", pvc.Name, "Lost"),
+				Namespace:     pvc.Namespace,
+				Kind:          "PersistentVolumeClaim",
+				Name:          pvc.Name,
+				Severity:      SeverityCritical,
+				Category:      CategoryPVLost,
+				Summary:       fmt.Sprintf("PVC %s is in ClaimLost state", pvc.Name),
+				Details:       fmt.Sprintf("PVC %s lost its underlying bound volume.", pvc.Name),
+				FirstObserved: pvc.CreationTimestamp.Time,
 				LastObserved:  now,
 			})
 		}
@@ -290,36 +424,34 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 
 	var issues []*Issue
 	now := time.Now()
+
 	for _, svc := range svcs.Items {
-		// Ignore headless or ExternalName services without selectors
-		if len(svc.Spec.Selector) == 0 {
+		// Ignore ExternalName or headless without selector
+		if svc.Spec.Type == corev1.ServiceTypeExternalName || len(svc.Spec.Selector) == 0 {
 			continue
 		}
 
-		eps, err := s.client.CoreV1().Endpoints(svc.Namespace).Get(ctx, svc.Name, metav1.GetOptions{})
+		ep, err := s.client.CoreV1().Endpoints(svc.Namespace).Get(ctx, svc.Name, metav1.GetOptions{})
 		if err != nil {
 			continue
 		}
 
-		hasEndpoints := false
-		for _, subset := range eps.Subsets {
-			if len(subset.Addresses) > 0 {
-				hasEndpoints = true
-				break
-			}
+		totalEndpoints := 0
+		for _, subset := range ep.Subsets {
+			totalEndpoints += len(subset.Addresses)
 		}
 
-		if !hasEndpoints {
+		if totalEndpoints == 0 {
 			issues = append(issues, &Issue{
-				ID:            makeID(svc.Namespace, "Service", svc.Name, "ZeroEndpoints"),
+				ID:            makeID(svc.Namespace, "Service", svc.Name, "NoEndpoints"),
 				Namespace:     svc.Namespace,
 				Kind:          "Service",
 				Name:          svc.Name,
-				Severity:      SeverityMedium,
+				Severity:      SeverityHigh,
 				Category:      CategoryServiceNoEndpoint,
-				Summary:       fmt.Sprintf("Service '%s' has 0 endpoints", svc.Name),
-				Details:       fmt.Sprintf("Selector %v does not match any healthy, running pods.", svc.Spec.Selector),
-				FirstObserved: now,
+				Summary:       fmt.Sprintf("Service %s has 0 ready endpoints", svc.Name),
+				Details:       fmt.Sprintf("Service selector %v matches 0 running, ready pods. Client traffic will fail with 502/connection refused.", svc.Spec.Selector),
+				FirstObserved: svc.CreationTimestamp.Time,
 				LastObserved:  now,
 			})
 		}
@@ -328,15 +460,15 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 }
 
 func (s *ClusterScanner) fetchPodLogsSnippet(ctx context.Context, namespace, name string) string {
-	tailLines := int64(50)
+	tailLines := int64(30)
 	req := s.client.CoreV1().Pods(namespace).GetLogs(name, &corev1.PodLogOptions{
 		TailLines: &tailLines,
-		Previous:  true, // Fetch previous crashed container if available
+		Previous:  true, // Try previous terminated container logs first
 	})
 
 	stream, err := req.Stream(ctx)
 	if err != nil {
-		// Try without previous=true
+		// Fallback to active container logs
 		req = s.client.CoreV1().Pods(namespace).GetLogs(name, &corev1.PodLogOptions{
 			TailLines: &tailLines,
 		})
@@ -365,6 +497,10 @@ func (s *ClusterScanner) fetchPodWarningEvents(ctx context.Context, namespace, n
 		results = append(results, sanitizer.SanitizeText(fmt.Sprintf("[%s] %s: %s", e.Reason, e.Source.Component, e.Message)))
 	}
 	return results
+}
+
+func generateIssueID(namespace, kind, name, discriminator string) string {
+	return makeID(namespace, kind, name, discriminator)
 }
 
 func makeID(namespace, kind, name, reason string) string {

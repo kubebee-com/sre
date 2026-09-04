@@ -29,3 +29,7 @@ func (p *DeepSeekProvider) Name() string {
 func (p *DeepSeekProvider) Diagnose(ctx context.Context, issue *scanner.Issue) (*Diagnosis, error) {
 	return p.codex.Diagnose(ctx, issue)
 }
+
+func (p *DeepSeekProvider) Explain(ctx context.Context, query string, issue *scanner.Issue) (string, error) {
+	return p.codex.Explain(ctx, query, issue)
+}

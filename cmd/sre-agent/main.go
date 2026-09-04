@@ -40,7 +40,7 @@ func main() {
 	webhookNotifier := notifier.NewWebhookNotifier(cfg.WebhookURL, cfg.PublicURL)
 
 	// 4. Initialize Web Server & Dashboard
-	apiServer := server.NewServer(cfg.Port, clusterScanner, triageProvider, remediationEngine)
+	apiServer := server.NewServer(cfg.Port, clusterScanner, triageProvider, remediationEngine, webhookNotifier)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
