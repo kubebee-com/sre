@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kubebee SRE Agent — Autonomous Cluster Triage & Remediation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; }
+    .badge-critical { background-color: #f8514933; color: #f85149; border: 1px solid #f8514966; }
+    .badge-high { background-color: #d2992233; color: #d29922; border: 1px solid #d2992266; }
+    .badge-medium { background-color: #388bfd33; color: #58a6ff; border: 1px solid #388bfd66; }
+    .badge-success { background-color: #23863633; color: #3fb950; border: 1px solid #23863666; }
+    pre { background-color: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- Top Navigation -->
+  <header class="border-b border-[#30363d] px-6 py-4 flex items-center justify-between bg-[#161b22]">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+          Kubebee SRE Agent
+          <span class="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">v1.0.0</span>
+        </h1>
+        <p class="text-xs text-gray-400">Autonomous Telemetry Scanner & Permission-Gated Remediation Engine (<span id="domain-label">sre.kubebee.com</span>)</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-3">
+      <span class="text-xs text-gray-400">LLM Provider: <strong id="llm-provider-label" class="text-gray-200">Loading...</strong></span>
+      <button onclick="triggerScan()" id="btn-scan" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-arrows-rotate" id="scan-spinner"></i>
+        <span>Scan Cluster</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+    <!-- Stats Row -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="card p-4">
+        <div class="text-xs text-gray-400 font-medium">Active Issues</div>
+        <div class="text-2xl font-bold text-white mt-1" id="stat-issues">0</div>
+        <div class="text-xs text-amber-400 mt-1 flex items-center gap-1">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>Detected in cluster</span>
+        </div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-gray-400 font-medium">Pending Approvals</div>
+        <div class="text-2xl font-bold text-amber-400 mt-1" id="stat-pending">0</div>
+        <div class="text-xs text-gray-400 mt-1">Requires human permission</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-gray-400 font-medium">Remediations Completed</div>
+        <div class="text-2xl font-bold text-emerald-400 mt-1" id="stat-completed">0</div>
+        <div class="text-xs text-emerald-400/80 mt-1">Executed after approval</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-gray-400 font-medium">Scanner Health</div>
+        <div class="text-2xl font-bold text-emerald-400 mt-1 flex items-center gap-2">
+          <span class="inline-block w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Online</span>
+        </div>
+        <div class="text-xs text-gray-400 mt-1" id="last-scan-time">Last scan: just now</div>
+      </div>
+    </div>
+
+    <!-- Permission Gated Approvals Section -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-user-shield text-amber-400"></i>
+            <span>Pending Remediation Proposals (Action Required)</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">The AI agent has triaged these issues and formulated fixes. No modifications occur without explicit approval.</p>
+        </div>
+        <span class="text-xs text-gray-400" id="pending-count-tag">0 pending</span>
+      </div>
+
+      <div id="proposals-container" class="space-y-4">
+        <!-- Dynamic Proposals inserted here -->
+        <div class="card p-8 text-center text-gray-500 text-sm">
+          <i class="fa-solid fa-circle-check text-2xl text-emerald-500 mb-2 block"></i>
+          No pending approvals required. All cluster workloads operating within expected limits.
+        </div>
+      </div>
+    </section>
+
+    <!-- Active Cluster Anomalies Section -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-blue-400"></i>
+            <span>Scanned Anomalies & Diagnostic Context</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">Live anomalies detected by the telemetry engine, enriched with logs and warning events.</p>
+        </div>
+      </div>
+
+      <div id="issues-container" class="space-y-3">
+        <!-- Dynamic Issues inserted here -->
+        <div class="card p-6 text-center text-gray-500 text-sm">
+          Scanning cluster for issues...
+        </div>
+      </div>
+    </section>
+
+    <!-- Remediation Audit History -->
+    <section class="space-y-4">
+      <h2 class="text-base font-bold text-white flex items-center gap-2">
+        <i class="fa-solid fa-clock-rotate-left text-purple-400"></i>
+        <span>Remediation Execution History</span>
+      </h2>
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-gray-300">
+            <thead class="bg-[#21262d] text-gray-400 uppercase text-[10px] tracking-wider border-b border-[#30363d]">
+              <tr>
+                <th class="px-4 py-3">Timestamp</th>
+                <th class="px-4 py-3">Target</th>
+                <th class="px-4 py-3">Action Type</th>
+                <th class="px-4 py-3">Status</th>
+                <th class="px-4 py-3">Approved By</th>
+                <th class="px-4 py-3">Result</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body" class="divide-y divide-[#30363d]">
+              <tr>
+                <td colspan="6" class="px-4 py-4 text-center text-gray-500">No executed remediations recorded yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
