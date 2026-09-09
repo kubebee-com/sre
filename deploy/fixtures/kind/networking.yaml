@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-no-endpoints
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: service-no-endpoints
+    sre.kubebee.com/fixture: "true"
+spec:
+  selector:
+    app: no-such-service-pods
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: endpointslice-mismatch
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: endpointslice-mismatch
+    sre.kubebee.com/fixture: "true"
+spec:
+  selector:
+    app: no-such-endpoint-pods
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: endpointslice-mismatch
+  namespace: sre-fixtures
+  labels:
+    kubernetes.io/service-name: endpointslice-mismatch
+    sre.kubebee.com/fixture-id: endpointslice-mismatch
+    sre.kubebee.com/fixture: "true"
+addressType: IPv4
+ports:
+  - name: http
+    port: 8080
+endpoints:
+  - addresses: ["10.0.0.250"]
+    conditions:
+      ready: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-port-mismatch
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: service-port-mismatch
+    sre.kubebee.com/fixture: "true"
+spec:
+  selector:
+    app: sre-service-port
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-invalid
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: ingress-invalid
+    sre.kubebee.com/fixture: "true"
+spec:
+  tls:
+    - hosts: ["fixture.invalid"]
+      secretName: ingress-missing-tls
+  rules:
+    - host: fixture.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ingress-missing-service
+                port:
+                  number: 8080
+          - path: /invalid-port
+            pathType: Prefix
+            backend:
+              service:
+                name: service-no-endpoints
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: networkpolicy-orphaned
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: networkpolicy-orphaned
+    sre.kubebee.com/fixture: "true"
+spec:
+  podSelector:
+    matchLabels:
+      app: no-such-network-policy-pods
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: networkpolicy-wide
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: networkpolicy-wide
+    sre.kubebee.com/fixture: "true"
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]

@@ -1,0 +1,54 @@
+{{- if .Values.collector.enabled }}
+{{- range $role := list "collector" "executor" }}
+{{- if or (eq $role "collector") $.Values.executor.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: {{ $.Release.Namespace }}-{{ $.Release.Name }}-{{ $role }}-identity}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: [kube-system]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: {{ $.Release.Namespace }}-{{ $.Release.Name }}-{{ $role }}-identity}
+subjects:
+  - {kind: ServiceAccount, name: {{ $.Release.Name }}-{{ $role }}, namespace: {{ $.Release.Namespace }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ $.Release.Namespace }}-{{ $.Release.Name }}-{{ $role }}-identity}
+{{- range $namespace := $.Values.agent.namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: {{ $.Release.Name }}-{{ $role }}, namespace: {{ $namespace }}}
+rules:
+  {{- if eq $role "collector" }}
+  - apiGroups: [""]
+    resources: [pods, services]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [get, list]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list]
+  {{- else }}
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, delete]
+  - apiGroups: [apps]
+    resources: [replicasets, statefulsets, daemonsets]
+    verbs: [get]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: {{ $.Release.Name }}-{{ $role }}, namespace: {{ $namespace }}}
+subjects:
+  - {kind: ServiceAccount, name: {{ $.Release.Name }}-{{ $role }}, namespace: {{ $.Release.Namespace }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $.Release.Name }}-{{ $role }}}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

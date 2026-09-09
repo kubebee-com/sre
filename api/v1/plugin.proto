@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package sre.plugin.v1;
+
+option go_package = "github.com/kubebee-com/sre/api/v1;apiv1";
+
+message PluginEmpty {}
+
+message PluginMetadataRequest {}
+
+message PluginMetadata {
+  string schema_version = 1;
+  string name = 2;
+  string resource = 3;
+  string description = 4;
+  string docs_url = 5;
+  string version = 6;
+  bool read_only = 7;
+}
+
+message AnalyzeRequest {
+  string schema_version = 1;
+  string namespace = 2;
+  string label_selector = 3;
+  repeated string kinds = 4;
+  repeated string names = 5;
+}
+
+message PluginFinding {
+  string id = 1;
+  string namespace = 2;
+  string kind = 3;
+  string name = 4;
+  string severity = 5;
+  string category = 6;
+  string summary = 7;
+  string details = 8;
+  repeated string evidence = 9;
+  string docs_url = 10;
+  string parent_kind = 11;
+  string parent_name = 12;
+  string parent_namespace = 13;
+}
+
+message AnalyzeResponse {
+  string schema_version = 1;
+  repeated PluginFinding findings = 2;
+}
+
+message HealthResponse {
+  string schema_version = 1;
+  bool ready = 2;
+  string message = 3;
+}
+
+service ExternalAnalyzer {
+  rpc Metadata(PluginMetadataRequest) returns (PluginMetadata);
+  rpc Analyze(AnalyzeRequest) returns (AnalyzeResponse);
+  rpc Health(PluginEmpty) returns (HealthResponse);
+}

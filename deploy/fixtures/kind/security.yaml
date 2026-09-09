@@ -1,0 +1,35 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sre-fixture-broad-role
+  labels:
+    sre.kubebee.com/fixture-id: security-cluster-binding
+    sre.kubebee.com/fixture: "true"
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: security-cluster-binding
+  labels:
+    sre.kubebee.com/fixture-id: security-cluster-binding
+    sre.kubebee.com/fixture: "true"
+subjects:
+  - kind: ServiceAccount
+    name: sre-fixture-subject
+    namespace: sre-fixtures
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sre-fixture-broad-role
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sre-fixture-subject
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture: "true"

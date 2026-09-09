@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sre
+
+resources:
+  - ../../k8s
+
+images:
+  - name: ghcr.io/kubebee-com/sre
+    newName: sre-agent
+    newTag: kind
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: sre-agent
+      namespace: sre
+    path: deployment-patch.yaml
+  - path: configmap-patch.yaml
+  - path: ingress-delete.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: sre-agent
+    path: rbac-secrets-patch.yaml

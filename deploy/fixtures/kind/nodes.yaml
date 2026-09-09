@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Node
+metadata:
+  name: sre-fixture-node
+  labels:
+    sre.kubebee.com/fixture-id: node-synthetic-failure
+    sre.kubebee.com/fixture: "true"
+spec:
+  unschedulable: true
+  taints:
+    - key: sre-fixture-taint
+      value: failure
+      effect: NoSchedule
+  podCIDR: 192.0.2.0/24
+status:
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: FixtureNotReady
+      message: synthetic fixture node is not ready
+    - type: MemoryPressure
+      status: "True"
+      reason: FixtureMemoryPressure
+      message: synthetic fixture memory pressure
+    - type: NetworkUnavailable
+      status: "True"
+      reason: FixtureNetworkUnavailable
+      message: synthetic fixture network unavailable

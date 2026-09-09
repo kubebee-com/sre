@@ -1,0 +1,113 @@
+{{- if and .Values.executor.enabled (not .Values.collector.enabled) }}{{ fail "executor requires its separately deployed collector and encrypted registry" }}{{ end }}
+{{- if .Values.collector.enabled }}
+{{- $origin := required "explicit agent.controlPlaneURL required" .Values.agent.controlPlaneURL }}
+{{- $organization := required "explicit organizationID required" .Values.agent.organizationID }}
+{{- $cluster := required "explicit clusterID required" .Values.agent.clusterID }}
+{{- $application := required "explicit applicationID required" .Values.agent.applicationID }}
+{{- $uid := required "verified expectedClusterUID required" .Values.agent.expectedClusterUID }}
+{{- if not .Values.agent.namespaces }}{{ fail "explicit namespace allowlist required" }}{{ end }}
+{{- if .Values.executor.enabled }}{{- range .Values.agent.namespaces }}{{- if or (has . $.Values.executor.protectedNamespaces) (eq . $.Release.Namespace) }}{{ fail "executor namespace allowlist contains a protected namespace" }}{{ end }}{{ end }}{{ end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: {{ .Release.Name }}-identities}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.storage.storageClassName }}
+  storageClassName: {{ .Values.storage.storageClassName | quote }}
+  {{- end }}
+  resources: {requests: {storage: {{ .Values.storage.size }}}}
+{{- range $role := list "collector" "executor" }}
+{{- if or (eq $role "collector") $.Values.executor.enabled }}
+{{- $roleConfig := index $.Values $role }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: {{ $.Release.Name }}-{{ $role }}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: {{ $.Release.Name }}-{{ $role }}-private}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if $.Values.storage.storageClassName }}
+  storageClassName: {{ $.Values.storage.storageClassName | quote }}
+  {{- end }}
+  resources: {requests: {storage: {{ $.Values.storage.size }}}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ $.Release.Name }}-{{ $role }}}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/instance: {{ $.Release.Name }}, sre.component: {{ $role }}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/instance: {{ $.Release.Name }}, sre.component: {{ $role }}}
+    spec:
+      serviceAccountName: {{ $.Release.Name }}-{{ $role }}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
+      {{- if eq $role "executor" }}
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app.kubernetes.io/instance: {{ $.Release.Name }}, sre.component: collector}
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
+      initContainers:
+        - name: private-bootstrap
+          image: {{ printf "%s:%s" $.Values.agentInitImage $.Values.imageTag | quote }}
+          args: ["--source-key=/projected-key/key", "--source-bootstrap=/projected-bootstrap/token", "--destination=/private/runtime"]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: key, mountPath: /projected-key, readOnly: true}
+            - {name: bootstrap, mountPath: /projected-bootstrap, readOnly: true}
+            - {name: private, mountPath: /private}
+      containers:
+        - name: {{ $role }}
+          image: {{ printf "%s:%s" $roleConfig.image $.Values.imageTag | quote }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          {{- if $.Values.tlsCASecret }}
+          env: [{name: SSL_CERT_FILE, value: /etc/sre-trust/ca.crt}]
+          {{- end }}
+          args:
+            - --in-cluster
+            - {{ printf "--control-plane=%s" $origin | quote }}
+            - {{ printf "--organization-id=%s" $organization | quote }}
+            - {{ printf "--cluster-id=%s" $cluster | quote }}
+            - {{ printf "--application-id=%s" $application | quote }}
+            - {{ printf "--cluster-uid=%s" $uid | quote }}
+            - {{ printf "--namespaces=%s" (join "," $.Values.agent.namespaces) | quote }}
+            - --registry-dir=/state/identities
+            - --identity-key-file=/private/runtime/identity.key
+            - --credential-file=/private/runtime/credential
+            - --bootstrap-file=/private/runtime/bootstrap
+            {{- if eq $role "executor" }}
+            - {{ printf "--protected-namespaces=%s" (join "," (append $.Values.executor.protectedNamespaces $.Release.Namespace | uniq)) | quote }}
+            {{- end }}
+          resources: {{ toYaml $.Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if $.Values.tlsCASecret }}
+            - {name: trust, mountPath: /etc/sre-trust, readOnly: true}
+            {{- end }}
+            - {name: identities, mountPath: /state, readOnly: {{ eq $role "executor" }}}
+            - {name: private, mountPath: /private}
+      volumes:
+        {{- if $.Values.tlsCASecret }}
+        - name: trust
+          secret: {secretName: {{ $.Values.tlsCASecret }}}
+        {{- end }}
+        - name: identities
+          persistentVolumeClaim: {claimName: {{ $.Release.Name }}-identities}
+        - name: private
+          persistentVolumeClaim: {claimName: {{ $.Release.Name }}-{{ $role }}-private}
+        - name: key
+          secret: {secretName: {{ $.Values.agent.identityKeySecret }}, defaultMode: 288}
+        - name: bootstrap
+          secret: {secretName: {{ $roleConfig.bootstrapSecret }}, defaultMode: 288}
+{{- end }}
+{{- end }}
+{{- end }}

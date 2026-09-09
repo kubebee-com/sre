@@ -1,0 +1,9 @@
+{{- if and .Values.orchestrator.enabled (gt (int .Values.orchestrator.replicas) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: {{ .Release.Name }}-orchestrator}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: orchestrator}
+{{- end }}

@@ -1,0 +1,231 @@
+name: CI & Docker Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: kubebee-com/sre
+  GO_VERSION: '1.26.6'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675
+        env:
+          POSTGRES_DB: sre_test
+          POSTGRES_PASSWORD: local-ci-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      SRE_ENTERPRISE_TEST_DATABASE_URL: postgres://postgres:local-ci-test-only@localhost:5432/sre_test?sslmode=disable
+      SRE_TEST_DATABASE_URL: postgres://postgres:local-ci-test-only@localhost:5432/sre_test?sslmode=disable
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install pinned chart verification tools
+        run: |
+          go install helm.sh/helm/v3/cmd/helm@v3.20.2
+          python3 -m pip install PyYAML==6.0.3
+
+      - name: Run tests and static checks
+        run: |
+          go test -v -race ./...
+          ./scripts/ci/messaging-coverage.sh
+          ./scripts/ci/messaging-e2e.sh
+          go vet ./...
+          make check
+          make build
+          make enterprise-build
+          make enterprise-evaluate
+          go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+  kind-integration:
+    name: Kind integration
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install pinned Kind
+        run: |
+          go install sigs.k8s.io/kind@v0.31.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned browser acceptance tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/sre-browser" playwright@1.56.1
+          "$RUNNER_TEMP/sre-browser/node_modules/.bin/playwright" install --with-deps chromium
+          echo "SRE_PLAYWRIGHT_MODULE=$RUNNER_TEMP/sre-browser/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "SRE_ENTERPRISE_ARTIFACTS=$RUNNER_TEMP/sre-enterprise-artifacts" >> "$GITHUB_ENV"
+
+      - name: Run unified product, two-cluster, and browser acceptance
+        run: make unified-kind-test
+
+      - name: Preserve unified acceptance artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unified-kind
+          path: ${{ runner.temp }}/sre-enterprise-artifacts
+          if-no-files-found: warn
+          retention-days: 14
+
+  enterprise-images:
+    name: Unified image security and SBOMs
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+      - name: Install verified Trivy
+        run: |
+          curl --fail --location --retry 3 -o "$RUNNER_TEMP/trivy.tar.gz" https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz
+          echo "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/trivy"
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP/trivy" trivy
+          echo "SRE_TRIVY_BIN=$RUNNER_TEMP/trivy/trivy" >> "$GITHUB_ENV"
+          echo "SRE_ENTERPRISE_ARTIFACTS=$RUNNER_TEMP/sre-image-artifacts" >> "$GITHUB_ENV"
+      - name: Build and scan orchestrator and agent
+        run: scripts/ci/enterprise-images.sh
+      - name: Preserve vulnerability reports and SBOMs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: enterprise-image-security
+          path: ${{ runner.temp }}/sre-image-artifacts
+          if-no-files-found: error
+          retention-days: 30
+
+  build-and-push:
+    name: Build, scan, sign, and push unified images
+    needs: [test, kind-integration, enterprise-images]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        component: [orchestrator, agent]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: ${{ env.REGISTRY }}/kubebee-com/sre-${{ matrix.component }}
+          tags: |
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+
+      - name: Build and push image with attestations
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: ./deploy/Dockerfile.unified
+          target: ${{ matrix.component }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
+          provenance: mode=max
+          sbom: true
+          outputs: type=image
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan published image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/kubebee-com/sre-${{ matrix.component }}:${{ steps.meta.outputs.version }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@fb28c2b6339dcd94da6e4cbcbc5e888961f6f8c3 # v3.9.0
+
+      - name: Sign published image
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${{ env.REGISTRY }}/kubebee-com/sre-${{ matrix.component }}@${IMAGE_DIGEST}"
+
+      - name: Verify published image signature
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/ci.yaml@" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${{ env.REGISTRY }}/kubebee-com/sre-${{ matrix.component }}@${IMAGE_DIGEST}"

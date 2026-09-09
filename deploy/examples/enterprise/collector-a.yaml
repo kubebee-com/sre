@@ -1,0 +1,16 @@
+controlPlane:
+  enabled: false
+collector:
+  enabled: true
+executor:
+  enabled: false
+agent:
+  controlPlaneURL: https://sre.company.example
+  organizationID: company
+  clusterID: production-a
+  applicationID: payments
+  expectedClusterUID: "REPLACE_WITH_VERIFIED_KUBE_SYSTEM_NAMESPACE_UID"
+  namespaces: [payments]
+  identityKeySecret: payments-sre-identity-key
+networkPolicy:
+  kubernetesAPIPort: 443

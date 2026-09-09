@@ -1,0 +1,82 @@
+{{- if .Values.controlPlane.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-control-plane
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-control-plane
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: control-plane}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: control-plane}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-control-plane
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: control-plane
+          image: {{ printf "%s:%s" .Values.controlPlane.image .Values.imageTag | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          envFrom:
+            - secretRef: {name: {{ .Values.controlPlane.existingSecret }}}
+          env:
+            {{- if .Values.tlsCASecret }}
+            - {name: SSL_CERT_FILE, value: /etc/sre-trust/ca.crt}
+            {{- end }}
+            - {name: SRE_ENTERPRISE_CONFIG, value: /etc/sre/config.json}
+            - {name: SRE_EXECUTOR_ENABLED, value: {{ .Values.controlPlane.executionEnabled | quote }}}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /readyz, port: http}, initialDelaySeconds: 2, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/sre, readOnly: true}
+            {{- if .Values.tlsCASecret }}
+            - {name: trust, mountPath: /etc/sre-trust, readOnly: true}
+            {{- end }}
+      volumes:
+        {{- if .Values.tlsCASecret }}
+        - name: trust
+          secret: {secretName: {{ .Values.tlsCASecret }}}
+        {{- end }}
+        - name: config
+          configMap: {name: {{ .Values.controlPlane.existingConfigMap }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-control-plane
+spec:
+  selector: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: control-plane}
+  ports: [{name: http, port: 8080, targetPort: http}]
+{{- if .Values.controlPlane.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-control-plane
+spec:
+  ingressClassName: {{ .Values.controlPlane.ingress.className }}
+  tls:
+    - secretName: {{ .Values.controlPlane.ingress.tlsSecret }}
+      hosts: [{{ .Values.controlPlane.ingress.host | quote }}]
+  rules:
+    - host: {{ .Values.controlPlane.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: {{ .Release.Name }}-control-plane, port: {name: http}}
+{{- end }}
+{{- end }}

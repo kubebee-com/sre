@@ -1,0 +1,43 @@
+imageTag: "0.2.0"
+imagePullPolicy: IfNotPresent
+tlsCASecret: ""
+orchestrator:
+  enabled: true
+  replicas: 2
+  image: ghcr.io/kubebee-com/sre-orchestrator
+  existingConfigMap: sre-config
+  existingSecret: sre-orchestrator
+  executionEnabled: false
+  ingress:
+    enabled: false
+    className: nginx
+    host: sre.example.com
+    tlsSecret: sre-tls
+agent:
+  enabled: false
+  image: ghcr.io/kubebee-com/sre-agent
+  executionEnabled: false
+  orchestratorURL: ""
+  organizationID: ""
+  clusterID: ""
+  applicationID: ""
+  expectedClusterUID: ""
+  namespaces: []
+  profiles: []
+  protectedNamespaces: [kube-system, kube-public, kube-node-lease]
+  identityKeySecret: sre-agent-identity
+  collectorBootstrapSecret: sre-collector-bootstrap
+  executorBootstrapSecret: sre-executor-bootstrap
+  providerSecret: ""
+storage:
+  storageClassName: ""
+  size: 1Gi
+networkPolicy:
+  enabled: true
+  databaseCIDRs: []
+  kubernetesAPIPort: 443
+  ingressNamespaceLabels:
+    kubernetes.io/metadata.name: ingress-nginx
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: "1", memory: 512Mi}

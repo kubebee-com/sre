@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-pending
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pvc-pending
+    sre.kubebee.com/fixture: "true"
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: sre-fixture-no-such-class
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-failed
+  labels:
+    sre.kubebee.com/fixture-id: pv-failed
+    sre.kubebee.com/fixture: "true"
+spec:
+  capacity:
+    storage: 512Mi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: sre-fixture-manual
+  hostPath:
+    path: /var/lib/sre-fixture-failed
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-released
+  labels:
+    sre.kubebee.com/fixture-id: pv-released
+    sre.kubebee.com/fixture: "true"
+spec:
+  capacity:
+    storage: 512Mi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: sre-fixture-manual
+  claimRef:
+    namespace: sre-fixtures
+    name: old-fixture-claim
+  hostPath:
+    path: /var/lib/sre-fixture-released
+    type: DirectoryOrCreate
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: storageclass-invalid
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  labels:
+    sre.kubebee.com/fixture-id: storageclass-invalid
+    sre.kubebee.com/fixture: "true"
+provisioner: kubernetes.io/gce-pd
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: storageclass-second-default
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  labels:
+    sre.kubebee.com/fixture-id: storageclass-invalid
+    sre.kubebee.com/fixture: "true"
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-empty
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: configmap-empty
+    sre.kubebee.com/fixture: "true"

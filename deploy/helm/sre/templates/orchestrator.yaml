@@ -1,0 +1,91 @@
+{{- if lt (int .Values.orchestrator.replicas) 1 }}{{ fail "orchestrator.replicas must be positive" }}{{ end }}
+{{- if .Values.orchestrator.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-orchestrator
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-orchestrator
+spec:
+  replicas: {{ .Values.orchestrator.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: orchestrator}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: orchestrator}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-orchestrator
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: orchestrator}
+      containers:
+        - name: orchestrator
+          image: {{ printf "%s:%s" .Values.orchestrator.image .Values.imageTag | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          envFrom:
+            - secretRef: {name: {{ .Values.orchestrator.existingSecret }}}
+          env:
+            {{- if .Values.tlsCASecret }}
+            - {name: SSL_CERT_FILE, value: /etc/sre-trust/ca.crt}
+            {{- end }}
+            - {name: SRE_CONFIG, value: /etc/sre/config.json}
+            - {name: SRE_EXECUTOR_ENABLED, value: {{ .Values.orchestrator.executionEnabled | quote }}}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /readyz, port: http}, initialDelaySeconds: 2, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/sre, readOnly: true}
+            {{- if .Values.tlsCASecret }}
+            - {name: trust, mountPath: /etc/sre-trust, readOnly: true}
+            {{- end }}
+      volumes:
+        {{- if .Values.tlsCASecret }}
+        - name: trust
+          secret: {secretName: {{ .Values.tlsCASecret }}}
+        {{- end }}
+        - name: config
+          configMap: {name: {{ .Values.orchestrator.existingConfigMap }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-orchestrator
+spec:
+  selector: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: orchestrator}
+  ports: [{name: http, port: 8080, targetPort: http}]
+{{- if .Values.orchestrator.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-orchestrator
+spec:
+  ingressClassName: {{ .Values.orchestrator.ingress.className }}
+  tls:
+    - secretName: {{ .Values.orchestrator.ingress.tlsSecret }}
+      hosts: [{{ .Values.orchestrator.ingress.host | quote }}]
+  rules:
+    - host: {{ .Values.orchestrator.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: {{ .Release.Name }}-orchestrator, port: {name: http}}
+{{- end }}
+{{- end }}

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: sre-agent
+description: Authenticated Kubernetes SRE scanning and triage service
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/kubebee-com/sre
+sources:
+  - https://github.com/kubebee-com/sre
+keywords:
+  - kubernetes
+  - sre
+  - observability
+maintainers:
+  - name: KubeBee
+    url: https://github.com/kubebee-com

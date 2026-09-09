@@ -1,0 +1,7 @@
+{
+  "id": "issue-'; alert(sessionStorage.getItem('sre-agent-api-token')); //",
+  "name": "pod\"');alert(1);//",
+  "namespace": "default",
+  "logs_snippet": "</button><script>fetch('/exfil')</script>'\"",
+  "details": "'); window.location='//attacker'; //"
+}

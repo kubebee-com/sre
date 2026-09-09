@@ -1,0 +1,394 @@
+# These deliberately minimal CRDs exercise optional capability discovery. They
+# are test-owned and preserve unknown fields so the scanner can inspect only
+# the status/spec paths it supports without installing third-party operators.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gatewayclasses.gateway.networking.k8s.io
+  annotations:
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api
+  labels: {sre.kubebee.com/fixture-family: gateway-api}
+spec:
+  group: gateway.networking.k8s.io
+  scope: Cluster
+  names: {plural: gatewayclasses, singular: gatewayclass, kind: GatewayClass}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gateways.gateway.networking.k8s.io
+  annotations:
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api
+  labels: {sre.kubebee.com/fixture-family: gateway-api}
+spec:
+  group: gateway.networking.k8s.io
+  scope: Namespaced
+  names: {plural: gateways, singular: gateway, kind: Gateway}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: httproutes.gateway.networking.k8s.io
+  annotations:
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api
+  labels: {sre.kubebee.com/fixture-family: gateway-api}
+spec:
+  group: gateway.networking.k8s.io
+  scope: Namespaced
+  names: {plural: httproutes, singular: httproute, kind: HTTPRoute}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: referencegrants.gateway.networking.k8s.io
+  annotations:
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api
+  labels: {sre.kubebee.com/fixture-family: gateway-api}
+spec:
+  group: gateway.networking.k8s.io
+  scope: Namespaced
+  names: {plural: referencegrants, singular: referencegrant, kind: ReferenceGrant}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clustercatalogs.olm.operatorframework.io
+  labels: {sre.kubebee.com/fixture-family: olm}
+spec:
+  group: olm.operatorframework.io
+  scope: Cluster
+  names: {plural: clustercatalogs, singular: clustercatalog, kind: ClusterCatalog}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusterextensions.olm.operatorframework.io
+  labels: {sre.kubebee.com/fixture-family: olm}
+spec:
+  group: olm.operatorframework.io
+  scope: Cluster
+  names: {plural: clusterextensions, singular: clusterextension, kind: ClusterExtension}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusterserviceversions.operators.coreos.com
+  labels: {sre.kubebee.com/fixture-family: olm}
+spec:
+  group: operators.coreos.com
+  scope: Namespaced
+  names: {plural: clusterserviceversions, singular: clusterserviceversion, kind: ClusterServiceVersion}
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: subscriptions.operators.coreos.com
+  labels: {sre.kubebee.com/fixture-family: olm}
+spec:
+  group: operators.coreos.com
+  scope: Namespaced
+  names: {plural: subscriptions, singular: subscription, kind: Subscription}
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: installplans.operators.coreos.com
+  labels: {sre.kubebee.com/fixture-family: olm}
+spec:
+  group: operators.coreos.com
+  scope: Namespaced
+  names: {plural: installplans, singular: installplan, kind: InstallPlan}
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: catalogsources.operators.coreos.com
+  labels: {sre.kubebee.com/fixture-family: olm}
+spec:
+  group: operators.coreos.com
+  scope: Namespaced
+  names: {plural: catalogsources, singular: catalogsource, kind: CatalogSource}
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: operatorgroups.operators.coreos.com
+  labels: {sre.kubebee.com/fixture-family: olm}
+spec:
+  group: operators.coreos.com
+  scope: Namespaced
+  names: {plural: operatorgroups, singular: operatorgroup, kind: OperatorGroup}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: scaledobjects.keda.sh
+  labels: {sre.kubebee.com/fixture-family: keda}
+spec:
+  group: keda.sh
+  scope: Namespaced
+  names: {plural: scaledobjects, singular: scaledobject, kind: ScaledObject}
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: scaledjobs.keda.sh
+  labels: {sre.kubebee.com/fixture-family: keda}
+spec:
+  group: keda.sh
+  scope: Namespaced
+  names: {plural: scaledjobs, singular: scaledjob, kind: ScaledJob}
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: triggerauthentications.keda.sh
+  labels: {sre.kubebee.com/fixture-family: keda}
+spec:
+  group: keda.sh
+  scope: Namespaced
+  names: {plural: triggerauthentications, singular: triggerauthentication, kind: TriggerAuthentication}
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clustertriggerauthentications.keda.sh
+  labels: {sre.kubebee.com/fixture-family: keda}
+spec:
+  group: keda.sh
+  scope: Cluster
+  names: {plural: clustertriggerauthentications, singular: clustertriggerauthentication, kind: ClusterTriggerAuthentication}
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: policies.kyverno.io
+  labels: {sre.kubebee.com/fixture-family: kyverno}
+spec:
+  group: kyverno.io
+  scope: Namespaced
+  names: {plural: policies, singular: policy, kind: Policy}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusterpolicies.kyverno.io
+  labels: {sre.kubebee.com/fixture-family: kyverno}
+spec:
+  group: kyverno.io
+  scope: Cluster
+  names: {plural: clusterpolicies, singular: clusterpolicy, kind: ClusterPolicy}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: policyreports.wgpolicyk8s.io
+  labels: {sre.kubebee.com/fixture-family: kyverno}
+spec:
+  group: wgpolicyk8s.io
+  scope: Namespaced
+  names: {plural: policyreports, singular: policyreport, kind: PolicyReport}
+  versions:
+    - name: v1alpha2
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusterpolicyreports.wgpolicyk8s.io
+  labels: {sre.kubebee.com/fixture-family: kyverno}
+spec:
+  group: wgpolicyk8s.io
+  scope: Cluster
+  names: {plural: clusterpolicyreports, singular: clusterpolicyreport, kind: ClusterPolicyReport}
+  versions:
+    - name: v1alpha2
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: prometheuses.monitoring.coreos.com
+  labels: {sre.kubebee.com/fixture-family: prometheus}
+spec:
+  group: monitoring.coreos.com
+  scope: Namespaced
+  names: {plural: prometheuses, singular: prometheus, kind: Prometheus}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: servicemonitors.monitoring.coreos.com
+  labels: {sre.kubebee.com/fixture-family: prometheus}
+spec:
+  group: monitoring.coreos.com
+  scope: Namespaced
+  names: {plural: servicemonitors, singular: servicemonitor, kind: ServiceMonitor}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: podmonitors.monitoring.coreos.com
+  labels: {sre.kubebee.com/fixture-family: prometheus}
+spec:
+  group: monitoring.coreos.com
+  scope: Namespaced
+  names: {plural: podmonitors, singular: podmonitor, kind: PodMonitor}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: prometheusrules.monitoring.coreos.com
+  labels: {sre.kubebee.com/fixture-family: prometheus}
+spec:
+  group: monitoring.coreos.com
+  scope: Namespaced
+  names: {plural: prometheusrules, singular: prometheusrule, kind: PrometheusRule}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: alertmanagers.monitoring.coreos.com
+  labels: {sre.kubebee.com/fixture-family: prometheus}
+spec:
+  group: monitoring.coreos.com
+  scope: Namespaced
+  names: {plural: alertmanagers, singular: alertmanager, kind: Alertmanager}
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}
+      subresources: {status: {}}

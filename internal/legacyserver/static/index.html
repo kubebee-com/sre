@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kubebee SRE Agent — Autonomous Cluster Triage & Remediation</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; }
+    .badge-critical { background-color: #f8514933; color: #f85149; border: 1px solid #f8514966; }
+    .badge-high { background-color: #d2992233; color: #d29922; border: 1px solid #d2992266; }
+    .badge-medium { background-color: #388bfd33; color: #58a6ff; border: 1px solid #388bfd66; }
+    .badge-low { background-color: #8b949e33; color: #8b949e; border: 1px solid #8b949e66; }
+    .badge-success { background-color: #23863633; color: #3fb950; border: 1px solid #23863666; }
+    pre { background-color: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
+    .nav-tab.active { border-bottom: 2px solid #388bfd; color: #58a6ff; font-weight: 600; }
+
+    /* Local utility subset keeps the dashboard usable without executable CDN code. */
+    * { box-sizing: border-box; }
+    button, input, select { font: inherit; }
+    .hidden { display: none; }
+    .min-h-screen { min-height: 100vh; }
+    .w-full { width: 100%; }
+    .max-w-7xl { max-width: 80rem; }
+    .max-w-2xl { max-width: 42rem; }
+    .max-w-3xl { max-width: 48rem; }
+    .max-w-xl { max-width: 36rem; }
+    .w-6 { width: 1.5rem; }
+    .w-9 { width: 2.25rem; }
+    .w-10 { width: 2.5rem; }
+    .w-48 { width: 12rem; }
+    [class~="max-h-[80vh]"] { max-height: 80vh; }
+    .h-6 { height: 1.5rem; }
+    .h-9 { height: 2.25rem; }
+    .h-10 { height: 2.5rem; }
+    .h-\[520px\] { height: 520px; }
+    .flex { display: flex; }
+    .grid { display: grid; }
+    .flex-1 { flex: 1 1 0%; }
+    .flex-col { flex-direction: column; }
+    .flex-wrap { flex-wrap: wrap; }
+    .flex-shrink-0 { flex-shrink: 0; }
+    .items-center { align-items: center; }
+    .items-end { align-items: flex-end; }
+    .justify-between { justify-content: space-between; }
+    .justify-center { justify-content: center; }
+    .text-center { text-align: center; }
+    .text-left { text-align: left; }
+    .text-right { text-align: right; }
+    .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .gap-1 { gap: 0.25rem; }
+    .gap-1\.5 { gap: 0.375rem; }
+    .gap-2 { gap: 0.5rem; }
+    .gap-3 { gap: 0.75rem; }
+    .gap-4 { gap: 1rem; }
+    .space-x-3 > :not([hidden]) ~ :not([hidden]) { margin-left: 0.75rem; }
+    .space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 1rem; }
+    .space-x-6 > :not([hidden]) ~ :not([hidden]) { margin-left: 1.5rem; }
+    .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem; }
+    .space-y-2 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem; }
+    .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem; }
+    .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }
+    .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.5rem; }
+    .p-2 { padding: 0.5rem; }
+    .p-3 { padding: 0.75rem; }
+    .p-4 { padding: 1rem; }
+    .p-5 { padding: 1.25rem; }
+    .p-6 { padding: 1.5rem; }
+    .p-8 { padding: 2rem; }
+    .px-1\.5 { padding-left: 0.375rem; padding-right: 0.375rem; }
+    .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+    .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+    .px-4 { padding-left: 1rem; padding-right: 1rem; }
+    .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
+    .py-0\.2 { padding-top: 0.05rem; padding-bottom: 0.05rem; }
+    .py-0\.5 { padding-top: 0.125rem; padding-bottom: 0.125rem; }
+    .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+    .pt-2 { padding-top: 0.5rem; }
+    .py-1\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+    .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+    .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+    .py-6 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+    .mt-1 { margin-top: 0.25rem; }
+    .mt-2 { margin-top: 0.5rem; }
+    .mr-1 { margin-right: 0.25rem; }
+    .mx-auto { margin-left: auto; margin-right: auto; }
+    .border { border-width: 1px; border-style: solid; }
+    .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+    .border-t { border-top-width: 1px; border-top-style: solid; }
+    .border-l-4 { border-left-width: 4px; border-left-style: solid; }
+    .rounded { border-radius: 0.25rem; }
+    .rounded-md { border-radius: 0.375rem; }
+    .rounded-lg { border-radius: 0.5rem; }
+    .rounded-full { border-radius: 9999px; }
+    .overflow-hidden { overflow: hidden; }
+    .overflow-x-auto { overflow-x: auto; }
+    .overflow-y-auto { overflow-y: auto; }
+    .break-all { overflow-wrap: anywhere; word-break: break-word; }
+    .dashboard-tabs button { flex-shrink: 0; }
+    .playbook-form label { display: block; margin: .6rem 0; font-size: .8rem; }
+    .playbook-form input:not([type=checkbox]), .playbook-form select, .playbook-form textarea { display: block; box-sizing: border-box; width: 100%; margin-top: .3rem; padding: .5rem; color: #c9d1d9; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; font: inherit; }
+    .playbook-form textarea { min-height: 9rem; resize: vertical; }
+    .playbook-details { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
+    .playbook-actions { display: flex; gap: .5rem; margin-top: .8rem; flex-wrap: wrap; }
+    #section-playbooks button { border: 1px solid #30363d; border-radius: 6px; padding: .4rem .7rem; }
+    #section-playbooks button:disabled { opacity: .5; cursor: wait; }
+
+    .fixed { position: fixed; }
+    .sticky { position: sticky; }
+    .inset-0 { inset: 0; }
+    .top-0 { top: 0; }
+    .z-30 { z-index: 30; }
+    .z-50 { z-index: 50; }
+    .uppercase { text-transform: uppercase; }
+    .whitespace-pre-wrap { white-space: pre-wrap; }
+    .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .font-medium { font-weight: 500; }
+    .font-semibold { font-weight: 600; }
+    .font-bold { font-weight: 700; }
+    .text-xs { font-size: 0.75rem; line-height: 1rem; }
+    .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+    .text-base { font-size: 1rem; line-height: 1.5rem; }
+    .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+    .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+    .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+    .leading-relaxed { line-height: 1.625; }
+    .tracking-wide { letter-spacing: 0.025em; }
+    .tracking-wider { letter-spacing: 0.05em; }
+    .text-white { color: #fff; }
+    .text-gray-200 { color: #e5e7eb; }
+    .text-gray-300 { color: #d1d5db; }
+    .text-gray-400 { color: #9ca3af; }
+    .text-gray-500 { color: #6b7280; }
+    .text-blue-400 { color: #60a5fa; }
+    .text-amber-300 { color: #fcd34d; }
+    .text-amber-400 { color: #fbbf24; }
+    .text-emerald-400 { color: #34d399; }
+    [class~="text-red-300"] { color: #fca5a5; }
+    [class~="text-red-400"] { color: #f87171; }
+    [class~="text-[#5059C9]"] { color: #5059c9; }
+    [class~="text-[#5865F2]"] { color: #5865f2; }
+    [class~="text-[#E01E5A]"] { color: #e01e5a; }
+    [class~="bg-[#0d1117]"] { background-color: #0d1117; }
+    [class~="bg-[#161b22]"] { background-color: #161b22; }
+    [class~="bg-[#21262d]"] { background-color: #21262d; }
+    [class~="bg-[#4A154B]/30"] { background-color: rgb(74 21 75 / 0.3); }
+    [class~="bg-[#5059C9]/20"] { background-color: rgb(80 89 201 / 0.2); }
+    [class~="bg-[#5865F2]/20"] { background-color: rgb(88 101 242 / 0.2); }
+    [class~="bg-[#E01E5A]"] { background-color: #e01e5a; }
+    [class~="bg-amber-500/20"] { background-color: rgb(245 158 11 / 0.2); }
+    [class~="bg-black/70"] { background-color: rgb(0 0 0 / 0.7); }
+    [class~="bg-blue-600"] { background-color: #2563eb; }
+    [class~="bg-blue-600/30"] { background-color: rgb(37 99 235 / 0.3); }
+    [class~="bg-black/40"] { background-color: rgb(0 0 0 / 0.4); }
+    [class~="bg-emerald-500/20"] { background-color: rgb(16 185 129 / 0.2); }
+    [class~="bg-emerald-600"] { background-color: #059669; }
+    [class~="bg-emerald-600/30"] { background-color: rgb(5 150 105 / 0.3); }
+    [class~="bg-emerald-950"] { background-color: #022c22; }
+    [class~="bg-gray-800"] { background-color: #1f2937; }
+    [class~="bg-red-700"] { background-color: #b91c1c; }
+    [class~="bg-red-500/20"] { background-color: rgb(239 68 68 / 0.2); }
+    [class~="bg-red-800/30"] { background-color: rgb(153 27 27 / 0.3); }
+    [class~="border-[#30363d]"] { border-color: #30363d; }
+    [class~="border-[#5059C9]"] { border-color: #5059c9; }
+    [class~="border-[#5865F2]"] { border-color: #5865f2; }
+    [class~="border-[#E01E5A]"] { border-color: #e01e5a; }
+    [class~="border-emerald-500"] { border-color: #10b981; }
+    [class~="border-emerald-800"] { border-color: #065f46; }
+    [class~="border-l-amber-500"] { border-left-color: #f59e0b; }
+    [class~="border-blue-500/50"] { border-color: rgb(59 130 246 / 0.5); }
+    [class~="border-emerald-500/30"] { border-color: rgb(16 185 129 / 0.3); }
+    [class~="border-red-500/30"] { border-color: rgb(239 68 68 / 0.3); }
+    [class~="hover:bg-[#30363d]"]:hover { background-color: #30363d; }
+    [class~="hover:bg-blue-500"]:hover { background-color: #3b82f6; }
+    [class~="hover:bg-blue-600/50"]:hover { background-color: rgb(37 99 235 / 0.5); }
+    [class~="hover:bg-emerald-500"]:hover { background-color: #10b981; }
+    [class~="hover:bg-gray-700"]:hover { background-color: #374151; }
+    [class~="hover:bg-gray-800/40"]:hover { background-color: rgb(31 41 55 / 0.4); }
+    [class~="hover:bg-red-600"]:hover { background-color: #dc2626; }
+    [class~="hover:bg-red-800"]:hover { background-color: #991b1b; }
+    [class~="hover:text-gray-200"]:hover { color: #e5e7eb; }
+    [class~="hover:text-white"]:hover { color: #fff; }
+    [class~="focus:border-blue-500"]:focus { border-color: #3b82f6; }
+    [class~="focus:outline-none"]:focus { outline: none; }
+    [class~="divide-y"] > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; border-top-style: solid; }
+    [class~="divide-[#30363d]"] > :not([hidden]) ~ :not([hidden]) { border-top-color: #30363d; }
+    [class~="backdrop-blur-sm"] { backdrop-filter: blur(4px); }
+    [class~="text-[10px]"] { font-size: 0.625rem; line-height: 0.875rem; }
+    .shadow-2xl { box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25); }
+    .transition { transition-property: color, background-color, border-color, opacity, box-shadow, transform; transition-duration: 150ms; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    @media (min-width: 640px) {
+      [class~="sm:block"] { display: block; }
+      [class~="sm:flex-row"] { flex-direction: row; }
+      [class~="sm:items-end"] { align-items: flex-end; }
+      [class~="sm:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      [class~="sm:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      [class~="sm:w-64"] { width: 16rem; }
+    }
+    @media (min-width: 768px) {
+      [class~="md:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      [class~="md:grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      [class~="md:grid-cols-5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+    @media (min-width: 1024px) {
+      [class~="lg:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Top Navigation -->
+  <header class="border-b border-[#30363d] px-6 py-4 flex items-center justify-between bg-[#161b22] sticky top-0 z-30">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400">
+        <i class="fa-solid fa-shield-halved text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-white tracking-wide flex items-center gap-2">
+          Kubebee SRE Agent
+          <span class="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">v1.2.0</span>
+        </h1>
+        <p class="text-xs text-gray-400">K8sGPT-compatible Analyzers & Permission-Gated Remediation (<span id="domain-label" class="text-blue-400">sre.kubebee.com</span>)</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-4">
+      <div class="text-xs text-gray-400 hidden sm:block">
+        Provider: <strong id="llm-provider-label" class="text-gray-200">Loading...</strong>
+      </div>
+      <button onclick="triggerScan()" id="btn-scan" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-arrows-rotate" id="scan-spinner"></i>
+        <span>Scan Cluster</span>
+      </button>
+    </div>
+  </header>
+
+  <section id="auth-panel" class="hidden border-b border-[#30363d] bg-[#0d1117]">
+    <div class="max-w-7xl w-full mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+      <div>
+        <h2 class="text-sm font-semibold text-white">Dashboard authentication</h2>
+        <p id="auth-message" class="text-xs text-gray-400 mt-1" aria-live="polite">An API token is required to use the dashboard.</p>
+      </div>
+      <form id="auth-form" data-auth-bootstrap="true" onsubmit="return dashboardLogin(event)" class="flex flex-col sm:flex-row gap-2">
+        <label for="auth-token" class="sr-only">API token</label>
+        <input id="auth-token" type="password" autocomplete="off" placeholder="API token" class="px-3 py-1.5 bg-[#161b22] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500 sm:w-64">
+        <button type="submit" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">Sign in</button>
+        <button type="button" onclick="dashboardLogout()" class="px-3 py-1.5 rounded-md bg-[#21262d] hover:bg-[#30363d] text-gray-300 text-xs font-semibold transition">Clear session</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl w-full mx-auto px-6 py-6 space-y-6 flex-1">
+    <!-- Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="card p-4">
+        <div class="text-xs text-gray-400 font-medium">Active Anomalies</div>
+        <div class="text-2xl font-bold text-white mt-1" id="stat-issues">0</div>
+        <div class="text-xs text-amber-400 mt-1 flex items-center gap-1">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>Detected in cluster</span>
+        </div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-gray-400 font-medium">Pending Approvals</div>
+        <div class="text-2xl font-bold text-amber-400 mt-1" id="stat-pending">0</div>
+        <div class="text-xs text-gray-400 mt-1">Requires human permission</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-gray-400 font-medium">Remediations Completed</div>
+        <div class="text-2xl font-bold text-emerald-400 mt-1" id="stat-completed">0</div>
+        <div class="text-xs text-gray-400 mt-1">Executed safely</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-gray-400 font-medium">Active Analyzers</div>
+        <div class="text-2xl font-bold text-blue-400 mt-1" id="stat-analyzers">14</div>
+        <div class="text-xs text-gray-400 mt-1">K8sGPT-compatible</div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="dashboard-tabs border-b border-[#30363d] flex space-x-6 text-sm overflow-x-auto">
+      <button onclick="switchTab('approvals')" id="tab-approvals" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition active flex items-center gap-2">
+        <i class="fa-solid fa-stamp"></i>
+        <span>Pending Approvals</span>
+        <span id="tab-badge-pending" class="px-1.5 py-0.2 rounded-full text-xs bg-amber-500/20 text-amber-300 font-mono hidden">0</span>
+      </button>
+      <button onclick="switchTab('anomalies')" id="tab-anomalies" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Cluster Anomalies</span>
+      </button>
+      <button onclick="switchTab('metrics')" id="tab-metrics" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>Metrics</span>
+      </button>
+      <button onclick="switchTab('analyzers')" id="tab-analyzers" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-cubes"></i>
+        <span>Analyzers Matrix</span>
+      </button>
+      <button onclick="switchTab('hygiene')" id="tab-hygiene" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-broom"></i>
+        <span>Pod Hygiene & Cleanup</span>
+      </button>
+      <button onclick="switchTab('chat')" id="tab-chat" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i>
+        <span>SRE AI Assistant</span>
+      </button>
+      <button data-action="playbook-tab" id="tab-playbooks" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition">Playbooks</button>
+      <button onclick="switchTab('settings')" id="tab-settings" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <i class="fa-solid fa-gear"></i>
+        <span>Settings</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: PENDING APPROVALS -->
+    <div id="section-approvals" class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-white">Remediation Proposals and Outcomes</h2>
+          <p class="text-xs text-gray-400">Human-in-the-Loop: No write actions will execute without explicit SRE authorization.</p>
+        </div>
+      </div>
+      <label for="proposal-status-filter" class="text-xs text-gray-400">Status</label>
+      <select id="proposal-status-filter" onchange="loadProposals()" class="bg-gray-800 text-gray-200">
+        <option value="">All statuses</option><option value="PENDING_APPROVAL">Pending approval</option>
+        <option value="APPROVED">Approved</option><option value="EXECUTING">Executing</option>
+        <option value="COMPLETED">Action completed</option><option value="FAILED">Failed</option>
+        <option value="STALE">Stale</option><option value="EXPIRED">Expired</option><option value="REJECTED">Rejected</option>
+      </select>
+      <div id="proposals-container" class="space-y-4">
+        <!-- Injected via JavaScript -->
+        <div class="card p-6 text-center text-gray-500 text-sm">Loading proposals...</div>
+      </div>
+    </div>
+
+    <!-- TAB 2: CLUSTER ANOMALIES -->
+    <div id="section-anomalies" class="space-y-4 hidden">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-white">Detected Cluster Anomalies</h2>
+          <p class="text-xs text-gray-400">Telemetry aggregated from pods, nodes, PVCs, services, and workloads.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="text" id="filter-search" oninput="applyAnomalyFilters()" placeholder="Search name/namespace..." class="px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500 w-48">
+          <select id="filter-severity" onchange="applyAnomalyFilters()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+            <option value="">All Severities</option>
+            <option value="CRITICAL">Critical</option>
+            <option value="HIGH">High</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LOW">Low</option>
+          </select>
+        </div>
+      </div>
+      <div id="issues-container" class="space-y-3">
+        <!-- Injected via JavaScript -->
+        <div class="card p-6 text-center text-gray-500 text-sm">Loading anomalies...</div>
+      </div>
+    </div>
+
+    <!-- TAB 3: RUNTIME METRICS -->
+    <div id="section-metrics" class="space-y-4 hidden">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-white">Runtime Metrics</h2>
+          <p class="text-xs text-gray-400">Protected Prometheus counters for cluster errors, analyzer health, and provider usage.</p>
+        </div>
+        <button onclick="loadDashboardMetrics()" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs rounded-md font-semibold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-arrows-rotate"></i>
+          <span>Refresh Metrics</span>
+        </button>
+      </div>
+      <div id="metrics-error-state" class="card p-3 text-xs text-gray-400 hidden" role="status"></div>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="card p-4">
+          <div class="text-xs text-gray-400 font-medium">Error Count</div>
+          <div class="text-2xl font-bold text-red-400 mt-1" id="metric-error-count">0</div>
+          <div class="text-xs text-gray-500 mt-1">Observed runtime errors</div>
+        </div>
+        <div class="card p-4">
+          <div class="text-xs text-gray-400 font-medium">Scan Errors</div>
+          <div class="text-2xl font-bold text-amber-400 mt-1" id="metric-scan-errors">0</div>
+          <div class="text-xs text-gray-500 mt-1">Failed scan cycles</div>
+        </div>
+        <div class="card p-4">
+          <div class="text-xs text-gray-400 font-medium">Analyzer Errors</div>
+          <div class="text-2xl font-bold text-amber-400 mt-1" id="metric-analyzer-errors">0</div>
+          <div class="text-xs text-gray-500 mt-1">Failed analyzer runs</div>
+        </div>
+        <div class="card p-4">
+          <div class="text-xs text-gray-400 font-medium">Provider Errors</div>
+          <div class="text-2xl font-bold text-amber-400 mt-1" id="metric-provider-errors">0</div>
+          <div class="text-xs text-gray-500 mt-1">Failed model calls</div>
+        </div>
+        <div class="card p-4">
+          <div class="text-xs text-gray-400 font-medium">Last Refresh</div>
+          <div class="text-sm font-semibold text-blue-400 mt-2" id="metric-last-refresh">Never</div>
+          <div class="text-xs text-gray-500 mt-1" id="metric-refresh-state">Waiting for metrics</div>
+        </div>
+      </div>
+      <div class="card p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">Provider Token Usage</h3>
+            <p class="text-xs text-gray-400 mt-1">Reported by the provider response; unavailable means the provider did not return usage metadata.</p>
+          </div>
+          <span id="metric-token-status" class="text-xs text-gray-500">Unavailable</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-xs text-gray-400">Prompt Tokens</div>
+            <div class="text-xl font-bold text-white mt-1" id="metric-token-prompt">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-xs text-gray-400">Completion Tokens</div>
+            <div class="text-xl font-bold text-white mt-1" id="metric-token-completion">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-xs text-gray-400">Total Tokens</div>
+            <div class="text-xl font-bold text-blue-400 mt-1" id="metric-token-total">Unavailable</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: ANALYZERS MATRIX -->
+    <div id="section-analyzers" class="space-y-4 hidden">
+      <div>
+        <h2 class="text-base font-semibold text-white">K8sGPT Analyzer Coverage</h2>
+        <p class="text-xs text-gray-400">All built-in analyzers inspecting cluster resources against health criteria.</p>
+      </div>
+      <div id="analyzers-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Injected via JavaScript -->
+      </div>
+    </div>
+
+    <!-- TAB 5: POD HYGIENE & CLEANUP -->
+    <div id="section-hygiene" class="space-y-4 hidden">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-white">Cluster Pod Hygiene & Auto-Cleaner</h2>
+          <p class="text-xs text-gray-400">Prune Evicted, Failed, Completed, and Stuck Terminating pods to keep nodes and etcd lean.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="loadCleanablePods()" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs rounded-md font-semibold transition">
+            <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh Candidates
+          </button>
+          <button onclick="cleanSelectedPods(false)" class="px-3 py-1.5 bg-red-700 hover:bg-red-600 text-white text-xs rounded-md font-semibold transition">
+            <i class="fa-solid fa-trash-can mr-1"></i> Clean Selected Pods
+          </button>
+        </div>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-[#21262d] text-gray-400 uppercase tracking-wider font-semibold">
+              <tr>
+                <th class="p-3 w-10"><input type="checkbox" id="check-all-pods" onchange="toggleSelectAllPods()"></th>
+                <th class="p-3">Namespace</th>
+                <th class="p-3">Pod Name</th>
+                <th class="p-3">Phase / Reason</th>
+                <th class="p-3">Restarts</th>
+                <th class="p-3">Age</th>
+                <th class="p-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="cleanable-pods-tbody" class="divide-y divide-[#30363d]">
+              <tr><td colspan="7" class="p-4 text-center text-gray-500">Loading cleanable candidates...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: SRE AI ASSISTANT CHAT -->
+    <div id="section-chat" class="space-y-4 hidden">
+      <div>
+        <h2 class="text-base font-semibold text-white">Interactive SRE AI Assistant</h2>
+        <p class="text-xs text-gray-400">Chat with the LLM triage agent regarding cluster anomalies, diagnostic logs, and kubectl commands.</p>
+      </div>
+      <div class="card flex flex-col h-[520px]">
+        <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
+          <div class="flex gap-2">
+            <div class="w-6 h-6 rounded bg-blue-600/30 text-blue-400 flex items-center justify-center flex-shrink-0 font-bold">AI</div>
+            <div class="bg-[#21262d] p-3 rounded-lg max-w-xl text-gray-300">
+              Hello! I am your Kubebee SRE Assistant. Ask me anything about cluster health, specific pod crashes, OOMKill root causes, or ask for recommended remediation steps.
+            </div>
+          </div>
+        </div>
+        <div class="p-3 border-t border-[#30363d] bg-[#161b22] flex gap-2">
+          <input type="text" id="chat-input" onkeydown="if(event.key==='Enter') sendChatMessage()" placeholder="Ask SRE AI (e.g. 'Why is local-path-provisioner crashing?' or 'How do I scale coredns?')..." class="flex-1 px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500">
+          <button onclick="sendChatMessage()" id="btn-chat-send" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5">
+            <span>Send</span>
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 7: SETTINGS & IM INTEGRATIONS -->
+
+    <div id="section-playbooks" class="space-y-4 hidden">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-semibold text-white">Playbooks</h2>
+        <button data-action="playbook-refresh" type="button">Refresh</button>
+      </div>
+      <p id="playbook-status" class="text-sm text-gray-400" role="status">Loading catalog status…</p>
+      <p id="playbook-message" class="text-sm text-gray-400" role="status" aria-live="polite"></p>
+      <div class="card p-5 space-y-3">
+        <h3 class="font-semibold">Task usage and outcomes</h3>
+        <p id="playbook-provider" class="text-xs text-gray-400">Provider configuration: Unavailable</p>
+        <div id="playbook-task-usage" class="text-sm">Token usage: Unavailable</div>
+        <p class="text-xs text-gray-400">Monetary cost: Unavailable. Task/provider configuration follows the server configuration.</p>
+        <div id="playbook-outcomes" class="text-sm">No outcomes recorded.</div>
+      </div>
+      <details class="card p-5">
+        <summary class="font-semibold">Import a runbook</summary>
+        <form id="playbook-import-form" class="playbook-form">
+          <label>Format<select name="media_type"><option value="text/markdown">Markdown</option><option value="application/json">JSON</option><option value="application/yaml">YAML</option></select></label>
+          <label>Source description<input name="origin" maxlength="256" placeholder="Operations runbook"></label>
+          <label>Runbook content<textarea name="content" required maxlength="65536" placeholder="Paste the runbook to create a version for review."></textarea></label>
+          <button type="submit" class="bg-blue-600 text-white">Import for review</button>
+        </form>
+      </details>
+      <details class="card p-5">
+        <summary class="font-semibold">Playbook settings</summary>
+        <p class="text-xs text-gray-400 mt-1">Changes apply to this running service. Policy cannot exceed the limits configured at startup.</p>
+        <form id="playbook-settings-form" class="playbook-form">
+          <fieldset id="playbook-settings-fields" disabled>
+            <label><input type="checkbox" name="enabled"> Enable playbook operations</label>
+            <label>Learning mode<select name="learning_mode"><option value="AUTO_DRAFT">Create review drafts</option><option value="OBSERVE_ONLY">Observe only</option><option value="DISABLED">Disabled</option></select></label>
+            <label>Minimum confidence<input name="min_confidence" type="number" min="0" max="1" step="0.01" required></label>
+            <label>Maximum steps<input name="max_steps" type="number" min="1" max="256" required></label>
+            <label>Maximum source bytes<input name="max_source_bytes" type="number" min="1" required></label>
+            <label>Maximum total text bytes<input name="max_total_text_bytes" type="number" min="1" required></label>
+            <label>Allowed actions (comma-separated)<input name="allowed_actions" maxlength="4096"></label>
+            <label>Allowed namespaces (comma-separated)<input name="allowed_namespaces" maxlength="4096"></label>
+            <label>Allowed resource kinds (comma-separated)<input name="allowed_kinds" maxlength="4096"></label>
+            <label><input type="checkbox" name="allow_cluster_scoped"> Allow cluster-scoped resources within startup policy</label>
+            <button type="submit" class="bg-blue-600 text-white">Save settings</button>
+          </fieldset>
+        </form>
+      </details>
+      <h3 class="font-semibold">Catalog and review</h3>
+      <p class="text-xs text-gray-400">Showing up to 256 versions. Activation makes a reviewed playbook eligible for matching; remediation still requires the existing proposal workflow.</p>
+      <div id="playbook-catalog" class="space-y-4">Loading playbooks…</div>
+    </div>
+
+    <div id="section-settings" class="space-y-6 hidden">
+      <div>
+        <h2 class="text-base font-semibold text-white">Runtime Settings & Integrations</h2>
+        <p class="text-xs text-gray-400">Review safe runtime configuration and manage approved notification destinations.</p>
+      </div>
+
+      <div class="card p-5 space-y-4">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">Runtime Configuration</h3>
+            <p class="text-xs text-gray-400 mt-1">Credential values and custom headers are never returned to the dashboard.</p>
+          </div>
+          <span id="settings-load-state" class="text-xs text-gray-500">Loading...</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Provider</div>
+            <div id="settings-provider" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Wire API</div>
+            <div id="settings-wire-api" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Model</div>
+            <div id="settings-model" class="text-gray-200 font-semibold mt-1 break-all">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Endpoint</div>
+            <div id="settings-base-url" class="text-gray-200 font-semibold mt-1 break-all">Masked</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Scan Interval</div>
+            <div id="settings-scan-interval" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Scan Jitter</div>
+            <div id="settings-scan-jitter" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Event-Driven Scans</div>
+            <div id="settings-event-driven" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Event Queue Capacity</div>
+            <div id="settings-event-queue-capacity" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Event Debounce</div>
+            <div id="settings-event-debounce" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Provider Cache</div>
+            <div id="settings-cache" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+          <div class="bg-[#0d1117] border border-[#30363d] rounded-md p-3">
+            <div class="text-gray-500">Webhook</div>
+            <div id="settings-webhook-status" class="text-gray-200 font-semibold mt-1">Unavailable</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-semibold text-white">Supported Instant Messaging (IM) Integrations</h3>
+        <p class="text-xs text-gray-400 mt-1">Send real-time alerts with direct approval buttons to your DevOps channels.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded bg-[#4A154B]/30 border border-[#E01E5A] flex items-center justify-center text-[#E01E5A] text-xl">
+            <i class="fa-brands fa-slack"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white">Slack</div>
+            <div class="text-xs text-gray-400">Block Kit alerts with approval links</div>
+          </div>
+        </div>
+        <div class="card p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded bg-[#5865F2]/20 border border-[#5865F2] flex items-center justify-center text-[#5865F2] text-xl">
+            <i class="fa-brands fa-discord"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white">Discord</div>
+            <div class="text-xs text-gray-400">Color-coded rich embeds & buttons</div>
+          </div>
+        </div>
+        <div class="card p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded bg-[#5059C9]/20 border border-[#5059C9] flex items-center justify-center text-[#5059C9] text-xl">
+            <i class="fa-brands fa-microsoft"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white">Microsoft Teams</div>
+            <div class="text-xs text-gray-400">Adaptive cards with deep actions</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-6 space-y-4 max-w-2xl">
+        <h3 class="text-sm font-semibold text-white">Configure Incoming Webhook URL</h3>
+        <p class="text-xs text-gray-400">Paste your Slack, Discord, or Microsoft Teams webhook endpoint below:</p>
+        <div class="flex gap-2">
+          <input type="text" id="settings-webhook-url" placeholder="https://hooks.slack.com/services/... or https://discord.com/api/webhooks/..." class="flex-1 px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500">
+          <button onclick="saveWebhookConfig()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-md transition">Save</button>
+        </div>
+        <div>
+          <button onclick="testWebhookAlert()" id="btn-test-alert" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs font-semibold rounded-md transition flex items-center gap-1.5">
+            <i class="fa-solid fa-paper-plane"></i>
+            <span>Send Test Alert Notification</span>
+          </button>
+          <div id="test-alert-status" class="mt-2 text-xs"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal for Logs & Details -->
+  <div id="modal-backdrop" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#161b22] border border-[#30363d] rounded-lg max-w-3xl w-full max-h-[80vh] flex flex-col shadow-2xl">
+      <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2" id="modal-title">Resource Logs</h3>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-base"></i></button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1 font-mono text-xs text-gray-300">
+        <pre id="modal-content" class="p-3 text-xs leading-relaxed whitespace-pre-wrap"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DASHBOARD_TOKEN_STORAGE_KEY = 'sre-agent-api-token';
+    let dashboardScriptLoaded = false;
+    let dashboardScriptPromise = null;
+
+    function dashboardGetStoredToken() {
+      try {
+        return sessionStorage.getItem(DASHBOARD_TOKEN_STORAGE_KEY) || '';
+      } catch (err) {
+        return '';
+      }
+    }
+
+    function dashboardShowLogin(message) {
+      document.getElementById('auth-panel').classList.remove('hidden');
+      document.getElementById('auth-message').textContent = message;
+    }
+
+    function dashboardLogout() {
+      try {
+        sessionStorage.removeItem(DASHBOARD_TOKEN_STORAGE_KEY);
+      } catch (err) {
+        // Storage can be unavailable in restricted browser contexts.
+      }
+      document.getElementById('auth-token').value = '';
+      dashboardShowLogin('Dashboard session cleared.');
+    }
+
+    async function dashboardLoadApp() {
+      if (dashboardScriptLoaded) return true;
+      if (dashboardScriptPromise) return dashboardScriptPromise;
+
+      dashboardScriptPromise = (async () => {
+        const token = dashboardGetStoredToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const response = await fetch('/static/app.js', { headers });
+        if (response.status === 401) {
+          dashboardShowLogin('An API token is required to load the dashboard.');
+          return false;
+        }
+        if (!response.ok) throw new Error('dashboard script request failed');
+
+        const script = document.createElement('script');
+        script.textContent = await response.text();
+        document.body.appendChild(script);
+        dashboardScriptLoaded = true;
+        return true;
+      })().catch(() => {
+        dashboardShowLogin('The dashboard could not be loaded.');
+        return false;
+      });
+
+      const loaded = await dashboardScriptPromise;
+      dashboardScriptPromise = null;
+      return loaded;
+    }
+
+    async function dashboardLogin(event) {
+      event.preventDefault();
+      const input = document.getElementById('auth-token');
+      const token = input.value.trim();
+      if (!token) {
+        dashboardShowLogin('Enter an API token to continue.');
+        return false;
+      }
+
+      try {
+        sessionStorage.setItem(DASHBOARD_TOKEN_STORAGE_KEY, token);
+      } catch (err) {
+        dashboardShowLogin('This browser does not permit session storage.');
+        return false;
+      }
+
+      const loaded = await dashboardLoadApp();
+      if (loaded && typeof login === 'function') await login();
+      return false;
+    }
+
+    dashboardLoadApp();
+  </script>
+</body>
+</html>

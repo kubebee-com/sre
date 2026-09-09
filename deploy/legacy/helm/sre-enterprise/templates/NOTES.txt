@@ -1,0 +1,9 @@
+The control plane has no Kubernetes token or workload RBAC. Collectors are explicit per-application installations; executors are opt-in and use separate ServiceAccounts and private state volumes.
+
+Required before startup:
+- A trusted ConfigMap containing config.json (owners, OIDC group bindings, approved provider profiles).
+- An existing Secret with SRE_ENTERPRISE_DATABASE_URL (verified TLS), SRE_ENTERPRISE_PUBLIC_URL (HTTPS), SRE_OIDC_ISSUER, SRE_OIDC_CLIENT_ID, SRE_OIDC_CLIENT_SECRET and SRE_AUTHORITY_GENERATION.
+- Reviewed database egress CIDRs, TLS ingress, and DNS/HTTPS connectivity.
+- For agents: verified cluster UID, explicit namespace allowlist, role-specific one-use bootstrap Secrets (key token), shared 32-byte identity key Secret (key key).
+
+Only one control-plane replica is supported. Restart or restore creates a fresh authority epoch and requires administrator agent re-enrollment; previous approvals and queued authority cannot resume. Keep the identity-registry PVC and each agent's private PVC separate. Executor affinity co-locates its read-only registry mount with the collector for RWO storage.

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: sre-enterprise
+description: Scoped enterprise SRE control plane with separate read-only collectors and optional approved executor
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

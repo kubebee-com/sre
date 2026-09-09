@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package sre.api.v1;
+
+option go_package = "github.com/kubebee-com/sre/api/v1;apiv1";
+
+// Empty is used for RPCs whose request has no parameters.
+message Empty {}
+
+message ScanRequest {
+  string schema_version = 1;
+  repeated string include_namespaces = 2;
+  repeated string exclude_namespaces = 3;
+  string label_selector = 4;
+  repeated string kinds = 5;
+  repeated string names = 6;
+  repeated string analyzers = 7;
+  int32 max_concurrency = 8;
+  // Go duration syntax, for example "30s" or "2m".
+  string timeout = 9;
+}
+
+message ScanScope {
+  string schema_version = 1;
+  repeated string include_namespaces = 2;
+  repeated string exclude_namespaces = 3;
+  string label_selector = 4;
+  repeated string kinds = 5;
+  repeated string names = 6;
+  repeated string analyzers = 7;
+  int32 max_concurrency = 8;
+  string timeout = 9;
+}
+
+message ResourceRef {
+  string namespace = 1;
+  string kind = 2;
+  string name = 3;
+  string uid = 4;
+}
+
+message Issue {
+  string id = 1;
+  string namespace = 2;
+  string kind = 3;
+  string name = 4;
+  string target_uid = 5;
+  string target_resource_version = 6;
+  string severity = 7;
+  string category = 8;
+  string summary = 9;
+  string details = 10;
+  string logs_snippet = 11;
+  repeated string events = 12;
+  string spec_snippet = 13;
+  string first_observed = 14;
+  string last_observed = 15;
+  ResourceRef parent = 16;
+  string docs_url = 17;
+  int32 redacted_count = 18;
+  repeated string redacted_fields = 19;
+}
+
+message AnalyzerInfo {
+  string name = 1;
+  string resource = 2;
+  string description = 3;
+  string docs_url = 4;
+  string parent_kind = 5;
+  bool enabled = 6;
+  int32 issue_count = 7;
+}
+
+message AnalyzerRun {
+  AnalyzerInfo info = 1;
+  int32 issue_count = 2;
+  string duration = 3;
+  string error = 4;
+  string started_at = 5;
+  string finished_at = 6;
+}
+
+message ScanResponse {
+  string schema_version = 1;
+  ScanScope scope = 2;
+  repeated Issue issues = 3;
+  repeated AnalyzerRun analyzers = 4;
+  string started_at = 5;
+  string finished_at = 6;
+  string duration = 7;
+}
+
+message ListAnalyzersResponse {
+  string schema_version = 1;
+  repeated AnalyzerInfo analyzers = 2;
+}
+
+message QueryRequest {
+  string schema_version = 1;
+  string kind = 2;
+  string namespace = 3;
+  string name = 4;
+}
+
+message QueryResponse {
+  string schema_version = 1;
+  string kind = 2;
+  string namespace = 3;
+  string name = 4;
+  string resource_json = 5;
+}
+
+message ConfigResponse {
+  string schema_version = 1;
+  string config_json = 2;
+}
+
+service AnalyzerService {
+  rpc Scan(ScanRequest) returns (ScanResponse);
+  rpc Analyze(ScanRequest) returns (ScanResponse);
+  rpc ListAnalyzers(Empty) returns (ListAnalyzersResponse);
+}
+
+service QueryService {
+  rpc GetResource(QueryRequest) returns (QueryResponse);
+  rpc Query(QueryRequest) returns (QueryResponse);
+}
+
+service ConfigService {
+  rpc GetConfig(Empty) returns (ConfigResponse);
+}

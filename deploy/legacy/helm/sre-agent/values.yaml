@@ -1,0 +1,234 @@
+# The chart uses the release namespace. Create the namespace separately or use
+# `helm upgrade --install --create-namespace`.
+nameOverride: ""
+fullnameOverride: ""
+
+commonLabels: {}
+
+image:
+  repository: ghcr.io/kubebee-com/sre
+  # A fixed release tag is supported for development. Use digest in production.
+  tag: "0.1.0"
+  digest: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+replicaCount: 1
+revisionHistoryLimit: 3
+terminationGracePeriodSeconds: 30
+
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: true
+  annotations: {}
+
+rbac:
+  create: true
+  # Cluster-wide read access is required for nodes, PVs, namespaces, and the
+  # default scanner scope. Keep mutation and Secret reads explicitly opt-in.
+  readSecrets: false
+  remediation:
+    enabled: false
+  extraRules: []
+
+config:
+  create: true
+  name: ""
+  grpcPort: "0"
+  grpcTLSCertFile: ""
+  grpcTLSKeyFile: ""
+  grpcTLSClientCAFile: ""
+  grpcReflection: false
+  enableAWSEKS: false
+  awsRegion: ""
+  eksClusterName: ""
+  cacheDir: ""
+  cacheTTL: 15m
+  cacheMaxEntries: 256
+  cacheMaxValueBytes: 1048576
+  llmProvider: rule-based
+  llmModel: ""
+  llmBaseURL: ""
+  llmEndpointAllowlist: ""
+  llmOrganization: ""
+  llmProxyURL: ""
+  publicURL: ""
+  scanInterval: 2m
+  scanJitter: 15s
+  leaderElection: true
+  leaderElectionNamespace: ""
+  leaderElectionID: sre-agent
+  leaderElectionIdentity: ""
+  llmMode: ""
+  allowedOrigins: []
+  maxBodyBytes: "1048576"
+  requestsPerMinute: "120"
+  requestBurst: "20"
+  includeNamespaces: []
+  excludeNamespaces: []
+  labelSelector: ""
+  resourceKinds: []
+  resourceNames: []
+  analyzers: []
+  scanConcurrency: "4"
+  scanTimeout: 90s
+  extra: {}
+
+auth:
+  requireAPIToken: true
+  trustedClientIPHeader: ""
+  trustedProxyCIDRs: []
+
+secret:
+  # External Secret management is the secure default. The referenced Secret
+  # must contain SRE_API_TOKEN; the other keys are optional.
+  create: false
+  name: ""
+  apiToken: ""
+  llmAPIKey: ""
+  llmCustomHeaders: ""
+  webhookURL: ""
+  stringData: {}
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  mountPath: /var/lib/sre-agent
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+grpc:
+  enabled: false
+  port: 9090
+  reflection: false
+  tls:
+    enabled: false
+    secretName: ""
+    mountPath: /etc/sre-agent/grpc-tls
+    certFile: /etc/sre-agent/grpc-tls/tls.crt
+    keyFile: /etc/sre-agent/grpc-tls/tls.key
+    clientCAFile: ""
+
+probes:
+  liveness:
+    enabled: true
+    path: /healthz
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    enabled: true
+    path: /healthz
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+podAnnotations: {}
+podLabels: {}
+deploymentAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+
+networkPolicy:
+  enabled: true
+  ingress:
+    ports:
+      - 8080
+    additionalFrom: []
+  egress:
+    dns:
+      enabled: true
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      ports:
+        - 53
+    internet:
+      enabled: true
+      ports:
+        - 443
+        - 80
+      # Empty means all destinations. Replace with explicit CIDRs when the
+      # cluster has a known egress boundary.
+      to: []
+
+pdb:
+  enabled: true
+  minAvailable: 1
+  maxUnavailable: ""
+
+ingress:
+  enabled: false
+  ingressClassName: ""
+  annotations: {}
+  tlsRequired: true
+  hosts: []
+  tls: []
+
+serviceMonitor:
+  enabled: false
+  authorization:
+    # Empty name reuses the configured API Secret; no value is embedded here.
+    secretName: ""
+    secretKey: SRE_API_TOKEN
+  # The application exposes metrics on the HTTP service at /metrics.
+  port: http
+  path: /metrics
+  scheme: http
+  interval: 30s
+  scrapeTimeout: 10s
+  honorLabels: false
+  labels: {}
+  annotations: {}
+  relabelings: []
+  metricRelabelings: []

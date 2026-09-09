@@ -1,0 +1,104 @@
+{{- if .Values.agent.enabled }}
+{{- $origin := required "agent.orchestratorURL required" .Values.agent.orchestratorURL }}
+{{- $org := required "agent.organizationID required" .Values.agent.organizationID }}
+{{- $cluster := required "agent.clusterID required" .Values.agent.clusterID }}
+{{- $app := required "agent.applicationID required" .Values.agent.applicationID }}
+{{- $uid := required "verified agent.expectedClusterUID required" .Values.agent.expectedClusterUID }}
+{{- if not .Values.agent.namespaces }}{{ fail "agent.namespaces must be explicit" }}{{ end }}
+{{- if .Values.agent.executionEnabled }}
+{{- range .Values.agent.namespaces }}
+{{- if or (has . $.Values.agent.protectedNamespaces) (eq . $.Release.Namespace) }}{{ fail "execution namespace is protected" }}{{ end }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: {{ .Release.Name }}-agent}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: {{ .Release.Name }}-agent}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.storage.storageClassName }}
+  storageClassName: {{ .Values.storage.storageClassName | quote }}
+  {{- end }}
+  resources: {requests: {storage: {{ .Values.storage.size }}}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ .Release.Name }}-agent}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: agent}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/instance: {{ .Release.Name }}, sre.component: agent}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-agent
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
+      initContainers:
+        {{- range $role := list "collector" "executor" }}
+        {{- if or (eq $role "collector") $.Values.agent.executionEnabled }}
+        - name: bootstrap-{{ $role }}
+          image: {{ printf "%s:%s" $.Values.agent.image $.Values.imageTag | quote }}
+          args: [init, "--source-key=/key/key", "--source-bootstrap=/bootstrap/token", "--destination=/state/runtime/{{ $role }}"]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: key, mountPath: /key, readOnly: true}
+            - {name: {{ $role }}-bootstrap, mountPath: /bootstrap, readOnly: true}
+        {{- end }}
+        {{- end }}
+      containers:
+        - name: agent
+          image: {{ printf "%s:%s" .Values.agent.image .Values.imageTag | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          {{- if .Values.agent.providerSecret }}
+          envFrom:
+            - secretRef: {name: {{ .Values.agent.providerSecret }}}
+          {{- end }}
+          {{- if .Values.tlsCASecret }}
+          env: [{name: SSL_CERT_FILE, value: /etc/sre-trust/ca.crt}]
+          {{- end }}
+          args:
+            - --in-cluster
+            - {{ printf "--orchestrator=%s" $origin | quote }}
+            - {{ printf "--organization-id=%s" $org | quote }}
+            - {{ printf "--cluster-id=%s" $cluster | quote }}
+            - {{ printf "--application-id=%s" $app | quote }}
+            - {{ printf "--cluster-uid=%s" $uid | quote }}
+            - {{ printf "--namespaces=%s" (join "," .Values.agent.namespaces) | quote }}
+            - {{ printf "--profiles=%s" (join "," .Values.agent.profiles) | quote }}
+            - --state-dir=/state/runtime
+            - --identity-key-file=/state/runtime/collector/identity.key
+            - --collector-bootstrap-file=/state/runtime/collector/bootstrap
+            {{- if .Values.agent.executionEnabled }}
+            - --execution-enabled
+            - --executor-bootstrap-file=/state/runtime/executor/bootstrap
+            - {{ printf "--protected-namespaces=%s" (join "," (append .Values.agent.protectedNamespaces .Release.Namespace | uniq)) | quote }}
+            {{- end }}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            {{- if .Values.tlsCASecret }}
+            - {name: trust, mountPath: /etc/sre-trust, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: state
+          persistentVolumeClaim: {claimName: {{ .Release.Name }}-agent}
+        - name: key
+          secret: {secretName: {{ .Values.agent.identityKeySecret }}, defaultMode: 288}
+        - name: collector-bootstrap
+          secret: {secretName: {{ .Values.agent.collectorBootstrapSecret }}, defaultMode: 288}
+        {{- if .Values.agent.executionEnabled }}
+        - name: executor-bootstrap
+          secret: {secretName: {{ .Values.agent.executorBootstrapSecret }}, defaultMode: 288}
+        {{- end }}
+        {{- if .Values.tlsCASecret }}
+        - name: trust
+          secret: {secretName: {{ .Values.tlsCASecret }}}
+        {{- end }}
+{{- end }}

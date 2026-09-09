@@ -1,0 +1,47 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-invalid
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: hpa-invalid
+    sre.kubebee.com/fixture: "true"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hpa-missing-target
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdb-invalid
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pdb-invalid
+    sre.kubebee.com/fixture: "true"
+spec:
+  maxUnavailable: 1
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdb-blocked
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pdb-blocked
+    sre.kubebee.com/fixture: "true"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: no-such-pdb-pods

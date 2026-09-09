@@ -1,0 +1,52 @@
+{{- if .Values.config.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sre-agent.configMapName" . }}
+  labels:
+    {{- include "sre-agent.labels" . | nindent 4 }}
+data:
+  SRE_GRPC_PORT: {{ if .Values.grpc.enabled }}{{ .Values.grpc.port | quote }}{{ else }}{{ .Values.config.grpcPort | quote }}{{ end }}
+  SRE_GRPC_TLS_CERT_FILE: {{ if .Values.grpc.tls.enabled }}{{ .Values.grpc.tls.certFile | quote }}{{ else }}{{ .Values.config.grpcTLSCertFile | quote }}{{ end }}
+  SRE_GRPC_TLS_KEY_FILE: {{ if .Values.grpc.tls.enabled }}{{ .Values.grpc.tls.keyFile | quote }}{{ else }}{{ .Values.config.grpcTLSKeyFile | quote }}{{ end }}
+  SRE_GRPC_TLS_CLIENT_CA_FILE: {{ if .Values.grpc.tls.enabled }}{{ .Values.grpc.tls.clientCAFile | quote }}{{ else }}{{ .Values.config.grpcTLSClientCAFile | quote }}{{ end }}
+  SRE_GRPC_REFLECTION: {{ if .Values.grpc.enabled }}{{ .Values.grpc.reflection | quote }}{{ else }}{{ .Values.config.grpcReflection | quote }}{{ end }}
+  SRE_ENABLE_AWS_EKS: {{ .Values.config.enableAWSEKS | quote }}
+  AWS_REGION: {{ .Values.config.awsRegion | quote }}
+  SRE_EKS_CLUSTER_NAME: {{ .Values.config.eksClusterName | quote }}
+  SRE_CACHE_DIR: {{ .Values.config.cacheDir | quote }}
+  SRE_CACHE_TTL: {{ .Values.config.cacheTTL | quote }}
+  SRE_CACHE_MAX_ENTRIES: {{ .Values.config.cacheMaxEntries | quote }}
+  SRE_CACHE_MAX_VALUE_BYTES: {{ .Values.config.cacheMaxValueBytes | quote }}
+  LLM_PROVIDER: {{ .Values.config.llmProvider | quote }}
+  LLM_MODE: {{ .Values.config.llmMode | quote }}
+  LLM_MODEL: {{ .Values.config.llmModel | quote }}
+  LLM_BASE_URL: {{ .Values.config.llmBaseURL | quote }}
+  LLM_ENDPOINT_ALLOWLIST: {{ .Values.config.llmEndpointAllowlist | quote }}
+  LLM_ORGANIZATION: {{ .Values.config.llmOrganization | quote }}
+  LLM_PROXY_URL: {{ .Values.config.llmProxyURL | quote }}
+  PUBLIC_URL: {{ .Values.config.publicURL | quote }}
+  SCAN_INTERVAL: {{ .Values.config.scanInterval | quote }}
+  SRE_SCAN_JITTER: {{ .Values.config.scanJitter | quote }}
+  SRE_LEADER_ELECTION: {{ .Values.config.leaderElection | quote }}
+  SRE_LEADER_ELECTION_NAMESPACE: {{ default .Release.Namespace .Values.config.leaderElectionNamespace | quote }}
+  SRE_LEADER_ELECTION_ID: {{ .Values.config.leaderElectionID | quote }}
+  SRE_LEADER_ELECTION_IDENTITY: {{ .Values.config.leaderElectionIdentity | quote }}
+  SRE_ALLOWED_ORIGINS: {{ join "," .Values.config.allowedOrigins | quote }}
+  SRE_MAX_BODY_BYTES: {{ .Values.config.maxBodyBytes | quote }}
+  SRE_REQUESTS_PER_MINUTE: {{ .Values.config.requestsPerMinute | quote }}
+  SRE_REQUEST_BURST: {{ .Values.config.requestBurst | quote }}
+  SRE_INCLUDE_NAMESPACES: {{ join "," .Values.config.includeNamespaces | quote }}
+  SRE_EXCLUDE_NAMESPACES: {{ join "," .Values.config.excludeNamespaces | quote }}
+  SRE_LABEL_SELECTOR: {{ .Values.config.labelSelector | quote }}
+  SRE_RESOURCE_KINDS: {{ join "," .Values.config.resourceKinds | quote }}
+  SRE_RESOURCE_NAMES: {{ join "," .Values.config.resourceNames | quote }}
+  SRE_ANALYZERS: {{ join "," .Values.config.analyzers | quote }}
+  SRE_SCAN_CONCURRENCY: {{ .Values.config.scanConcurrency | quote }}
+  SRE_SCAN_TIMEOUT: {{ .Values.config.scanTimeout | quote }}
+  {{- with .Values.config.extra }}
+  {{- range $key, $value := . }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

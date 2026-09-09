@@ -1,0 +1,16 @@
+{
+  "retention_days": 90,
+  "applications": [
+    {"scope":{"organization_id":"company","cluster_id":"production-a","application_id":"payments"},"owner_group":"payments-owners","approver_groups":["payments-oncall"]},
+    {"scope":{"organization_id":"company","cluster_id":"production-b","application_id":"payments"},"owner_group":"payments-owners","approver_groups":["payments-oncall"]}
+  ],
+  "bindings": [
+    {"scope":{"organization_id":"company","cluster_id":"production-a","application_id":"payments"},"group":"platform-admins","role":"ADMINISTRATOR"},
+    {"scope":{"organization_id":"company","cluster_id":"production-b","application_id":"payments"},"group":"platform-admins","role":"ADMINISTRATOR"},
+    {"scope":{"organization_id":"company","cluster_id":"production-a","application_id":"payments"},"group":"diagnostic-stewards","role":"STEWARD"}
+  ],
+  "providers": [
+    {"id":"offline-review","provider":"rule","scopes":[{"organization_id":"company","cluster_id":"production-a","application_id":"payments"},{"organization_id":"company","cluster_id":"production-b","application_id":"payments"}]}
+  ],
+  "notifications": []
+}

@@ -1,0 +1,45 @@
+# syntax=docker/dockerfile:1
+ARG GO_IMAGE=golang:1.26.6-alpine@sha256:3889b425f035be855a72fb4755265311293b6d414521f0a519d819df32222d83
+ARG RUNTIME_IMAGE=cgr.dev/chainguard/static@sha256:f51c2493951313c3ad4069080b2814ffb6ed6fe3909dabeb84a9482f42d5600b
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG BUILD_DATE=unknown
+FROM ${GO_IMAGE} AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -p 1 -trimpath \
+    -ldflags="-s -w -X github.com/kubebee-com/sre/pkg/buildinfo.Version=${VERSION} -X github.com/kubebee-com/sre/pkg/buildinfo.Revision=${REVISION} -X github.com/kubebee-com/sre/pkg/buildinfo.BuildDate=${BUILD_DATE}" \
+    -o /out/sre-agent ./cmd/sre-agent && \
+    CGO_ENABLED=0 go build -p 1 -trimpath \
+    -ldflags="-s -w -X github.com/kubebee-com/sre/pkg/buildinfo.Version=${VERSION} -X github.com/kubebee-com/sre/pkg/buildinfo.Revision=${REVISION} -X github.com/kubebee-com/sre/pkg/buildinfo.BuildDate=${BUILD_DATE}" \
+    -o /out/sre-orchestrator ./cmd/sre-orchestrator
+FROM ${RUNTIME_IMAGE} AS orchestrator
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="KubeBee SRE Orchestrator" \
+      org.opencontainers.image.description="HA scoped SRE orchestration, approvals, notifications and audit" \
+      org.opencontainers.image.source="https://github.com/kubebee-com/sre" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.licenses="Apache-2.0"
+USER 65532:65532
+COPY --from=build /out/sre-orchestrator /usr/local/bin/sre-orchestrator
+ENTRYPOINT ["/usr/local/bin/sre-orchestrator"]
+FROM ${RUNTIME_IMAGE} AS agent
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="KubeBee SRE Agent" \
+      org.opencontainers.image.description="Authenticated Kubernetes collection, diagnosis and approval-gated execution" \
+      org.opencontainers.image.source="https://github.com/kubebee-com/sre" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.licenses="Apache-2.0"
+USER 65532:65532
+COPY --from=build /out/sre-agent /usr/local/bin/sre-agent
+ENTRYPOINT ["/usr/local/bin/sre-agent", "--managed"]

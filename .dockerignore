@@ -1,0 +1,8 @@
+.git
+.github
+.worktrees
+bin
+docs
+scripts
+**/*_test.go
+deploy/k8s/secret.example.yaml

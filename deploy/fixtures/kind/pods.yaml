@@ -1,0 +1,224 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-pending-scheduling
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-pending-scheduling
+    sre.kubebee.com/fixture: "true"
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    sre-fixture-node: does-not-exist
+  containers:
+    - name: pending
+      image: busybox:1.36.1
+      command: ["sh", "-c", "sleep 3600"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-invalid-image
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-invalid-image
+    sre.kubebee.com/fixture: "true"
+spec:
+  containers:
+    - name: invalid-image
+      image: registry.invalid/kubebee/sre-fixture:missing
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-crash-loop
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-crash-loop
+    sre.kubebee.com/fixture: "true"
+spec:
+  restartPolicy: Always
+  containers:
+    - name: crash-loop
+      image: busybox:1.36.1
+      command: ["sh", "-c", "echo ERROR crash-loop fixture; exit 1"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-oom-exit-137
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-oom-exit-137
+    sre.kubebee.com/fixture: "true"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: oom
+      image: busybox:1.36.1
+      command: ["sh", "-c", "exit 137"]
+      resources:
+        limits:
+          memory: 16Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-failed
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-failed
+    sre.kubebee.com/fixture: "true"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: failed
+      image: busybox:1.36.1
+      command: ["sh", "-c", "echo failed fixture; exit 1"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-evicted
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-evicted
+    sre.kubebee.com/fixture: "true"
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    sre-fixture-node: does-not-exist
+  containers:
+    - name: evicted
+      image: busybox:1.36.1
+      command: ["sh", "-c", "sleep 3600"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-stuck-terminating
+  namespace: sre-fixtures
+  finalizers:
+    - sre.kubebee.com/fixture-finalizer
+  labels:
+    sre.kubebee.com/fixture-id: pod-stuck-terminating
+    sre.kubebee.com/fixture: "true"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: terminating
+      image: busybox:1.36.1
+      command: ["sh", "-c", "sleep 3600"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-current-log-error
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-current-log-error
+    sre.kubebee.com/fixture: "true"
+spec:
+  containers:
+    - name: current-log
+      image: busybox:1.36.1
+      command: ["sh", "-c", "echo ERROR current-log fixture-token=__KIND_FIXTURE_TOKEN__; exit 1"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-previous-log-error
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-previous-log-error
+    sre.kubebee.com/fixture: "true"
+spec:
+  containers:
+    - name: previous-log
+      image: busybox:1.36.1
+      command: ["sh", "-c", "echo ERROR previous-log fixture-token=__KIND_FIXTURE_TOKEN__; exit 1"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-container-config
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-container-config
+    sre.kubebee.com/fixture: "true"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: bad-config
+      image: busybox:1.36.1
+      env:
+        - name: REQUIRED_FIXTURE_VALUE
+          valueFrom:
+            configMapKeyRef:
+              name: configmap-missing
+              key: missing
+              optional: false
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-high-restarts
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-high-restarts
+    sre.kubebee.com/fixture: "true"
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    sre-fixture-node: does-not-exist
+  containers:
+    - name: high-restarts
+      image: busybox:1.36.1
+      command: ["sh", "-c", "echo ERROR high-restarts; exit 1"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-service-port-mismatch
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: pod-service-port-mismatch
+    sre.kubebee.com/fixture: "true"
+    app: sre-service-port
+spec:
+  containers:
+    - name: service-target
+      image: busybox:1.36.1
+      command: ["sh", "-c", "sleep 3600"]
+      ports:
+        - name: actual
+          containerPort: 9090
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-privilege
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: security-privilege
+    sre.kubebee.com/fixture: "true"
+spec:
+  hostPID: true
+  restartPolicy: Never
+  containers:
+    - name: privileged
+      image: busybox:1.36.1
+      command: ["sh", "-c", "sleep 3600"]
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+        runAsUser: 0
+      volumeMounts:
+        - name: host
+          mountPath: /host
+          readOnly: true
+  volumes:
+    - name: host
+      hostPath:
+        path: /var/lib
+        type: Directory

@@ -1,0 +1,48 @@
+tlsCASecret: "" # Optional Secret containing ca.crt (trusted CA bundle).
+imageTag: "0.1.0"
+imagePullPolicy: IfNotPresent
+controlPlane:
+  enabled: true
+  image: ghcr.io/kubebee-com/sre-control-plane
+  existingConfigMap: sre-enterprise-config
+  existingSecret: sre-enterprise-control-plane
+  executionEnabled: false
+  ingress:
+    enabled: false
+    className: nginx
+    host: sre.example.com
+    tlsSecret: sre-enterprise-tls
+collector:
+  enabled: false
+  image: ghcr.io/kubebee-com/sre-collector
+  bootstrapSecret: sre-collector-bootstrap
+executor:
+  enabled: false
+  image: ghcr.io/kubebee-com/sre-executor
+  bootstrapSecret: sre-executor-bootstrap
+  protectedNamespaces: [kube-system, kube-public, kube-node-lease]
+agentInitImage: ghcr.io/kubebee-com/sre-agent-init
+agent:
+  controlPlaneURL: ""
+  organizationID: ""
+  clusterID: ""
+  applicationID: ""
+  expectedClusterUID: ""
+  namespaces: []
+  identityKeySecret: sre-local-identity-key
+storage:
+  storageClassName: ""
+  size: 1Gi
+networkPolicy:
+  enabled: true
+  databaseCIDRs: []
+  kubernetesAPIPort: 443
+  ingressNamespaceLabels:
+    kubernetes.io/metadata.name: ingress-nginx
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

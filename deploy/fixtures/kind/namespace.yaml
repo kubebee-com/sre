@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sre-fixtures
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    sre.kubebee.com/fixture: "true"

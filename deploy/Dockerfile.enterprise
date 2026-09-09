@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1.7
+ARG GO_IMAGE=golang:1.26.6-alpine@sha256:3889b425f035be855a72fb4755265311293b6d414521f0a519d819df32222d83
+ARG RUNTIME_IMAGE=cgr.dev/chainguard/static@sha256:f51c2493951313c3ad4069080b2814ffb6ed6fe3909dabeb84a9482f42d5600b
+FROM ${GO_IMAGE} AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/sre-control-plane ./cmd/sre-collector ./cmd/sre-executor ./cmd/sre-agent-init
+FROM ${RUNTIME_IMAGE} AS base
+USER 65532:65532
+FROM base AS control-plane
+COPY --from=builder /out/sre-control-plane /usr/local/bin/sre-control-plane
+ENTRYPOINT ["/usr/local/bin/sre-control-plane"]
+FROM base AS collector
+COPY --from=builder /out/sre-collector /usr/local/bin/sre-collector
+ENTRYPOINT ["/usr/local/bin/sre-collector"]
+FROM base AS executor
+COPY --from=builder /out/sre-executor /usr/local/bin/sre-executor
+ENTRYPOINT ["/usr/local/bin/sre-executor"]
+FROM base AS agent-init
+COPY --from=builder /out/sre-agent-init /usr/local/bin/sre-agent-init
+ENTRYPOINT ["/usr/local/bin/sre-agent-init"]

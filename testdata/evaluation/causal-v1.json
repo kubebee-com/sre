@@ -1,0 +1,306 @@
+{
+  "version": "causal-v1",
+  "at": "2026-01-01T00:00:00Z",
+  "cases": [
+    {
+      "id": "resource_pressure",
+      "split": "baseline",
+      "evidence": [
+        {
+          "ref": {
+            "id": "resource_pressure-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "RESOURCE_PRESSURE",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": "RESOURCE_PRESSURE",
+      "expected_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "network_blocked",
+      "split": "baseline",
+      "evidence": [
+        {
+          "ref": {
+            "id": "network_blocked-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "NETWORK_BLOCKED",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": "NETWORK_BLOCKED",
+      "expected_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "configuration_drift",
+      "split": "baseline",
+      "evidence": [
+        {
+          "ref": {
+            "id": "configuration_drift-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "CONFIGURATION_DRIFT",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": "CONFIGURATION_DRIFT",
+      "expected_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "symptom-only",
+      "split": "baseline",
+      "evidence": [
+        {
+          "ref": {
+            "id": "symptom-only-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "CRASH_LOOP",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": ""
+    },
+    {
+      "id": "dependency-side-effect",
+      "split": "baseline",
+      "evidence": [
+        {
+          "ref": {
+            "id": "dependency-side-effect-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "DEPENDENCY_UNAVAILABLE",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": ""
+    },
+    {
+      "id": "healthy-contradiction",
+      "split": "baseline",
+      "evidence": [
+        {
+          "ref": {
+            "id": "healthy-contradiction-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "RESOURCE_PRESSURE",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        },
+        {
+          "ref": {
+            "id": "healthy-contradiction-1",
+            "version": 1
+          },
+          "observation": {
+            "code": "HEALTHY",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": ""
+    },
+    {
+      "id": "expired-evidence",
+      "split": "heldout",
+      "evidence": [
+        {
+          "ref": {
+            "id": "expired-evidence-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "RESOURCE_PRESSURE",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2025-12-31T23:59:00Z",
+            "valid_until": "2026-01-01T00:00:00Z"
+          }
+        }
+      ],
+      "expected_cause": ""
+    },
+    {
+      "id": "future-evidence",
+      "split": "heldout",
+      "evidence": [
+        {
+          "ref": {
+            "id": "future-evidence-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "RESOURCE_PRESSURE",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:01Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": ""
+    },
+    {
+      "id": "no-evidence",
+      "split": "heldout",
+      "evidence": [],
+      "expected_cause": ""
+    },
+    {
+      "id": "incomplete-collection",
+      "split": "heldout",
+      "evidence": [
+        {
+          "ref": {
+            "id": "incomplete-collection-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "READ_UNAVAILABLE",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": ""
+    },
+    {
+      "id": "upstream-over-symptom",
+      "split": "heldout",
+      "evidence": [
+        {
+          "ref": {
+            "id": "upstream-over-symptom-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "CRASH_LOOP",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        },
+        {
+          "ref": {
+            "id": "upstream-over-symptom-1",
+            "version": 1
+          },
+          "observation": {
+            "code": "RESOURCE_PRESSURE",
+            "resource_handle": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": "RESOURCE_PRESSURE",
+      "expected_handle": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "id": "healthy-other-resource",
+      "split": "heldout",
+      "evidence": [
+        {
+          "ref": {
+            "id": "healthy-other-resource-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "HEALTHY",
+            "resource_handle": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        },
+        {
+          "ref": {
+            "id": "healthy-other-resource-1",
+            "version": 1
+          },
+          "observation": {
+            "code": "CONFIGURATION_DRIFT",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": "CONFIGURATION_DRIFT",
+      "expected_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "contradicted-first-resource",
+      "split": "heldout",
+      "evidence": [
+        {
+          "ref": {
+            "id": "contradicted-first-resource-0",
+            "version": 1
+          },
+          "observation": {
+            "code": "RESOURCE_PRESSURE",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        },
+        {
+          "ref": {
+            "id": "contradicted-first-resource-1",
+            "version": 1
+          },
+          "observation": {
+            "code": "HEALTHY",
+            "resource_handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        },
+        {
+          "ref": {
+            "id": "contradicted-first-resource-2",
+            "version": 1
+          },
+          "observation": {
+            "code": "RESOURCE_PRESSURE",
+            "resource_handle": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:01:00Z"
+          }
+        }
+      ],
+      "expected_cause": "RESOURCE_PRESSURE",
+      "expected_handle": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

@@ -1,0 +1,315 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: gatewayclass-unaccepted
+  labels:
+    sre.kubebee.com/fixture-id: gatewayclass-unaccepted
+    sre.kubebee.com/fixture: "true"
+spec:
+  controllerName: fixture.sre.kubebee.com/controller
+status:
+  conditions:
+    - type: Accepted
+      status: "False"
+      reason: Unsupported
+      message: fixture GatewayClass was not accepted
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-invalid
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: gateway-invalid
+    sre.kubebee.com/fixture: "true"
+spec:
+  listeners:
+    - name: invalid
+      protocol: HTTP
+      port: 0
+status:
+  conditions:
+    - type: Accepted
+      status: "False"
+      reason: Invalid
+      message: fixture Gateway was not accepted
+    - type: Programmed
+      status: "False"
+      reason: NotProgrammed
+      message: fixture Gateway was not programmed
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-missing-parent
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: httproute-missing-parent
+    sre.kubebee.com/fixture: "true"
+spec:
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-missing-backend
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: httproute-missing-backend
+    sre.kubebee.com/fixture: "true"
+spec:
+  parentRefs:
+    - name: gateway-invalid
+  rules:
+    - backendRefs:
+        - name: gateway-backend-does-not-exist
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata:
+  name: referencegrant-invalid
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: referencegrant-invalid
+    sre.kubebee.com/fixture: "true"
+spec: {}
+---
+apiVersion: olm.operatorframework.io/v1
+kind: ClusterCatalog
+metadata:
+  name: olm-cluster-catalog-failed
+  labels:
+    sre.kubebee.com/fixture-id: olm-cluster-catalog-failed
+    sre.kubebee.com/fixture: "true"
+status:
+  phase: Failed
+  message: fixture catalog failed
+---
+apiVersion: olm.operatorframework.io/v1
+kind: ClusterExtension
+metadata:
+  name: olm-cluster-extension-failed
+  labels:
+    sre.kubebee.com/fixture-id: olm-cluster-extension-failed
+    sre.kubebee.com/fixture: "true"
+status:
+  phase: Failed
+  message: fixture extension failed
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: olm-csv-failed
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: olm-csv-failed
+    sre.kubebee.com/fixture: "true"
+status:
+  phase: Failed
+  message: fixture CSV failed
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: olm-subscription-failed
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: olm-subscription-failed
+    sre.kubebee.com/fixture: "true"
+status:
+  state: UpgradeFailed
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: Failed
+      message: fixture subscription failed
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: InstallPlan
+metadata:
+  name: olm-install-plan-failed
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: olm-install-plan-failed
+    sre.kubebee.com/fixture: "true"
+status:
+  phase: Failed
+  message: fixture install plan failed
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: olm-catalog-source-failed
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: olm-catalog-source-failed
+    sre.kubebee.com/fixture: "true"
+status:
+  connectionState:
+    lastObservedState: TRANSIENT_FAILURE
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: Failed
+      message: fixture catalog source failed
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: olm-operator-group-failed
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: olm-operator-group-failed
+    sre.kubebee.com/fixture: "true"
+status:
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: Failed
+      message: fixture operator group failed
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: keda-scaled-object-paused
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: keda-scaled-object-paused
+    sre.kubebee.com/fixture: "true"
+spec:
+  scaleTargetRef:
+    name: missing-keda-target
+  paused: true
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: keda-scaled-job-paused
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: keda-scaled-job-paused
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-trigger-auth-paused
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: keda-trigger-auth-paused
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: keda.sh/v1alpha1
+kind: ClusterTriggerAuthentication
+metadata:
+  name: keda-cluster-trigger-auth-paused
+  labels:
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: kyverno-policy-failed
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: kyverno-policy-failed
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kyverno-cluster-policy-failed
+  labels:
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: wgpolicyk8s.io/v1alpha2
+kind: PolicyReport
+metadata:
+  name: kyverno-policy-report-failed
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: kyverno-policy-report-failed
+    sre.kubebee.com/fixture: "true"
+results:
+  - result: fail
+    message: fixture policy failed
+---
+apiVersion: wgpolicyk8s.io/v1alpha2
+kind: ClusterPolicyReport
+metadata:
+  name: kyverno-cluster-policy-report-failed
+  labels:
+    sre.kubebee.com/fixture: "true"
+results:
+  - result: fail
+    message: fixture cluster policy failed
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: prometheus-paused
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: prometheus-paused
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: prometheus-service-monitor-paused
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: prometheus-service-monitor-paused
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: prometheus-pod-monitor-paused
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: prometheus-pod-monitor-paused
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: prometheus-rule-paused
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: prometheus-rule-paused
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: prometheus-alertmanager-paused
+  namespace: sre-fixtures
+  labels:
+    sre.kubebee.com/fixture-id: prometheus-alertmanager-paused
+    sre.kubebee.com/fixture: "true"
+spec:
+  paused: true

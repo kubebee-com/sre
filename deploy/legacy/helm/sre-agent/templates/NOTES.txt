@@ -1,0 +1,11 @@
+SRE Agent {{ .Chart.Version }} has been installed as {{ include "sre-agent.fullname" . }}.
+
+The chart requires an externally managed Secret named {{ include "sre-agent.secretName" . }}
+with a non-empty SRE_API_TOKEN unless `secret.create=true` was selected.
+The application Service is {{ include "sre-agent.fullname" . }} on port {{ .Values.service.port }}.
+
+For production images, set:
+  --set image.digest=sha256:<64 lowercase hexadecimal characters>
+
+Authentication is enabled by default. Keep the Service internal or configure an
+Ingress with TLS and an ingress controller that preserves the Authorization header.

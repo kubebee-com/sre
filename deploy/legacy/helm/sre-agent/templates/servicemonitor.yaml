@@ -1,0 +1,44 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "sre-agent.fullname" . }}
+  labels:
+    {{- include "sre-agent.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.serviceMonitor.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "sre-agent.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace | quote }}
+  endpoints:
+    - port: {{ .Values.serviceMonitor.port | quote }}
+      path: {{ .Values.serviceMonitor.path | quote }}
+      scheme: {{ .Values.serviceMonitor.scheme | quote }}
+      interval: {{ .Values.serviceMonitor.interval | quote }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout | quote }}
+      honorLabels: {{ .Values.serviceMonitor.honorLabels }}
+      {{- if .Values.auth.requireAPIToken }}
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ default (include "sre-agent.secretName" .) .Values.serviceMonitor.authorization.secretName | quote }}
+          key: {{ .Values.serviceMonitor.authorization.secretKey | quote }}
+      {{- end }}
+      {{- with .Values.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -1,0 +1,18 @@
+- op: add
+  path: /rules/-
+  value:
+    apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+- op: add
+  path: /rules/-
+  value:
+    apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["update"]
+- op: add
+  path: /rules/-
+  value:
+    apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sre-agent-config
+  namespace: sre
+data:
+  SRE_ENABLE_AWS_EKS: "false"
+  AWS_REGION: ""
+  SRE_EKS_CLUSTER_NAME: ""
+  LLM_PROVIDER: codex
+  LLM_MODE: remote
+  LLM_ENDPOINT_ALLOWLIST: ""
+  LLM_WIRE_API: responses
+  PUBLIC_URL: http://127.0.0.1:18080
+  SCAN_INTERVAL: 5s
+  SRE_SCAN_JITTER: 0s
+  SRE_LEADER_ELECTION: "false"
