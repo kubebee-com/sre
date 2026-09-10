@@ -43,4 +43,4 @@ COPY --from=builder /app/bin/sre-agent /usr/local/bin/sre-agent
 
 EXPOSE 8080
 
-ENTRYPOINT ["/usr/local/bin/sre-agent", "--managed"]
+ENTRYPOINT ["/usr/local/bin/sre-agent"]

@@ -533,7 +533,7 @@ func TestMainDispatchesVersionWithPlaybookEnabled(t *testing.T) {
 		for index, arg := range os.Args {
 			if arg == "--" {
 				os.Args = append([]string{os.Args[0]}, os.Args[index+1:]...)
-				legacyMain()
+				LegacyMain()
 				return
 			}
 		}

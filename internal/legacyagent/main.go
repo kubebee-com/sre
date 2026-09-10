@@ -207,7 +207,7 @@ func (r *startupReadiness) MarkScanResult(err error) {
 	}
 }
 
-func legacyMain() {
+func LegacyMain() {
 	args := normalizePlaybookEnabledArgs(os.Args[1:])
 	if hasVersionFlag(args) {
 		fmt.Println(buildinfo.String())
