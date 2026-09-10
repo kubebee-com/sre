@@ -13,18 +13,40 @@
     label { display: block; margin-bottom: 0.5rem; color: #c9d1d9; font-size: 0.75rem; font-weight: 600; }
     input { box-sizing: border-box; width: 100%; padding: 0.625rem 0.75rem; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #f0f6fc; font-size: 0.875rem; }
     input:focus { outline: 2px solid #388bfd; outline-offset: 1px; }
-    button { margin-top: 1rem; width: 100%; padding: 0.625rem 0.75rem; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; font-size: 0.875rem; font-weight: 600; }
-    button:hover { background: #3b82f6; }
+    button, .sso-btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.625rem 0.75rem; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; font-size: 0.875rem; font-weight: 600; text-decoration: none; }
+    button:hover, .sso-btn:hover { background: #3b82f6; }
     button:disabled { cursor: wait; opacity: 0.7; }
+    .divider { display: flex; align-items: center; text-align: center; margin: 1.25rem 0; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid #30363d; }
+    .divider:not(:empty)::before { margin-right: .75em; }
+    .divider:not(:empty)::after { margin-left: .75em; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
   <main>
-    <h1>Kubebee SRE Agent</h1>
-    <p id="bootstrap-message" aria-live="polite">Enter an API token to open the dashboard.</p>
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem;">
+      <div style="width: 2.25rem; height: 2.25rem; border-radius: 6px; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; display: flex; align-items: center; justify-content: center; color: #10b981;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+      </div>
+      <div>
+        <h1 style="margin: 0; font-size: 1.125rem; color: #fff;">Kubebee SRE Agent</h1>
+        <div style="font-size: 0.75rem; color: #8b949e;">Autonomous Cluster Triage & Remediation</div>
+      </div>
+    </div>
+    <p id="bootstrap-message" aria-live="polite">Sign in to access the cluster dashboard.</p>
+    
+    <div id="sso-container" class="hidden">
+      <a href="/auth/login" id="sso-button" class="sso-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+        <span id="sso-btn-text">Sign in with Keycloak SSO</span>
+      </a>
+      <div class="divider">or enter API token</div>
+    </div>
+
     <form id="bootstrap-form">
-      <label for="bootstrap-token">API token</label>
-      <input id="bootstrap-token" type="password" autocomplete="off" required>
+      <label for="bootstrap-token">API token (Break-glass)</label>
+      <input id="bootstrap-token" type="password" autocomplete="off" placeholder="Enter API token" required>
       <button id="bootstrap-submit" type="submit">Open dashboard</button>
     </form>
   </main>
@@ -51,9 +73,9 @@
       dashboardLoadPromise = (async () => {
         const token = bootstrapStoredToken();
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const response = await fetch('/static/index.html', { headers });
+        const response = await fetch('/static/index.html', { credentials: 'same-origin', headers });
         if (response.status === 401) {
-          bootstrapMessage('Enter a valid API token to open the dashboard.');
+          bootstrapMessage('Sign in with SSO or enter an API token to continue.');
           return false;
         }
         if (!response.ok) throw new Error('dashboard request failed');
@@ -71,6 +93,21 @@
       const loaded = await dashboardLoadPromise;
       dashboardLoadPromise = null;
       return loaded;
+    }
+
+    async function checkSSOConfig() {
+      try {
+        const res = await fetch('/api/auth/config', { credentials: 'same-origin' });
+        if (res.ok) {
+          const cfg = await res.json();
+          if (cfg.oidc_enabled) {
+            document.getElementById('sso-container').classList.remove('hidden');
+            if (cfg.provider_name) {
+              document.getElementById('sso-btn-text').textContent = `Sign in with ${cfg.provider_name} SSO`;
+            }
+          }
+        }
+      } catch (e) {}
     }
 
     document.getElementById('bootstrap-form').addEventListener('submit', async event => {
@@ -96,6 +133,7 @@
       }
     });
 
+    checkSSOConfig();
     loadProtectedDashboard();
   </script>
 </body>

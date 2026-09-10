@@ -100,6 +100,10 @@ type UserSettings struct {
 	HarnessCommand            string   `json:"harness_command,omitempty" yaml:"harness_command,omitempty"`
 	PublicURL                 string   `json:"public_url,omitempty" yaml:"public_url,omitempty"`
 	RequireAPIToken           bool     `json:"require_api_token,omitempty" yaml:"require_api_token,omitempty"`
+	OIDCIssuer                string   `json:"oidc_issuer,omitempty" yaml:"oidc_issuer,omitempty"`
+	OIDCClientID              string   `json:"oidc_client_id,omitempty" yaml:"oidc_client_id,omitempty"`
+	OIDCScopes                []string `json:"oidc_scopes,omitempty" yaml:"oidc_scopes,omitempty"`
+	OIDCAllowedGroups         []string `json:"oidc_allowed_groups,omitempty" yaml:"oidc_allowed_groups,omitempty"`
 	AllowedOrigins            []string `json:"allowed_origins,omitempty" yaml:"allowed_origins,omitempty"`
 	TrustedClientIPHeader     string   `json:"trusted_client_ip_header,omitempty" yaml:"trusted_client_ip_header,omitempty"`
 	TrustedProxyCIDRs         []string `json:"trusted_proxy_cidrs,omitempty" yaml:"trusted_proxy_cidrs,omitempty"`
@@ -676,6 +680,14 @@ func ResolveConfig(options ResolveOptions) (*Config, UserConfig, error) {
 	if err := boolValue(&cfg.RequireAPIToken, "require-api-token", settings.RequireAPIToken, flags, environment, "SRE_REQUIRE_API_TOKEN"); err != nil {
 		return nil, UserConfig{}, err
 	}
+	stringValue(&cfg.OIDCIssuer, "oidc-issuer", settings.OIDCIssuer, flags, environment, "SRE_OIDC_ISSUER")
+	stringValue(&cfg.OIDCClientID, "oidc-client-id", settings.OIDCClientID, flags, environment, "SRE_OIDC_CLIENT_ID")
+	stringValue(&cfg.OIDCClientSecret, "oidc-client-secret", "", flags, environment, "SRE_OIDC_CLIENT_SECRET")
+	cfg.OIDCScopes = listValue(settings.OIDCScopes, flags, environment, "oidc-scopes", "SRE_OIDC_SCOPES")
+	if len(cfg.OIDCScopes) == 0 && cfg.OIDCIssuer != "" {
+		cfg.OIDCScopes = []string{"openid", "email", "profile"}
+	}
+	cfg.OIDCAllowedGroups = listValue(settings.OIDCAllowedGroups, flags, environment, "oidc-allowed-groups", "SRE_OIDC_ALLOWED_GROUPS")
 	cfg.AllowedOrigins = listValue(settings.AllowedOrigins, flags, environment, "allowed-origins", "SRE_ALLOWED_ORIGINS")
 	stringValue(&cfg.TrustedClientIPHeader, "trusted-client-ip-header", settings.TrustedClientIPHeader, flags, environment, "SRE_TRUSTED_CLIENT_IP_HEADER")
 	cfg.TrustedProxyCIDRs = listValue(settings.TrustedProxyCIDRs, flags, environment, "trusted-proxy-cidrs", "SRE_TRUSTED_PROXY_CIDRS")
@@ -1124,6 +1136,10 @@ func normalizeSettings(settings UserSettings) UserSettings {
 	settings.LLMProxyURL = strings.TrimSpace(settings.LLMProxyURL)
 	settings.HarnessCommand = strings.TrimSpace(settings.HarnessCommand)
 	settings.PublicURL = strings.TrimSpace(settings.PublicURL)
+	settings.OIDCIssuer = strings.TrimSpace(settings.OIDCIssuer)
+	settings.OIDCClientID = strings.TrimSpace(settings.OIDCClientID)
+	settings.OIDCScopes = normalizeList(settings.OIDCScopes)
+	settings.OIDCAllowedGroups = normalizeList(settings.OIDCAllowedGroups)
 	settings.LeaderElectionNamespace = strings.TrimSpace(settings.LeaderElectionNamespace)
 	settings.LeaderElectionID = strings.TrimSpace(settings.LeaderElectionID)
 	settings.LeaderElectionIdentity = strings.TrimSpace(settings.LeaderElectionIdentity)

@@ -328,6 +328,12 @@ func LegacyMain() {
 	apiServer := server.NewServer(cfg.Port, clusterScanner, triageProvider, remediationEngine, webhookNotifier, server.ServerOptions{
 		APIToken:              cfg.APIToken,
 		RequireAPIToken:       cfg.RequireAPIToken,
+		OIDCIssuer:            cfg.OIDCIssuer,
+		OIDCClientID:          cfg.OIDCClientID,
+		OIDCClientSecret:      cfg.OIDCClientSecret,
+		OIDCScopes:            cfg.OIDCScopes,
+		OIDCAllowedGroups:     cfg.OIDCAllowedGroups,
+		PublicURL:             cfg.PublicURL,
 		AllowedOrigins:        cfg.AllowedOrigins,
 		TrustedClientIPHeader: cfg.TrustedClientIPHeader,
 		TrustedProxyCIDRs:     cfg.TrustedProxyCIDRs,
@@ -1198,7 +1204,7 @@ func providerSecretValues(cfg *config.Config) []string {
 	if cfg == nil {
 		return nil
 	}
-	values := []string{cfg.LLMAPIKey, cfg.APIToken, cfg.WebhookURL, cfg.CacheEncryptionKey, cfg.DatabaseURL}
+	values := []string{cfg.LLMAPIKey, cfg.APIToken, cfg.OIDCClientSecret, cfg.WebhookURL, cfg.CacheEncryptionKey, cfg.DatabaseURL}
 	values = append(values, urlSecretVariants(cfg.WebhookURL)...)
 	values = append(values, urlSecretVariants(cfg.DatabaseURL)...)
 	for _, raw := range cfg.LLMHeaders {

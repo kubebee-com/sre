@@ -70,6 +70,11 @@ type Config struct {
 	PublicURL                 string
 	APIToken                  string
 	RequireAPIToken           bool
+	OIDCIssuer                string
+	OIDCClientID              string
+	OIDCClientSecret          string `json:"-" yaml:"-"`
+	OIDCScopes                []string
+	OIDCAllowedGroups         []string
 	AllowedOrigins            []string
 	TrustedClientIPHeader     string
 	TrustedProxyCIDRs         []string
@@ -138,6 +143,7 @@ func (c Config) redactedForLog() any {
 	redactString(&redacted.DatabaseURL)
 	redactString(&redacted.LLMAPIKey)
 	redactString(&redacted.APIToken)
+	redactString(&redacted.OIDCClientSecret)
 	redactString(&redacted.WebhookURL)
 	redactString(&redacted.CacheEncryptionKey)
 	redacted.LLMHeaders = redactHeaderValues(c.LLMHeaders)
@@ -167,6 +173,8 @@ func LoadConfigArgs(args []string) *Config {
 	_, playbookEnabledEnvSet := os.LookupEnv("SRE_PLAYBOOK_ENABLED")
 	llmHeaders := splitCSV(getEnv("LLM_CUSTOM_HEADERS", getEnv("K8SGPT_CUSTOM_HEADERS", "")))
 	headersFlagSet := false
+	oidcScopes := getEnv("SRE_OIDC_SCOPES", "openid,email,profile")
+	oidcAllowedGroups := getEnv("SRE_OIDC_ALLOWED_GROUPS", "")
 
 	flags := flag.NewFlagSet("sre-agent", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -218,6 +226,14 @@ func LoadConfigArgs(args []string) *Config {
 	flags.StringVar(&cfg.APIToken, "api-token", cfg.APIToken, "API token for authenticated API requests")
 	cfg.RequireAPIToken = getEnvBool("SRE_REQUIRE_API_TOKEN", false)
 	flags.BoolVar(&cfg.RequireAPIToken, "require-api-token", cfg.RequireAPIToken, "Require a nonblank API token before starting the HTTP server")
+	cfg.OIDCIssuer = getEnv("SRE_OIDC_ISSUER", "")
+	flags.StringVar(&cfg.OIDCIssuer, "oidc-issuer", cfg.OIDCIssuer, "OIDC issuer URL for SSO authentication")
+	cfg.OIDCClientID = getEnv("SRE_OIDC_CLIENT_ID", "")
+	flags.StringVar(&cfg.OIDCClientID, "oidc-client-id", cfg.OIDCClientID, "OIDC client ID for SSO authentication")
+	cfg.OIDCClientSecret = getEnv("SRE_OIDC_CLIENT_SECRET", "")
+	flags.StringVar(&cfg.OIDCClientSecret, "oidc-client-secret", cfg.OIDCClientSecret, "OIDC client secret for SSO authentication")
+	flags.StringVar(&oidcScopes, "oidc-scopes", oidcScopes, "Comma-separated OIDC scopes to request")
+	flags.StringVar(&oidcAllowedGroups, "oidc-allowed-groups", oidcAllowedGroups, "Comma-separated group names allowed to access via OIDC")
 	flags.StringVar(&allowedOrigins, "allowed-origins", allowedOrigins, "Comma-separated browser origins allowed to call the HTTP API")
 	cfg.TrustedClientIPHeader = getEnv("SRE_TRUSTED_CLIENT_IP_HEADER", "")
 	flags.StringVar(&cfg.TrustedClientIPHeader, "trusted-client-ip-header", cfg.TrustedClientIPHeader, "HTTP header overwritten by a trusted ingress with the client address")
@@ -293,6 +309,11 @@ func LoadConfigArgs(args []string) *Config {
 	if cfg.RequestBurst <= 0 {
 		cfg.RequestBurst = DefaultRequestBurst
 	}
+	cfg.OIDCScopes = splitCSV(oidcScopes)
+	if len(cfg.OIDCScopes) == 0 && cfg.OIDCIssuer != "" {
+		cfg.OIDCScopes = []string{"openid", "email", "profile"}
+	}
+	cfg.OIDCAllowedGroups = splitCSV(oidcAllowedGroups)
 	cfg.AllowedOrigins = splitCSV(allowedOrigins)
 	cfg.TrustedProxyCIDRs = splitCSV(trustedProxyCIDRs)
 	cfg.IncludeNamespaces = splitCSV(includeNamespaces)

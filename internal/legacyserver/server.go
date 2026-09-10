@@ -43,6 +43,12 @@ type ServerOptions struct {
 	Readiness             func() bool
 	Metrics               *metrics.Registry
 	Runtime               RuntimeSettings
+	OIDCIssuer            string
+	OIDCClientID          string
+	OIDCClientSecret      string
+	OIDCScopes            []string
+	OIDCAllowedGroups     []string
+	PublicURL             string
 }
 
 const (
@@ -122,6 +128,8 @@ type Server struct {
 	engine                *remediation.Engine
 	notifier              *notifier.WebhookNotifier
 	authenticator         *tokenAuthenticator
+	oidcAuth              *oidcAuthenticator
+	publicURL             string
 	requireAPIToken       bool
 	allowedOrigins        map[string]struct{}
 	maxBodyBytes          int64
@@ -296,6 +304,22 @@ func NewServer(
 	startSlot := make(chan struct{}, 1)
 	startSlot <- struct{}{}
 
+	var oidcAuth *oidcAuthenticator
+	if strings.TrimSpace(opts.OIDCIssuer) != "" && strings.TrimSpace(opts.OIDCClientID) != "" {
+		var oidcErr error
+		oidcAuth, oidcErr = newOIDCAuthenticator(context.Background(), OIDCConfig{
+			Issuer:        opts.OIDCIssuer,
+			ClientID:      opts.OIDCClientID,
+			ClientSecret:  opts.OIDCClientSecret,
+			PublicURL:     opts.PublicURL,
+			Scopes:        opts.OIDCScopes,
+			AllowedGroups: opts.OIDCAllowedGroups,
+		})
+		if oidcErr != nil {
+			log.Printf("Warning: failed to initialize OIDC authenticator: %v", oidcErr)
+		}
+	}
+
 	return &Server{
 		playbooks:             opts.Playbooks,
 		port:                  port,
@@ -304,6 +328,8 @@ func NewServer(
 		engine:                engine,
 		notifier:              notifier,
 		authenticator:         newTokenAuthenticator(opts.APIToken),
+		oidcAuth:              oidcAuth,
+		publicURL:             opts.PublicURL,
 		requireAPIToken:       opts.RequireAPIToken,
 		allowedOrigins:        allowedOrigins,
 		maxBodyBytes:          opts.MaxBodyBytes,
@@ -676,6 +702,26 @@ func (s *Server) newHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/chat/sessions/", s.handleChatSessionAction)
 	mux.HandleFunc("/api/notify/test", s.handleTestNotification)
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/auth/config", s.handleAuthConfig)
+	mux.HandleFunc("/api/auth/me", s.handleAuthMe)
+	mux.HandleFunc("/api/auth/logout", s.handleAuthLogout)
+
+	// SSO Endpoints
+	if s.oidcAuth != nil {
+		mux.HandleFunc("/auth/login", s.oidcAuth.handleLogin)
+		mux.HandleFunc("/auth/callback", s.oidcAuth.handleCallback)
+		mux.HandleFunc("/auth/logout", s.oidcAuth.handleLogout)
+	} else {
+		mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "SSO is not configured", http.StatusNotImplemented)
+		})
+		mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "SSO is not configured", http.StatusNotImplemented)
+		})
+		mux.HandleFunc("/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+		})
+	}
 
 	// Versioned compatibility endpoints reuse the same authenticated boundary.
 	mux.HandleFunc("/api/v1/status", s.handleStatus)
@@ -711,8 +757,10 @@ func (s *Server) newHandler() (http.Handler, error) {
 			return
 		}
 		page := "static/index.html"
-		if s.authenticator.enabled {
-			page = "static/bootstrap.html"
+		if (s.authenticator != nil && s.authenticator.enabled) || s.oidcAuth != nil {
+			if _, ok := s.authenticateRequest(r); !ok {
+				page = "static/bootstrap.html"
+			}
 		}
 		serveEmbeddedHTML(w, r, page)
 	})
@@ -971,4 +1019,53 @@ func waitForDone(ctx context.Context, done <-chan struct{}) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
+	enabled := s.oidcAuth != nil
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"oidc_enabled":        enabled,
+		"provider_name":       "Keycloak",
+		"login_url":           "/auth/login",
+		"logout_url":          "/auth/logout",
+		"api_token_required":  s.requireAPIToken,
+	})
+}
+
+func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.authenticateRequest(r)
+	if !ok {
+		s.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"authenticated": false,
+		})
+		return
+	}
+
+	resp := map[string]interface{}{
+		"authenticated": true,
+		"actor":         actor,
+	}
+
+	if s.oidcAuth != nil {
+		if principal, ok := s.oidcAuth.authenticateSession(r); ok {
+			resp["email"] = principal.Email
+			resp["preferred_username"] = principal.PreferredUsername
+			resp["name"] = principal.Name
+			resp["auth_type"] = "oidc"
+		} else {
+			resp["auth_type"] = "api-token"
+		}
+	} else {
+		resp["auth_type"] = "api-token"
+	}
+
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	if s.oidcAuth != nil {
+		s.oidcAuth.handleLogout(w, r)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]bool{"signed_out": true})
 }

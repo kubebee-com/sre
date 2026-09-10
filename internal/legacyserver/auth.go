@@ -186,6 +186,51 @@ func (s *Server) boundaryMiddleware(next http.Handler) http.Handler {
 	return s.corsMiddleware(handler)
 }
 
+func (s *Server) authenticateRequest(r *http.Request) (string, bool) {
+	if s.oidcAuth != nil {
+		if principal, ok := s.oidcAuth.authenticateSession(r); ok {
+			actor := principal.Email
+			if actor == "" {
+				actor = principal.PreferredUsername
+			}
+			if actor == "" {
+				actor = principal.ID
+			}
+			return actor, true
+		}
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	parts := strings.Fields(authHeader)
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && parts[1] != "" {
+		token := parts[1]
+		if s.authenticator != nil && s.authenticator.enabled {
+			if actor, ok := s.authenticator.authenticate(r); ok {
+				return actor, true
+			}
+		}
+		if s.oidcAuth != nil {
+			if principal, err := s.oidcAuth.verifyBearerToken(r.Context(), token); err == nil {
+				actor := principal.Email
+				if actor == "" {
+					actor = principal.PreferredUsername
+				}
+				if actor == "" {
+					actor = principal.ID
+				}
+				return actor, true
+			}
+		}
+		return "", false
+	}
+
+	if (s.authenticator == nil || !s.authenticator.enabled) && s.oidcAuth == nil {
+		return localActor, true
+	}
+
+	return "", false
+}
+
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isPublicEndpoint(r.URL.Path) {
@@ -193,7 +238,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		actor, ok := s.authenticator.authenticate(r)
+		actor, ok := s.authenticateRequest(r)
 		if !ok {
 			if s.authFailureLimiter != nil && !s.authFailureLimiter.allow("remote:"+remoteClientKey(r)) {
 				w.Header().Set("Retry-After", "1")
@@ -210,7 +255,15 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 }
 
 func isPublicEndpoint(path string) bool {
-	return path == "/" || path == "/healthz" || path == "/readyz"
+	return path == "/" ||
+		path == "/healthz" ||
+		path == "/readyz" ||
+		path == "/auth/login" ||
+		path == "/auth/callback" ||
+		path == "/auth/logout" ||
+		path == "/api/auth/config" ||
+		path == "/api/auth/me" ||
+		path == "/api/auth/logout"
 }
 
 func rejectLegacyIdentityMiddleware(next http.Handler) http.Handler {
@@ -287,13 +340,14 @@ func (s *Server) allowedOriginHeader(origin string) string {
 	if origin == "" {
 		return ""
 	}
-	if origin == "*" && s.authenticator.enabled {
+	authEnabled := (s.authenticator != nil && s.authenticator.enabled) || s.oidcAuth != nil
+	if origin == "*" && authEnabled {
 		return ""
 	}
 	if _, ok := s.allowedOrigins[origin]; ok {
 		return origin
 	}
-	if _, wildcardConfigured := s.allowedOrigins["*"]; wildcardConfigured && !s.authenticator.enabled {
+	if _, wildcardConfigured := s.allowedOrigins["*"]; wildcardConfigured && !authEnabled {
 		return "*"
 	}
 	return ""

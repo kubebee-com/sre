@@ -233,6 +233,13 @@
         <i class="fa-solid fa-arrows-rotate" id="scan-spinner"></i>
         <span>Scan Cluster</span>
       </button>
+      <div id="user-badge" class="hidden items-center gap-2 px-2.5 py-1 rounded-md bg-[#21262d] border border-[#30363d] text-xs">
+        <i class="fa-solid fa-user-shield text-emerald-400"></i>
+        <span id="user-name" class="text-gray-200 font-medium"></span>
+        <button onclick="dashboardLogout()" title="Sign out" class="text-gray-400 hover:text-red-400 ml-1 transition">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -693,26 +700,52 @@
       document.getElementById('auth-message').textContent = message;
     }
 
-    function dashboardLogout() {
+    async function dashboardLogout() {
       try {
         sessionStorage.removeItem(DASHBOARD_TOKEN_STORAGE_KEY);
       } catch (err) {
         // Storage can be unavailable in restricted browser contexts.
       }
       document.getElementById('auth-token').value = '';
-      dashboardShowLogin('Dashboard session cleared.');
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      } catch (err) {}
+      window.location.href = '/';
+    }
+
+    async function dashboardCheckUser() {
+      try {
+        const token = dashboardGetStoredToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch('/api/auth/me', { credentials: 'same-origin', headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated) {
+            const badge = document.getElementById('user-badge');
+            const nameEl = document.getElementById('user-name');
+            if (badge && nameEl) {
+              nameEl.textContent = data.email || data.preferred_username || data.name || data.actor;
+              badge.classList.remove('hidden');
+              badge.classList.add('flex');
+            }
+          }
+        }
+      } catch (e) {}
     }
 
     async function dashboardLoadApp() {
-      if (dashboardScriptLoaded) return true;
+      if (dashboardScriptLoaded) {
+        await dashboardCheckUser();
+        return true;
+      }
       if (dashboardScriptPromise) return dashboardScriptPromise;
 
       dashboardScriptPromise = (async () => {
         const token = dashboardGetStoredToken();
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const response = await fetch('/static/app.js', { headers });
+        const response = await fetch('/static/app.js', { credentials: 'same-origin', headers });
         if (response.status === 401) {
-          dashboardShowLogin('An API token is required to load the dashboard.');
+          dashboardShowLogin('Authentication required to load the dashboard.');
           return false;
         }
         if (!response.ok) throw new Error('dashboard script request failed');
@@ -721,13 +754,14 @@
         script.textContent = await response.text();
         document.body.appendChild(script);
         dashboardScriptLoaded = true;
+        await dashboardCheckUser();
         return true;
       })().catch(() => {
         dashboardShowLogin('The dashboard could not be loaded.');
         return false;
       });
 
-      const loaded = await dashboardScriptPromise;
+      const loaded = await dashboardLoadPromise || await dashboardScriptPromise;
       dashboardScriptPromise = null;
       return loaded;
     }

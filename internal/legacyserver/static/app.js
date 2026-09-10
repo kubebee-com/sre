@@ -137,9 +137,12 @@ async function login() {
   }
 }
 
-function logout() {
+async function logout() {
   clearStoredAPIToken();
-  showAuthRequired('Dashboard session cleared.');
+  try {
+    await apiFetch('/api/auth/logout', { method: 'POST' });
+  } catch (err) {}
+  window.location.href = '/';
 }
 
 function apiFetch(input, options = {}) {
@@ -147,7 +150,7 @@ function apiFetch(input, options = {}) {
   const token = getStoredAPIToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
-  return fetch(input, { ...options, headers }).then(res => {
+  return fetch(input, { ...options, credentials: 'same-origin', headers }).then(res => {
     if (res.status === 401) showAuthRequired();
     return res;
   });

@@ -19,11 +19,14 @@ var ErrUnauthenticated = errors.New("verified engineer identity required")
 const MaxIdentityAge = 15 * time.Minute
 
 type Principal struct {
-	ID        string    `json:"id"`
-	Issuer    string    `json:"issuer"`
-	Groups    []string  `json:"-"`
-	IssuedAt  time.Time `json:"issued_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID                string    `json:"id"`
+	Issuer            string    `json:"issuer"`
+	Email             string    `json:"email,omitempty"`
+	PreferredUsername string    `json:"preferred_username,omitempty"`
+	Name              string    `json:"name,omitempty"`
+	Groups            []string  `json:"-"`
+	IssuedAt          time.Time `json:"issued_at"`
+	ExpiresAt         time.Time `json:"expires_at"`
 }
 
 func (p Principal) Valid(at time.Time) bool {
@@ -75,9 +78,12 @@ func (v *OIDCVerifier) Verify(ctx context.Context, raw string) (Principal, error
 		return Principal{}, ErrUnauthenticated
 	}
 	var claims struct {
-		Groups          []string `json:"groups"`
-		AuthorizedParty string   `json:"azp"`
-		NotBefore       int64    `json:"nbf"`
+		Groups            []string `json:"groups"`
+		AuthorizedParty   string   `json:"azp"`
+		NotBefore         int64    `json:"nbf"`
+		Email             string   `json:"email"`
+		PreferredUsername string   `json:"preferred_username"`
+		Name              string   `json:"name"`
 	}
 	if token.Claims(&claims) != nil || token.Subject == "" || len(token.Subject) > 1024 || len(claims.Groups) > 128 {
 		return Principal{}, ErrUnauthenticated
@@ -97,7 +103,16 @@ func (v *OIDCVerifier) Verify(ctx context.Context, raw string) (Principal, error
 	if ageExpiry := token.IssuedAt.Add(MaxIdentityAge); ageExpiry.Before(expiry) {
 		expiry = ageExpiry
 	}
-	principal := Principal{ID: hex.EncodeToString(digest[:]), Issuer: v.issuer, Groups: append([]string(nil), claims.Groups...), IssuedAt: token.IssuedAt, ExpiresAt: expiry}
+	principal := Principal{
+		ID:                hex.EncodeToString(digest[:]),
+		Issuer:            v.issuer,
+		Email:             claims.Email,
+		PreferredUsername: claims.PreferredUsername,
+		Name:              claims.Name,
+		Groups:            append([]string(nil), claims.Groups...),
+		IssuedAt:          token.IssuedAt,
+		ExpiresAt:         expiry,
+	}
 	if !principal.Valid(now) {
 		return Principal{}, ErrUnauthenticated
 	}
