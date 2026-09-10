@@ -316,7 +316,12 @@ async function loadProposals() {
     const container = document.getElementById('proposals-container');
 
     const statusFilter = document.getElementById('proposal-status-filter')?.value || '';
-    const pending = proposals.filter(p => !statusFilter || p.status === statusFilter);
+    const groupFilter = document.getElementById('proposal-group-filter')?.value || '';
+    const pending = proposals.filter(p => {
+      const matchStatus = !statusFilter || p.status === statusFilter;
+      const matchGroup = !groupFilter || (p.group && p.group.toLowerCase() === groupFilter.toLowerCase());
+      return matchStatus && matchGroup;
+    });
 
     if (pending.length === 0) {
       container.innerHTML = `
@@ -336,6 +341,7 @@ async function loadProposals() {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <span class="text-xs px-2 py-0.5 rounded font-mono ${getSeverityBadge(p.diagnosis.severity)}">${escapeHtml(p.diagnosis.severity)}</span>
+            <span class="text-xs px-2 py-0.5 rounded font-mono ${getGroupBadge(p.group)}"><i class="fa-solid ${getGroupIcon(p.group)} mr-1"></i>${escapeHtml(p.group || 'Improvement')}</span>
             <span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono">${escapeHtml(p.kind)}</span>
             <span class="text-sm font-bold text-white">${escapeHtml(p.namespace)}/${escapeHtml(p.name)}</span>
           </div>
@@ -428,12 +434,14 @@ async function loadIssues() {
 
 function applyAnomalyFilters() {
   const search = document.getElementById('filter-search')?.value.toLowerCase() || '';
+  const group = document.getElementById('filter-group')?.value || '';
   const severity = document.getElementById('filter-severity')?.value || '';
 
   const filtered = activeIssues.filter(i => {
     const matchesSearch = !search || i.name.toLowerCase().includes(search) || i.namespace.toLowerCase().includes(search);
+    const matchesGroup = !group || i.group === group;
     const matchesSeverity = !severity || i.severity === severity;
-    return matchesSearch && matchesSeverity;
+    return matchesSearch && matchesGroup && matchesSeverity;
   });
 
   const container = document.getElementById('issues-container');
@@ -447,6 +455,7 @@ function applyAnomalyFilters() {
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <span class="text-xs px-2 py-0.5 rounded font-mono ${getSeverityBadge(i.severity)}">${escapeHtml(i.severity)}</span>
+          <span class="text-xs px-2 py-0.5 rounded font-mono ${getGroupBadge(i.group)}"><i class="fa-solid ${getGroupIcon(i.group)} mr-1"></i>${escapeHtml(i.group || 'Improvement')}</span>
           <span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono">${escapeHtml(i.kind)}</span>
           <span class="text-xs font-bold text-white">${i.namespace ? escapeHtml(i.namespace) + '/' : ''}${escapeHtml(i.name)}</span>
           <span class="text-xs text-gray-400 font-mono">(${escapeHtml(i.category)})</span>
@@ -742,6 +751,28 @@ function getSeverityBadge(severity) {
     case 'MEDIUM': return 'badge-medium';
     case 'LOW': return 'badge-low';
     default: return 'badge-medium';
+  }
+}
+
+function getGroupBadge(group) {
+  switch (group) {
+    case 'Vulnerability': return 'badge-purple';
+    case 'Upgrade': return 'badge-low';
+    case 'Failures': return 'badge-critical';
+    case 'Errors': return 'badge-high';
+    case 'Improvement': return 'badge-medium';
+    default: return 'badge-medium';
+  }
+}
+
+function getGroupIcon(group) {
+  switch (group) {
+    case 'Vulnerability': return 'fa-shield-halved';
+    case 'Upgrade': return 'fa-rocket';
+    case 'Failures': return 'fa-burst';
+    case 'Errors': return 'fa-triangle-exclamation';
+    case 'Improvement': return 'fa-lightbulb';
+    default: return 'fa-circle-info';
   }
 }
 

@@ -18,9 +18,9 @@ import (
 
 const (
 	SchemaVersion      = "scan/v1"
-	DefaultConcurrency = 4
+	DefaultConcurrency = 8
 	MaxConcurrency     = 32
-	DefaultScanTimeout = 90 * time.Second
+	DefaultScanTimeout = 5 * time.Minute
 	MaxScanTimeout     = 15 * time.Minute
 )
 

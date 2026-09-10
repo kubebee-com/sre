@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -252,6 +253,7 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	ns := r.URL.Query().Get("namespace")
 	severity := r.URL.Query().Get("severity")
 	category := r.URL.Query().Get("category")
+	group := r.URL.Query().Get("group")
 
 	var filtered []*scanner.SanitizedIssue
 	for _, issue := range s.issueSnapshot() {
@@ -262,6 +264,9 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if category != "" && string(issue.Category) != category {
+			continue
+		}
+		if group != "" && !strings.EqualFold(string(issue.Group), group) {
 			continue
 		}
 		filtered = append(filtered, scanner.SanitizeIssueWithRedactor(issue, s.redactor))
@@ -277,6 +282,10 @@ func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	statusFilter := r.URL.Query().Get("status")
+	groupFilter := r.URL.Query().Get("group")
+	dedupParam := r.URL.Query().Get("dedup")
+	dedup := dedupParam != "false"
+
 	if s.engine == nil {
 		s.writeError(w, http.StatusServiceUnavailable, "remediation engine unavailable")
 		return
@@ -287,16 +296,34 @@ func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if statusFilter == "" {
-		s.writeJSON(w, http.StatusOK, s.sanitizeProposalResponses(all))
-		return
-	}
+	sorted := append([]*remediation.Proposal(nil), all...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.After(sorted[j].CreatedAt)
+	})
 
+	seenIssues := make(map[string]bool)
 	var filtered []*remediation.SanitizedProposal
-	for _, p := range all {
-		if string(p.Status) == statusFilter {
-			filtered = append(filtered, s.sanitizeProposalResponse(p))
+	for _, p := range sorted {
+		if statusFilter != "" && string(p.Status) != statusFilter {
+			continue
 		}
+		if groupFilter != "" && !strings.EqualFold(p.Group, groupFilter) {
+			continue
+		}
+		if dedup {
+			dedupKey := p.IssueID
+			if dedupKey == "" {
+				dedupKey = p.Namespace + "/" + p.Kind + "/" + p.Name
+			}
+			if seenIssues[dedupKey] {
+				continue
+			}
+			seenIssues[dedupKey] = true
+		}
+		filtered = append(filtered, s.sanitizeProposalResponse(p))
+	}
+	if filtered == nil {
+		filtered = make([]*remediation.SanitizedProposal, 0)
 	}
 	s.writeJSON(w, http.StatusOK, filtered)
 }

@@ -148,6 +148,54 @@ func AllIssueCategories() []IssueCategory {
 	return result
 }
 
+type FindingGroup string
+
+const (
+	GroupVulnerability FindingGroup = "Vulnerability"
+	GroupUpgrade       FindingGroup = "Upgrade"
+	GroupFailures      FindingGroup = "Failures"
+	GroupErrors        FindingGroup = "Errors"
+	GroupImprovement   FindingGroup = "Improvement"
+)
+
+// ResolveFindingGroup maps fine-grained analyzer categories into intuitive high-level groups.
+func ResolveFindingGroup(category IssueCategory) FindingGroup {
+	switch category {
+	case CategoryPodVulnerability, CategoryClusterSecurityRisk,
+		CategorySecurityPrivilege, CategorySecurityClusterBinding:
+		return GroupVulnerability
+
+	case CategoryAppUpdateAvailable, CategoryStorageClassDeprecated:
+		return GroupUpgrade
+
+	case CategoryCrashLoop, CategoryOOMKilled, CategoryPodFailed, CategoryPodEvicted,
+		CategoryJobFailed, CategoryJobBackoffExceeded, CategoryJobDeadlineExceeded,
+		CategoryCronJobFailed, CategoryNodeNotReady, CategoryNodeNetworkUnavailable,
+		CategoryPVLost, CategoryPVFailed:
+		return GroupFailures
+
+	case CategoryImagePull, CategoryContainerConfig, CategoryFailedScheduling,
+		CategoryPodStuckTerminating, CategoryDeploymentMismatch, CategoryStatefulSetMismatch,
+		CategoryDaemonSetMismatch, CategoryReplicaSetStuck, CategoryServiceNoEndpoint,
+		CategoryServiceEndpointError, CategoryServicePortMismatch, CategoryServiceExternalInvalid,
+		CategoryIngressBackendNotFound, CategoryIngressClassMissing, CategoryIngressPortInvalid,
+		CategoryIngressPathInvalid, CategoryIngressStatusPending, CategoryIngressTLSSecretMissing,
+		CategoryPVCPending, CategoryPVCStorageClassMissing, CategoryStorageClassNoProvisioner,
+		CategoryConfigMapReferenceMissing, CategoryWebhookServiceMissing, CategoryWebhookNoActivePods,
+		CategoryWebhookTargetMissing, CategoryPDBDisruptionsBlocked, CategoryPDBSelectorInvalid,
+		CategoryHPATargetMissing, CategoryHPAMetricInvalid, CategoryGatewayClassNotAccepted,
+		CategoryGatewayNotAccepted, CategoryGatewayNotProgrammed, CategoryGatewayListenerInvalid,
+		CategoryGatewaySpecInvalid, CategoryHTTPRouteNoParent, CategoryHTTPRouteParentNotAccepted,
+		CategoryHTTPRouteRefsNotResolved, CategoryHTTPRouteBackendMissing, CategoryHTTPRouteBackendInvalid,
+		CategoryReferenceGrantInvalid, CategoryReferenceGrantMissing, CategoryOLMResourceUnhealthy,
+		CategoryIntegrationResourceUnhealthy, CategoryDynamicMalformed:
+		return GroupErrors
+
+	default:
+		return GroupImprovement
+	}
+}
+
 type Issue struct {
 	AnalyzerNames         []string      `json:"analyzer_names,omitempty"`
 	ID                    string        `json:"id"`
@@ -158,6 +206,7 @@ type Issue struct {
 	TargetResourceVersion string        `json:"target_resource_version,omitempty"`
 	Severity              Severity      `json:"severity"`
 	Category              IssueCategory `json:"category"`
+	Group                 FindingGroup  `json:"group"`
 	Summary               string        `json:"summary"`
 	Details               string        `json:"details"`
 	LogsSnippet           string        `json:"logs_snippet,omitempty"`

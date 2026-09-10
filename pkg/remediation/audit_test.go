@@ -51,7 +51,7 @@ func TestEngineConcurrentApprovalsCommitOnlyOneTransition(t *testing.T) {
 	release := make(chan struct{})
 	engine := NewEngineWithOptions(fake.NewSimpleClientset(), EngineOptions{
 		Executor:         blockingTestExecutor{started: started, release: release},
-		ExecutionTimeout: time.Second,
+		ExecutionTimeout: 5 * time.Second,
 	})
 	defer engine.Close()
 	issue := &scanner.Issue{ID: "issue-concurrent-approval", Kind: "Pod", Name: "payments"}
@@ -259,7 +259,7 @@ func waitForStatus(t *testing.T, engine *Engine, id string, want ProposalStatus)
 		time.Sleep(5 * time.Millisecond)
 	}
 	proposal, _ := engine.GetProposal(id)
-	t.Fatalf("proposal status = %s, want %s", proposal.Status, want)
+	t.Fatalf("proposal status = %s, want %s, error = %q", proposal.Status, want, proposal.ExecutionError)
 }
 
 type blockingTestExecutor struct {

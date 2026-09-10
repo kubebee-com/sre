@@ -19,6 +19,8 @@ type SanitizedProposal struct {
 	Namespace             string                     `json:"namespace"`
 	Kind                  string                     `json:"kind"`
 	Name                  string                     `json:"name"`
+	Category              string                     `json:"category,omitempty"`
+	Group                 string                     `json:"group,omitempty"`
 	TargetUID             string                     `json:"target_uid,omitempty"`
 	TargetResourceVersion string                     `json:"target_resource_version,omitempty"`
 	Revision              uint64                     `json:"revision"`
@@ -58,6 +60,8 @@ func (p *Proposal) SanitizedWithRedactor(redactor *sanitizer.Redactor) *Sanitize
 		Namespace:             redactor.SanitizeText(p.Namespace),
 		Kind:                  redactor.SanitizeText(p.Kind),
 		Name:                  redactor.SanitizeText(p.Name),
+		Category:              redactor.SanitizeText(p.Category),
+		Group:                 redactor.SanitizeText(p.Group),
 		TargetUID:             redactor.SanitizeText(p.TargetUID),
 		TargetResourceVersion: redactor.SanitizeText(p.TargetResourceVersion),
 		Revision:              p.Revision,

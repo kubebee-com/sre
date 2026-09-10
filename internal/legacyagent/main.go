@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -1032,9 +1033,15 @@ func runSingleScanWithPlan(
 	if err != nil {
 		return fmt.Errorf("proposal state unavailable")
 	}
-	known := make(map[string]bool, len(previous))
+	known := make(map[string]bool, len(previous)*3)
 	for _, proposal := range previous {
 		known[proposal.ID] = true
+		if proposal.IssueID != "" {
+			known["issue:"+proposal.IssueID] = true
+		}
+		if proposal.Diagnosis != nil {
+			known[fmt.Sprintf("target:%s/%s/%s/%s", proposal.Namespace, proposal.Kind, proposal.Name, proposal.Diagnosis.ActionType)] = true
+		}
 	}
 
 	for _, issue := range issues {
@@ -1055,6 +1062,12 @@ func runSingleScanWithPlan(
 			diag, err := tp.Diagnose(scanCtx, sanitizedIssue)
 			if err != nil {
 				log.Printf("Triage failed for issue %s: %s", sanitizeLog(cfg, issue.ID), sanitizeLog(cfg, err.Error()))
+				continue
+			}
+			// Only generate pending remediation proposals for actionable remediations
+			// (BumpVersion, UpgradeApp, DeletePod, Restart, Scale, Cordon) or critical severity.
+			// Informational findings remain accessible under the Cluster Anomalies tab.
+			if diag.ActionType == triage.ActionManual && issue.Severity != scanner.SeverityCritical {
 				continue
 			}
 			proposal = eng.CreateProposal(issue, diag)
@@ -1295,6 +1308,8 @@ func buildKubeRESTConfig(kubeconfigPath string) (*rest.Config, error) {
 	}
 
 	k8sCfg.Timeout = 10 * time.Second
+	k8sCfg.QPS = 50
+	k8sCfg.Burst = 100
 	return k8sCfg, nil
 }
 
@@ -1304,10 +1319,54 @@ type proposalCreationNotifier interface {
 	NotifyProposalCreated(context.Context, *remediation.Proposal) error
 }
 
+var (
+	recentNotificationsMu sync.Mutex
+	recentNotifications   = make(map[string]time.Time)
+)
+
 func notifyNewProposal(ctx context.Context, notifier proposalCreationNotifier, proposal *remediation.Proposal, known map[string]bool) error {
-	if proposal == nil || known[proposal.ID] {
+	if proposal == nil {
 		return nil
 	}
+	targetKey := ""
+	if proposal.Diagnosis != nil {
+		targetKey = fmt.Sprintf("target:%s/%s/%s/%s", proposal.Namespace, proposal.Kind, proposal.Name, proposal.Diagnosis.ActionType)
+	}
+	issueKey := "issue:" + proposal.IssueID
+	if known[proposal.ID] || (proposal.IssueID != "" && known[issueKey]) || (targetKey != "" && known[targetKey]) {
+		return nil
+	}
+
+	recentNotificationsMu.Lock()
+	now := time.Now()
+	for k, t := range recentNotifications {
+		if now.Sub(t) > 24*time.Hour {
+			delete(recentNotifications, k)
+		}
+	}
+	if targetKey != "" && now.Sub(recentNotifications[targetKey]) < 24*time.Hour {
+		recentNotificationsMu.Unlock()
+		return nil
+	}
+	if proposal.IssueID != "" && now.Sub(recentNotifications[issueKey]) < 24*time.Hour {
+		recentNotificationsMu.Unlock()
+		return nil
+	}
+	if targetKey != "" {
+		recentNotifications[targetKey] = now
+	}
+	if proposal.IssueID != "" {
+		recentNotifications[issueKey] = now
+	}
+	recentNotificationsMu.Unlock()
+
 	known[proposal.ID] = true
+	if proposal.IssueID != "" {
+		known[issueKey] = true
+	}
+	if targetKey != "" {
+		known[targetKey] = true
+	}
 	return notifier.NotifyProposalCreated(ctx, proposal)
 }
+

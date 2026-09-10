@@ -284,6 +284,9 @@ func normalizeIssue(issue *Issue, fallbackDocsURL string) {
 	if issue.ID == "" {
 		issue.ID = makeID(issue.Namespace, issue.Kind, issue.Name, string(issue.Category))
 	}
+	if issue.Group == "" {
+		issue.Group = ResolveFindingGroup(issue.Category)
+	}
 	if len(issue.Events) > maxIssueEventCount {
 		issue.Events = issue.Events[:maxIssueEventCount]
 	}

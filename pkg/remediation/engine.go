@@ -41,6 +41,8 @@ type Proposal struct {
 	Namespace             string             `json:"namespace"`
 	Kind                  string             `json:"kind"`
 	Name                  string             `json:"name"`
+	Category              string             `json:"category,omitempty"`
+	Group                 string             `json:"group,omitempty"`
 	TargetUID             string             `json:"target_uid,omitempty"`
 	TargetResourceVersion string             `json:"target_resource_version,omitempty"`
 	Revision              uint64             `json:"revision"`
@@ -279,13 +281,17 @@ func (e *Engine) CreateProposalForActor(issue *scanner.Issue, diag *triage.Diagn
 	if err != nil {
 		return nil, fmt.Errorf("list proposals: %w", err)
 	}
+	group := string(issue.Group)
+	if group == "" {
+		group = string(scanner.ResolveFindingGroup(issue.Category))
+	}
+	now := time.Now().UTC()
 	for _, existing := range proposals {
 		if existing.IssueID == issue.ID && isActiveProposalStatus(existing.Status) {
 			return existing, nil
 		}
 	}
 
-	now := time.Now().UTC()
 	proposal := &Proposal{
 		ID:                    newProposalID(),
 		IssueID:               issue.ID,
@@ -295,6 +301,8 @@ func (e *Engine) CreateProposalForActor(issue *scanner.Issue, diag *triage.Diagn
 		Namespace:             issue.Namespace,
 		Kind:                  issue.Kind,
 		Name:                  issue.Name,
+		Category:              string(issue.Category),
+		Group:                 group,
 		TargetUID:             issue.TargetUID,
 		TargetResourceVersion: issue.TargetResourceVersion,
 		Revision:              1,

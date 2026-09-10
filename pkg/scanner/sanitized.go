@@ -21,6 +21,7 @@ type SanitizedIssue struct {
 	TargetResourceVersion string                    `json:"target_resource_version,omitempty"`
 	Severity              Severity                  `json:"severity"`
 	Category              IssueCategory             `json:"category"`
+	Group                 FindingGroup              `json:"group"`
 	Summary               string                    `json:"summary"`
 	Details               string                    `json:"details"`
 	LogsSnippet           string                    `json:"logs_snippet,omitempty"`
@@ -70,9 +71,13 @@ func sanitizeIssueWithRedactor(issue *Issue, redactor *sanitizer.Redactor) *Sani
 	result := &SanitizedIssue{
 		Severity:      issue.Severity,
 		Category:      issue.Category,
+		Group:         issue.Group,
 		FirstObserved: issue.FirstObserved,
 		LastObserved:  issue.LastObserved,
 		Report:        sanitizer.RedactionReport{},
+	}
+	if result.Group == "" {
+		result.Group = ResolveFindingGroup(issue.Category)
 	}
 	for _, name := range issue.AnalyzerNames {
 		result.AnalyzerNames = appendUniqueField(result.AnalyzerNames, sanitizeAndRecord(redactor, name, "analyzer_names", &result.Report))

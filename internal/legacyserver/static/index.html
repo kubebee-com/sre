@@ -13,6 +13,7 @@
     .badge-medium { background-color: #388bfd33; color: #58a6ff; border: 1px solid #388bfd66; }
     .badge-low { background-color: #8b949e33; color: #8b949e; border: 1px solid #8b949e66; }
     .badge-success { background-color: #23863633; color: #3fb950; border: 1px solid #23863666; }
+    .badge-purple { background-color: #a371f733; color: #bc8cff; border: 1px solid #a371f766; }
     pre { background-color: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
     .nav-tab.active { border-bottom: 2px solid #388bfd; color: #58a6ff; font-weight: 600; }
 
@@ -323,19 +324,33 @@
 
     <!-- TAB 1: PENDING APPROVALS -->
     <div id="section-approvals" class="space-y-4">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-base font-semibold text-white">Remediation Proposals and Outcomes</h2>
           <p class="text-xs text-gray-400">Human-in-the-Loop: No write actions will execute without explicit SRE authorization.</p>
         </div>
+        <div class="flex items-center gap-2">
+          <select id="proposal-group-filter" onchange="loadProposals()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+            <option value="">All Categories</option>
+            <option value="Vulnerability">🛡️ Vulnerability</option>
+            <option value="Upgrade">🚀 Upgrade</option>
+            <option value="Failures">💥 Failures</option>
+            <option value="Errors">⚠️ Errors</option>
+            <option value="Improvement">💡 Improvement</option>
+          </select>
+          <select id="proposal-status-filter" onchange="loadProposals()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+            <option value="">All statuses</option>
+            <option value="PENDING_APPROVAL">Pending approval</option>
+            <option value="APPROVED">Approved</option>
+            <option value="EXECUTING">Executing</option>
+            <option value="COMPLETED">Action completed</option>
+            <option value="FAILED">Failed</option>
+            <option value="STALE">Stale</option>
+            <option value="EXPIRED">Expired</option>
+            <option value="REJECTED">Rejected</option>
+          </select>
+        </div>
       </div>
-      <label for="proposal-status-filter" class="text-xs text-gray-400">Status</label>
-      <select id="proposal-status-filter" onchange="loadProposals()" class="bg-gray-800 text-gray-200">
-        <option value="">All statuses</option><option value="PENDING_APPROVAL">Pending approval</option>
-        <option value="APPROVED">Approved</option><option value="EXECUTING">Executing</option>
-        <option value="COMPLETED">Action completed</option><option value="FAILED">Failed</option>
-        <option value="STALE">Stale</option><option value="EXPIRED">Expired</option><option value="REJECTED">Rejected</option>
-      </select>
       <div id="proposals-container" class="space-y-4">
         <!-- Injected via JavaScript -->
         <div class="card p-6 text-center text-gray-500 text-sm">Loading proposals...</div>
@@ -351,6 +366,14 @@
         </div>
         <div class="flex items-center gap-2">
           <input type="text" id="filter-search" oninput="applyAnomalyFilters()" placeholder="Search name/namespace..." class="px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500 w-48">
+          <select id="filter-group" onchange="applyAnomalyFilters()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+            <option value="">All Categories</option>
+            <option value="Vulnerability">🛡️ Vulnerability</option>
+            <option value="Upgrade">🚀 Upgrade</option>
+            <option value="Failures">💥 Failures</option>
+            <option value="Errors">⚠️ Errors</option>
+            <option value="Improvement">💡 Improvement</option>
+          </select>
           <select id="filter-severity" onchange="applyAnomalyFilters()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
             <option value="">All Severities</option>
             <option value="CRITICAL">Critical</option>

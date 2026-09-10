@@ -260,8 +260,47 @@ func NewFileProposalStore(dir string) (*FileProposalStore, error) {
 		}
 		seenIDs[proposal.ID] = struct{}{}
 	}
+	store.pruneOldProposalsLocked()
 	opened = true
 	return store, nil
+}
+
+func (s *FileProposalStore) pruneOldProposalsLocked() {
+	if len(s.state.Proposals) <= 200 {
+		return
+	}
+	now := time.Now().UTC()
+	survived := make([]*Proposal, 0, len(s.state.Proposals))
+	validIDs := make(map[string]bool)
+
+	for _, p := range s.state.Proposals {
+		if isActiveProposalStatus(p.Status) {
+			survived = append(survived, p)
+			validIDs[p.ID] = true
+			continue
+		}
+		if now.Sub(p.UpdatedAt) < 24*time.Hour {
+			survived = append(survived, p)
+			validIDs[p.ID] = true
+		}
+	}
+	if len(survived) > 500 {
+		survived = survived[len(survived)-500:]
+		validIDs = make(map[string]bool, len(survived))
+		for _, p := range survived {
+			validIDs[p.ID] = true
+		}
+	}
+	s.state.Proposals = survived
+
+	auditSurvived := make([]AuditEvent, 0, len(s.state.Audit))
+	for _, a := range s.state.Audit {
+		if validIDs[a.ProposalID] {
+			auditSurvived = append(auditSurvived, a)
+		}
+	}
+	s.state.Audit = auditSurvived
+	_ = s.writeStateLocked(s.state)
 }
 
 func (s *FileProposalStore) Create(proposal *Proposal) error {
@@ -391,14 +430,6 @@ func (s *FileProposalStore) writeStateLocked(state proposalState) error {
 	}
 	if err := os.Chmod(s.path, 0o600); err != nil {
 		return fmt.Errorf("restrict proposal store: %w", err)
-	}
-	directory, err := os.Open(s.dir)
-	if err != nil {
-		return fmt.Errorf("open proposal store directory: %w", err)
-	}
-	defer directory.Close()
-	if err := directory.Sync(); err != nil {
-		return fmt.Errorf("sync proposal store directory: %w", err)
 	}
 	return nil
 }

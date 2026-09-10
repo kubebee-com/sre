@@ -984,7 +984,14 @@ func (s *ClusterScanner) scanWarningEvents(ctx context.Context, namespace string
 	if err != nil {
 		return nil, err
 	}
-	issues := make([]*Issue, 0, len(events.Items))
+	type eventKey struct {
+		namespace string
+		kind      string
+		name      string
+		reason    string
+	}
+	grouped := make(map[eventKey]*Issue)
+	order := make([]eventKey, 0)
 	for index := range events.Items {
 		event := &events.Items[index]
 		if event.Type != corev1.EventTypeWarning {
@@ -1007,29 +1014,54 @@ func (s *ClusterScanner) scanWarningEvents(ctx context.Context, namespace string
 			message = "warning event reported without a message"
 		}
 		evidence := boundIssueText(fmt.Sprintf("[%s] %s", reason, message), maxIssueDetailsBytes)
-		eventKey := string(event.UID)
-		if eventKey == "" {
-			eventKey = event.Name
-		}
-		if eventKey == "" {
-			eventKey = event.CreationTimestamp.UTC().Format(time.RFC3339Nano)
-		}
 		observed := warningEventTime(event)
-		issues = append(issues, &Issue{
-			ID:                    makeID(event.Namespace, kind, name, "WarningEvent-"+reason+"-"+eventKey),
-			Namespace:             event.Namespace,
-			Kind:                  kind,
-			Name:                  name,
-			TargetUID:             string(event.InvolvedObject.UID),
-			TargetResourceVersion: event.ResourceVersion,
-			Severity:              SeverityMedium,
-			Category:              CategoryWarningEvent,
-			Summary:               fmt.Sprintf("Warning event %s for %s %s", reason, kind, name),
-			Details:               evidence,
-			Events:                []string{evidence},
-			FirstObserved:         observed,
-			LastObserved:          observed,
-		})
+
+		k := eventKey{namespace: event.Namespace, kind: kind, name: name, reason: reason}
+		existing, ok := grouped[k]
+		if !ok {
+			issue := &Issue{
+				ID:                    makeID(event.Namespace, kind, name, "WarningEvent-"+reason),
+				Namespace:             event.Namespace,
+				Kind:                  kind,
+				Name:                  name,
+				TargetUID:             string(event.InvolvedObject.UID),
+				TargetResourceVersion: event.ResourceVersion,
+				Severity:              SeverityMedium,
+				Category:              CategoryWarningEvent,
+				Summary:               fmt.Sprintf("Warning event %s for %s %s", reason, kind, name),
+				Details:               evidence,
+				Events:                []string{evidence},
+				FirstObserved:         observed,
+				LastObserved:          observed,
+			}
+			grouped[k] = issue
+			order = append(order, k)
+		} else {
+			if observed.Before(existing.FirstObserved) && !observed.IsZero() {
+				existing.FirstObserved = observed
+			}
+			if observed.After(existing.LastObserved) {
+				existing.LastObserved = observed
+				existing.Details = evidence
+				if event.ResourceVersion != "" {
+					existing.TargetResourceVersion = event.ResourceVersion
+				}
+			}
+			foundEvidence := false
+			for _, e := range existing.Events {
+				if e == evidence {
+					foundEvidence = true
+					break
+				}
+			}
+			if !foundEvidence && len(existing.Events) < maxIssueEventCount {
+				existing.Events = append(existing.Events, evidence)
+			}
+		}
+	}
+	issues := make([]*Issue, 0, len(order))
+	for _, k := range order {
+		issues = append(issues, grouped[k])
 	}
 	sort.SliceStable(issues, func(i, j int) bool { return issueLess(issues[i], issues[j]) })
 	return issues, nil
