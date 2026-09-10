@@ -25,9 +25,10 @@ type OIDCConfig struct {
 }
 
 type loginChallenge struct {
-	verifier string
-	nonce    string
-	expires  time.Time
+	verifier    string
+	nonce       string
+	redirectURL string
+	expires     time.Time
 }
 
 type browserSession struct {
@@ -137,6 +138,22 @@ func (a *oidcAuthenticator) prune(now time.Time) {
 	}
 }
 
+func (a *oidcAuthenticator) callbackURL(r *http.Request) string {
+	pub := strings.TrimRight(a.publicURL, "/")
+	if pub != "" && !strings.Contains(pub, "${") {
+		return pub + "/auth/callback"
+	}
+	proto := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		proto = "https"
+	}
+	host := r.Host
+	if fwdHost := r.Header.Get("X-Forwarded-Host"); fwdHost != "" {
+		host = fwdHost
+	}
+	return fmt.Sprintf("%s://%s/auth/callback", proto, host)
+}
+
 func (a *oidcAuthenticator) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := a.ensureVerifier(r.Context()); err != nil {
 		http.Error(w, "SSO identity provider unavailable: "+err.Error(), http.StatusServiceUnavailable)
@@ -149,16 +166,19 @@ func (a *oidcAuthenticator) handleLogin(w http.ResponseWriter, r *http.Request) 
 	state := identity.NewID()
 	nonce := identity.NewID()
 	codeVerifier := oauth2.GenerateVerifier()
+	redirectURL := a.callbackURL(r)
 
 	a.challenges[state] = loginChallenge{
-		verifier: codeVerifier,
-		nonce:    nonce,
-		expires:  time.Now().Add(10 * time.Minute),
+		verifier:    codeVerifier,
+		nonce:       nonce,
+		redirectURL: redirectURL,
+		expires:     time.Now().Add(10 * time.Minute),
 	}
-	oauthCfg := a.oauthCfg
+	oauthCfg := *a.oauthCfg
+	oauthCfg.RedirectURL = redirectURL
 	a.mu.Unlock()
 
-	isHTTPS := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" || strings.HasPrefix(a.publicURL, "https://")
+	isHTTPS := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" || strings.HasPrefix(redirectURL, "https://")
 	http.SetCookie(w, &http.Cookie{
 		Name:     "sre-login-state",
 		Value:    state,
@@ -201,7 +221,10 @@ func (a *oidcAuthenticator) handleCallback(w http.ResponseWriter, r *http.Reques
 	if found {
 		delete(a.challenges, state)
 	}
-	oauthCfg := a.oauthCfg
+	oauthCfg := *a.oauthCfg
+	if challenge.redirectURL != "" {
+		oauthCfg.RedirectURL = challenge.redirectURL
+	}
 	verifier := a.verifier
 	a.mu.Unlock()
 

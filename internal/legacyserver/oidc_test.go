@@ -190,3 +190,52 @@ func TestServerAuthConfigAndMe(t *testing.T) {
 		t.Errorf("unexpected /api/auth/me response: %+v", meAuthResp)
 	}
 }
+
+func TestOIDCCallbackURLResolution(t *testing.T) {
+	tests := []struct {
+		name      string
+		publicURL string
+		reqHost   string
+		reqHeader map[string]string
+		want      string
+	}{
+		{
+			name:      "Explicit publicURL configured",
+			publicURL: "https://sre.infra.kubeb.com",
+			reqHost:   "internal.host:8080",
+			want:      "https://sre.infra.kubeb.com/auth/callback",
+		},
+		{
+			name:      "Unexpanded template variable falls back to host header",
+			publicURL: "https://${cluster__apps__sre__domain:=sre.infra.kubeb.com}",
+			reqHost:   "sre.infra.kubeb.com",
+			reqHeader: map[string]string{"X-Forwarded-Proto": "https"},
+			want:      "https://sre.infra.kubeb.com/auth/callback",
+		},
+		{
+			name:      "Empty publicURL uses forwarded host and proto",
+			publicURL: "",
+			reqHost:   "10.42.0.200:8080",
+			reqHeader: map[string]string{
+				"X-Forwarded-Proto": "https",
+				"X-Forwarded-Host":  "sre.infra.kubeb.com",
+			},
+			want: "https://sre.infra.kubeb.com/auth/callback",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			auth := &oidcAuthenticator{publicURL: tt.publicURL}
+			req := httptest.NewRequest(http.MethodGet, "http://"+tt.reqHost+"/auth/login", nil)
+			req.Host = tt.reqHost
+			for k, v := range tt.reqHeader {
+				req.Header.Set(k, v)
+			}
+			got := auth.callbackURL(req)
+			if got != tt.want {
+				t.Errorf("callbackURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

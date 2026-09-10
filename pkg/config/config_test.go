@@ -596,3 +596,23 @@ func TestLoadConfigFallsBackForInvalidSafetyEnvironment(t *testing.T) {
 		t.Fatalf("invalid RequestBurst = %d, want %d", cfg.RequestBurst, DefaultRequestBurst)
 	}
 }
+
+func TestExpandEnvDefaults(t *testing.T) {
+	t.Setenv("MY_CLUSTER_DOMAIN", "mycluster.example.com")
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"https://plain.example.com", "https://plain.example.com"},
+		{"https://${MY_CLUSTER_DOMAIN:=fallback.example.com}", "https://mycluster.example.com"},
+		{"https://${UNSET_DOMAIN:=fallback.example.com}", "https://fallback.example.com"},
+		{"https://${UNSET_DOMAIN:-fallback.example.com}", "https://fallback.example.com"},
+		{"${UNSET_VAR}", ""},
+	}
+	for _, tt := range tests {
+		got := ExpandEnvDefaults(tt.input)
+		if got != tt.want {
+			t.Errorf("ExpandEnvDefaults(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}

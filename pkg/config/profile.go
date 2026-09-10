@@ -813,14 +813,14 @@ func currentEnvironment() map[string]string {
 
 func stringValue(destination *string, flagKey, fileValue string, flags, environment map[string]string, environmentKeys ...string) {
 	if value, ok := firstMapValue(flags, flagKey); ok {
-		*destination = value
+		*destination = ExpandEnvDefaults(value)
 		return
 	}
 	if value, ok := firstMapValue(environment, environmentKeys...); ok {
-		*destination = value
+		*destination = ExpandEnvDefaults(value)
 		return
 	}
-	*destination = fileValue
+	*destination = ExpandEnvDefaults(fileValue)
 }
 
 func listValue(fileValue []string, flags, environment map[string]string, flagKey, environmentKey string) []string {

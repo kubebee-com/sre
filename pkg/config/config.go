@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -411,11 +412,36 @@ func (c *Config) ScanPlan() scanplan.Plan {
 	}
 }
 
+var envPattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?::[=-]([^}]*))?\}`)
+
+// ExpandEnvDefaults expands ${VAR:=default} and ${VAR:-default} patterns in s,
+// falling back to os.Getenv or the provided default.
+func ExpandEnvDefaults(s string) string {
+	if !strings.Contains(s, "${") {
+		return s
+	}
+	return envPattern.ReplaceAllStringFunc(s, func(m string) string {
+		sub := envPattern.FindStringSubmatch(m)
+		if len(sub) < 2 {
+			return m
+		}
+		key := sub[1]
+		def := ""
+		if len(sub) >= 3 {
+			def = sub[2]
+		}
+		if val, ok := os.LookupEnv(key); ok && val != "" {
+			return val
+		}
+		return def
+	})
+}
+
 func getEnv(key, fallback string) string {
 	if val := os.Getenv(key); val != "" {
-		return val
+		return ExpandEnvDefaults(val)
 	}
-	return fallback
+	return ExpandEnvDefaults(fallback)
 }
 
 func getEnvInt(key string, fallback int) int {
