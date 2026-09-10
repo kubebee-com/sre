@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -204,7 +205,7 @@ func NewEngineWithVerificationOptions(client kubernetes.Interface, options Engin
 		proposalTTL:            proposalTTL,
 	}
 	engine.startWorkers(workerCount)
-	engine.recoverApprovedWork()
+	go engine.recoverApprovedWork()
 	return engine
 }
 
@@ -218,8 +219,10 @@ func (e *Engine) startWorkers(count int) {
 func (e *Engine) recoverApprovedWork() {
 	proposals, err := e.store.List()
 	if err != nil {
+		log.Printf("Remediation: Failed to list stored proposals for recovery: %v", err)
 		return
 	}
+	log.Printf("Remediation: evaluating %d stored proposals for recovery...", len(proposals))
 	for _, proposal := range proposals {
 		if proposalExpired(proposal, time.Now().UTC()) {
 			switch proposal.Status {
