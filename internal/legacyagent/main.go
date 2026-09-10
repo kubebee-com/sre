@@ -257,9 +257,11 @@ func LegacyMain() {
 	log.Printf("Selected Triage Provider: %s", sanitizeLog(cfg, triageProvider.Name()))
 
 	// 3. Initialize Scanner, Remediation Engine, and Notifier
+	log.Printf("Startup: Initializing typed scanner...")
 	redactionSecrets := providerSecretValues(cfg)
 	typedScanner := scanner.NewClusterScanner(k8sClient)
 	var clusterScanner server.Scanner = typedScanner
+	log.Printf("Startup: Initializing dynamic scanner...")
 	if dynamicClient, dynamicErr := dynamic.NewForConfig(kubeRESTConfig); dynamicErr != nil {
 		log.Printf("Optional dynamic Kubernetes client unavailable; continuing with typed analyzers: %s", sanitizeLog(cfg, dynamicErr.Error()))
 	} else {
@@ -281,6 +283,7 @@ func LegacyMain() {
 		historyDir = filepath.Join(cfg.DataDir, "scan-history")
 	}
 	if historyDir != "" {
+		log.Printf("Startup: Initializing scan history store at %s...", historyDir)
 		scanHistory, err = scanner.NewFileHistoryStore(historyDir)
 		if err != nil {
 			log.Fatalf("Failed to initialize scan history store: %s", sanitizeLog(cfg, err.Error()))
@@ -293,13 +296,16 @@ func LegacyMain() {
 	}
 	var proposalStore remediation.ProposalStore
 	if strings.TrimSpace(cfg.DataDir) != "" {
+		log.Printf("Startup: Initializing proposal store at %s...", cfg.DataDir)
 		proposalStore, err = remediation.NewFileProposalStore(cfg.DataDir)
 		if err != nil {
 			log.Fatalf("Failed to initialize durable proposal store: %s", sanitizeLog(cfg, err.Error()))
 		}
 	} else {
+		log.Printf("Startup: Initializing memory proposal store...")
 		proposalStore = remediation.NewMemoryProposalStore()
 	}
+	log.Printf("Startup: Initializing playbooks...")
 	playbookService, closePlaybooks := startPlaybooks(context.Background(), cfg, triageProvider, metricsRegistry)
 	defer closePlaybooks()
 	verificationOptions := remediation.EngineVerificationOptions{}
@@ -308,14 +314,17 @@ func LegacyMain() {
 		verificationOptions.TerminalObserver = playbookAuditObserver{service: playbookService}
 		verificationOptions.OutcomeObserverTimeout = time.Minute
 	}
+	log.Printf("Startup: Initializing remediation engine...")
 	remediationEngine := remediation.NewEngineWithVerificationOptions(k8sClient, remediation.EngineOptions{Store: proposalStore}, verificationOptions)
 	if playbookService != nil {
 		playbookService.SetProposalCreator(remediationEngine)
 	}
+	log.Printf("Startup: Initializing webhook notifier...")
 	webhookNotifier := notifier.NewWebhookNotifier(cfg.WebhookURL, cfg.PublicURL, redactionSecrets...)
 	readiness := &startupReadiness{}
 
 	// 4. Initialize Web Server & Dashboard
+	log.Printf("Startup: Initializing API server on port %d...", cfg.Port)
 	apiServer := server.NewServer(cfg.Port, clusterScanner, triageProvider, remediationEngine, webhookNotifier, server.ServerOptions{
 		APIToken:              cfg.APIToken,
 		RequireAPIToken:       cfg.RequireAPIToken,
@@ -378,19 +387,23 @@ func LegacyMain() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 5. Start Background Proactive Scanner Loop
-	go runScannerLoopWithLeader(ctx, cfg, clusterScanner, triageProvider, remediationEngine, webhookNotifier, apiServer, readiness, k8sClient)
-
-	// 6. Start Web UI & API Server
+	// 5. Start Web UI & API Server
+	log.Printf("Startup: Launching API server goroutine...")
 	go func() {
+		log.Printf("Startup: Calling apiServer.Start...")
 		if err := apiServer.Start(ctx); err != nil && err != rest.ErrNotInCluster {
 			log.Printf("HTTP server terminated: %s", sanitizeLog(cfg, err.Error()))
 		}
 	}()
 
+	// 6. Start Background Proactive Scanner Loop
+	log.Printf("Startup: Launching scanner loop goroutine...")
+	go runScannerLoopWithLeader(ctx, cfg, clusterScanner, triageProvider, remediationEngine, webhookNotifier, apiServer, readiness, k8sClient)
+
 	// Graceful Shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	log.Printf("Startup: SRE Agent initialization complete, waiting for signals...")
 	<-sigCh
 	log.Println("Received termination signal, shutting down Kubebee SRE Agent...")
 

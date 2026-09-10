@@ -415,11 +415,13 @@ func (s *Server) Start(ctx context.Context) error {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	log.Printf("Server: Starting server on port %d...", s.port)
 	listener, err := net.Listen("tcp", httpServer.Addr)
 	if err != nil {
 		s.completeLifecycle(generation, nil)
 		return fmt.Errorf("listen on %s: %w", httpServer.Addr, err)
 	}
+	log.Printf("Server: net.Listen succeeded on %s", httpServer.Addr)
 
 	select {
 	case <-ctx.Done():
