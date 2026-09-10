@@ -181,6 +181,12 @@ func ruleSpecFor(category scanner.IssueCategory) ruleSpec {
 		return manual("OLM resource is unhealthy", "An Operator Lifecycle Manager resource reports a failed or incomplete condition.", "Inspect operator, subscription, install plan, and catalog status before retrying.", "resource")
 	case scanner.CategoryIntegrationResourceUnhealthy:
 		return manual("Integration resource is unhealthy", "An optional integration resource reports an unhealthy condition.", "Inspect the integration controller status and dependency conditions.", "resource")
+	case scanner.CategoryPodVulnerability:
+		return ruleSpec{"Pod container vulnerability detected", "The pod runs a container image with known security vulnerabilities or unpinned tags.", "Approve bumping the container image version to the patched release.", ActionBumpVersion, "deployment", "bump-version"}
+	case scanner.CategoryClusterSecurityRisk:
+		return manual("Cluster security risk detected", "A cluster component or configuration presents a security vulnerability or excessive privilege.", "Review and approve hardening or version upgrade for the affected component.", "resource")
+	case scanner.CategoryAppUpdateAvailable:
+		return ruleSpec{"Application upgrade available", "A newer version of the application or Helm chart is available for deployment.", "Approve upgrading the application or Helm chart to the latest stable version.", ActionUpgradeApp, "deployment", "bump-version"}
 	case scanner.CategoryDynamicMalformed:
 		return manual("Dynamic resource is malformed", "The optional resource payload does not satisfy the discovered API shape.", "Validate the resource against the installed CRD schema before changing it.", "resource")
 	default:
@@ -256,6 +262,9 @@ func safeRuleToken(value, fallback string) string {
 func ruleCommand(spec ruleSpec, name, namespace string) string {
 	if spec.commandStyle == "cordon" {
 		return "kubectl cordon " + name
+	}
+	if spec.commandStyle == "bump-version" {
+		return fmt.Sprintf("kubectl set image %s/%s %s=updated-image -n %s", spec.resource, name, name, namespace)
 	}
 	if spec.commandStyle != "describe" || spec.resource == "resource" {
 		return "# Review the sanitized scanner evidence before remediation"

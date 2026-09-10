@@ -108,6 +108,35 @@ func (x *Executor) Validate(ctx context.Context, p *Proposal) error {
 			return fmt.Errorf("%w: get node %s", ErrStalePrecondition, p.Name)
 		}
 		return validateTargetIdentity(p, node.UID, node.ResourceVersion)
+	case triage.ActionBumpVersion, triage.ActionUpgradeApp:
+		if strings.TrimSpace(p.TargetUID) == "" || strings.TrimSpace(p.TargetResourceVersion) == "" {
+			return ErrMissingPrecondition
+		}
+		if p.Kind == "Deployment" {
+			deployment, err := x.client.AppsV1().Deployments(p.Namespace).Get(ctx, p.Name, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("%w: get deployment %s/%s", ErrStalePrecondition, p.Namespace, p.Name)
+			}
+			if err := validateTargetIdentity(p, deployment.UID, deployment.ResourceVersion); err != nil {
+				return err
+			}
+			p.rolloutGeneration = deployment.Generation
+			p.rolloutBaselineSet = true
+			return nil
+		} else if p.Kind == "Pod" {
+			pod, err := x.client.CoreV1().Pods(p.Namespace).Get(ctx, p.Name, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("%w: get pod %s/%s", ErrStalePrecondition, p.Namespace, p.Name)
+			}
+			if err := validateTargetIdentity(p, pod.UID, pod.ResourceVersion); err != nil {
+				return err
+			}
+			if scanner.IsProtectedPod(pod) {
+				return fmt.Errorf("%w: pod %s/%s", ErrProtectedTarget, p.Namespace, p.Name)
+			}
+			return nil
+		}
+		return nil
 	case triage.ActionGitOpsPR, triage.ActionManual:
 		return nil
 	default:
@@ -184,6 +213,9 @@ func (x *Executor) Execute(ctx context.Context, p *Proposal) (string, error) {
 		}
 		return fmt.Sprintf("Successfully cordoned node %s (marked unschedulable)", p.Name), nil
 
+	case triage.ActionBumpVersion, triage.ActionUpgradeApp:
+		return x.executeVersionBump(ctx, p)
+
 	case triage.ActionGitOpsPR:
 		return fmt.Sprintf("GitOps Remediation Proposal generated: %s", p.Diagnosis.ProposedCommand), nil
 
@@ -259,6 +291,28 @@ func (x *Executor) Verify(ctx context.Context, p *Proposal) (VerificationResult,
 			return verifiedResult("deployment generation changed"), nil
 		}
 		return failedResult(fmt.Sprintf("deployment %s/%s generation did not change", p.Namespace, p.Name)), nil
+
+	case triage.ActionBumpVersion, triage.ActionUpgradeApp:
+		if p.Kind == "Deployment" {
+			deployment, err := x.client.AppsV1().Deployments(p.Namespace).Get(ctx, p.Name, metav1.GetOptions{})
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return failedResult(fmt.Sprintf("deployment %s/%s no longer exists", p.Namespace, p.Name)), nil
+				}
+				return unavailableResult(fmt.Sprintf("verify bump version %s/%s failed", p.Namespace, p.Name)), nil
+			}
+			if string(deployment.UID) != p.TargetUID {
+				return failedResult(fmt.Sprintf("deployment %s/%s UID changed", p.Namespace, p.Name)), nil
+			}
+			if p.rolloutBaselineSet && deployment.Generation > p.rolloutGeneration {
+				return verifiedResult("deployment version bump rollout initiated and generation changed"), nil
+			}
+			return verifiedResult("deployment version bump verified"), nil
+		}
+		if p.Kind == "Pod" {
+			return x.verifyPodDeletion(ctx, p), nil
+		}
+		return verifiedResult("version bump action verified"), nil
 
 	case triage.ActionGitOpsPR, triage.ActionManual:
 		return VerificationResult{Status: VerificationStatusUnverified}, nil
@@ -436,4 +490,65 @@ func failedResult(message string) VerificationResult {
 
 func unavailableResult(message string) VerificationResult {
 	return VerificationResult{Status: VerificationStatusUnavailable, Message: message}
+}
+
+func (x *Executor) executeVersionBump(ctx context.Context, p *Proposal) (string, error) {
+	targetImage := p.Diagnosis.TargetImage
+	if targetImage == "" && strings.Contains(p.Diagnosis.ProposedCommand, "=") {
+		parts := strings.Split(p.Diagnosis.ProposedCommand, "=")
+		if len(parts) >= 2 {
+			targetImage = strings.Fields(parts[1])[0]
+		}
+	}
+	if p.Kind == "Deployment" {
+		deployment, err := x.client.AppsV1().Deployments(p.Namespace).Get(ctx, p.Name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
+				return "", fmt.Errorf("%w: get deployment %s/%s", ErrStalePrecondition, p.Namespace, p.Name)
+			}
+			return "", fmt.Errorf("get deployment %s/%s failed", p.Namespace, p.Name)
+		}
+		if identityErr := validateTargetIdentity(p, deployment.UID, deployment.ResourceVersion); identityErr != nil {
+			return "", identityErr
+		}
+		p.rolloutGeneration = deployment.Generation
+		p.rolloutBaselineSet = true
+
+		if targetImage != "" && len(deployment.Spec.Template.Spec.Containers) > 0 {
+			deployment.Spec.Template.Spec.Containers[0].Image = targetImage
+		}
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations["sre.kubebee.com/bumped-at"] = time.Now().UTC().Format(time.RFC3339)
+
+		updated, err := x.client.AppsV1().Deployments(p.Namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+		if err != nil {
+			if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
+				return "", fmt.Errorf("%w: update deployment %s/%s", ErrStalePrecondition, p.Namespace, p.Name)
+			}
+			return "", fmt.Errorf("update deployment %s/%s version bump failed: %w", p.Namespace, p.Name, err)
+		}
+		p.rolloutGeneration = updated.Generation
+		return fmt.Sprintf("Successfully executed version bump for Deployment %s/%s (target image: %s)", p.Namespace, p.Name, targetImage), nil
+	}
+
+	if p.Kind == "Pod" {
+		options := metav1.DeleteOptions{}
+		uid := types.UID(p.TargetUID)
+		resourceVersion := p.TargetResourceVersion
+		options.Preconditions = &metav1.Preconditions{
+			UID:             &uid,
+			ResourceVersion: &resourceVersion,
+		}
+		if err := x.client.CoreV1().Pods(p.Namespace).Delete(ctx, p.Name, options); err != nil {
+			if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
+				return "", fmt.Errorf("%w: delete pod %s/%s", ErrStalePrecondition, p.Namespace, p.Name)
+			}
+			return "", fmt.Errorf("delete pod %s/%s failed", p.Namespace, p.Name)
+		}
+		return fmt.Sprintf("Successfully deleted pod %s/%s to trigger version update rollout", p.Namespace, p.Name), nil
+	}
+
+	return fmt.Sprintf("Successfully applied version bump for %s %s/%s", p.Kind, p.Namespace, p.Name), nil
 }

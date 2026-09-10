@@ -94,6 +94,9 @@ const (
 	CategorySecurityPrivilege         IssueCategory = "SecurityPrivilege"
 	CategorySecurityClusterBinding    IssueCategory = "SecurityClusterBinding"
 	CategoryEKSClusterHealth          IssueCategory = "EKSClusterHealth"
+	CategoryPodVulnerability          IssueCategory = "PodVulnerability"
+	CategoryClusterSecurityRisk       IssueCategory = "ClusterSecurityRisk"
+	CategoryAppUpdateAvailable        IssueCategory = "AppUpdateAvailable"
 
 	// Generic events
 	CategoryWarningEvent IssueCategory = "WarningEvent"
@@ -133,6 +136,7 @@ func AllIssueCategories() []IssueCategory {
 		CategoryConfigMapUnused, CategoryConfigMapTooLarge, CategoryConfigMapReferenceMissing,
 		CategoryWebhookServiceMissing, CategoryWebhookNoActivePods, CategoryWebhookTargetMissing,
 		CategorySecurityPrivilege, CategorySecurityClusterBinding, CategoryEKSClusterHealth,
+		CategoryPodVulnerability, CategoryClusterSecurityRisk, CategoryAppUpdateAvailable,
 		CategoryWarningEvent, CategoryGatewayClassNotAccepted, CategoryGatewayNotAccepted,
 		CategoryGatewayNotProgrammed, CategoryGatewayListenerInvalid, CategoryGatewaySpecInvalid,
 		CategoryHTTPRouteNoParent, CategoryHTTPRouteParentNotAccepted, CategoryHTTPRouteRefsNotResolved,

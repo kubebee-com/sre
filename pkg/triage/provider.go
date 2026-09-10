@@ -436,7 +436,7 @@ func validSeverity(severity scanner.Severity) bool {
 func validAction(action ActionType) bool {
 	switch action {
 	case ActionRestartPod, ActionDeleteFailedPod, ActionScaleWorkload, ActionRolloutRestart,
-		ActionCordonNode, ActionCleanupPods, ActionGitOpsPR, ActionManual:
+		ActionCordonNode, ActionCleanupPods, ActionBumpVersion, ActionUpgradeApp, ActionGitOpsPR, ActionManual:
 		return true
 	default:
 		return false
@@ -490,7 +490,7 @@ func validateKubectlCommand(fields []string) error {
 	}
 	verb := fields[1]
 	switch verb {
-	case "get", "describe", "logs", "delete", "rollout", "cordon", "scale":
+	case "get", "describe", "logs", "delete", "rollout", "cordon", "scale", "set":
 	default:
 		return fmt.Errorf("kubectl command verb is not allow-listed")
 	}
@@ -529,6 +529,10 @@ func validateKubectlCommand(fields []string) error {
 		}
 		if !hasSafeReplicaFlag(fields[3:]) {
 			return fmt.Errorf("kubectl scale requires a bounded replica count")
+		}
+	case "set":
+		if len(fields) < 4 || fields[2] != "image" || !strings.Contains(fields[3], "/") {
+			return fmt.Errorf("kubectl set image command is incomplete")
 		}
 	}
 	return nil

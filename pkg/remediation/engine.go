@@ -541,7 +541,8 @@ func proposalSupportsLearningOutcome(proposal *Proposal) bool {
 	}
 	switch proposal.Diagnosis.ActionType {
 	case triage.ActionRestartPod, triage.ActionDeleteFailedPod, triage.ActionCleanupPods,
-		triage.ActionRolloutRestart, triage.ActionCordonNode, triage.ActionScaleWorkload:
+		triage.ActionRolloutRestart, triage.ActionCordonNode, triage.ActionScaleWorkload,
+		triage.ActionBumpVersion, triage.ActionUpgradeApp:
 		return true
 	default:
 		return false
@@ -598,7 +599,8 @@ func isActiveProposalStatus(status ProposalStatus) bool {
 func proposalTargetsRequired(action triage.ActionType) bool {
 	switch action {
 	case triage.ActionRestartPod, triage.ActionDeleteFailedPod, triage.ActionCleanupPods,
-		triage.ActionRolloutRestart, triage.ActionCordonNode, triage.ActionScaleWorkload:
+		triage.ActionRolloutRestart, triage.ActionCordonNode, triage.ActionScaleWorkload,
+		triage.ActionBumpVersion, triage.ActionUpgradeApp:
 		return true
 	default:
 		return false

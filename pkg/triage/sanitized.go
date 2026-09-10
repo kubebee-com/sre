@@ -16,6 +16,8 @@ type SanitizedDiagnosis struct {
 	RemediationPlan string                    `json:"remediation_plan"`
 	ActionType      ActionType                `json:"action_type"`
 	ProposedCommand string                    `json:"proposed_command"`
+	TargetImage     string                    `json:"target_image,omitempty"`
+	TargetVersion   string                    `json:"target_version,omitempty"`
 	TargetReplicas  *int32                    `json:"target_replicas,omitempty"`
 	ConfidenceScore float64                   `json:"confidence_score"`
 	ProviderName    string                    `json:"provider_name"`
@@ -46,6 +48,8 @@ func (d *Diagnosis) SanitizedWithRedactor(redactor *sanitizer.Redactor) *Sanitiz
 	result.RootCause = sanitizeDiagnosisField(redactor, d.RootCause, "root_cause", &result.Report)
 	result.RemediationPlan = sanitizeDiagnosisField(redactor, d.RemediationPlan, "remediation_plan", &result.Report)
 	result.ProposedCommand = sanitizeDiagnosisField(redactor, d.ProposedCommand, "proposed_command", &result.Report)
+	result.TargetImage = sanitizeDiagnosisField(redactor, d.TargetImage, "target_image", &result.Report)
+	result.TargetVersion = sanitizeDiagnosisField(redactor, d.TargetVersion, "target_version", &result.Report)
 	result.ProviderName = sanitizeDiagnosisField(redactor, d.ProviderName, "provider_name", &result.Report)
 	return result
 }
@@ -99,6 +103,8 @@ func (d *SanitizedDiagnosis) AsDiagnosis() *Diagnosis {
 		RemediationPlan: d.RemediationPlan,
 		ActionType:      d.ActionType,
 		ProposedCommand: d.ProposedCommand,
+		TargetImage:     d.TargetImage,
+		TargetVersion:   d.TargetVersion,
 		TargetReplicas:  cloneInt32Pointer(d.TargetReplicas),
 		ConfidenceScore: d.ConfidenceScore,
 		ProviderName:    d.ProviderName,

@@ -187,20 +187,36 @@ func (n *WebhookNotifier) dispatchSlackProposal(ctx context.Context, url string,
 		color = "#E53E3E"
 	}
 
+	headerText := fmt.Sprintf("%s [%s] SRE Remediation Required: %s/%s", severityEmoji, p.Diagnosis.Severity, p.Kind, p.Name)
+	if p.Diagnosis.ActionType == triage.ActionBumpVersion || p.Diagnosis.ActionType == triage.ActionUpgradeApp {
+		headerText = fmt.Sprintf("🛡️ %s [%s] SRE Security Fix / App Upgrade Approval Required: %s/%s", severityEmoji, p.Diagnosis.Severity, p.Kind, p.Name)
+	}
+
+	fields := []map[string]interface{}{
+		{"title": "Namespace", "value": p.Namespace, "short": true},
+		{"title": "Action Type", "value": string(p.Diagnosis.ActionType), "short": true},
+	}
+	if p.Diagnosis.TargetImage != "" {
+		fields = append(fields, map[string]interface{}{"title": "Target Image", "value": fmt.Sprintf("`%s`", p.Diagnosis.TargetImage), "short": true})
+	}
+	if p.Diagnosis.TargetVersion != "" {
+		fields = append(fields, map[string]interface{}{"title": "Target Version", "value": fmt.Sprintf("`%s`", p.Diagnosis.TargetVersion), "short": true})
+	}
+	fields = append(fields,
+		map[string]interface{}{"title": "Proposed Command", "value": fmt.Sprintf("`%s`", p.Diagnosis.ProposedCommand), "short": false},
+		map[string]interface{}{"title": "AI Confidence", "value": fmt.Sprintf("%.0f%% via %s", p.Diagnosis.ConfidenceScore*100, p.Diagnosis.ProviderName), "short": true},
+		map[string]interface{}{"title": "Approve via Chat", "value": fmt.Sprintf("`/sre approve %s`", p.ID), "short": true},
+		map[string]interface{}{"title": "Review & Authorize", "value": fmt.Sprintf("<%s|Open SRE Approval Console>", approveLink), "short": false},
+	)
+
 	payload := map[string]interface{}{
-		"text": fmt.Sprintf("%s [%s] SRE Remediation Required: %s/%s", severityEmoji, p.Diagnosis.Severity, p.Kind, p.Name),
+		"text": headerText,
 		"attachments": []map[string]interface{}{
 			{
-				"color": color,
-				"title": p.Diagnosis.Summary,
-				"text":  p.Diagnosis.RootCause,
-				"fields": []map[string]interface{}{
-					{"title": "Namespace", "value": p.Namespace, "short": true},
-					{"title": "Action Type", "value": string(p.Diagnosis.ActionType), "short": true},
-					{"title": "Proposed Command", "value": fmt.Sprintf("`%s`", p.Diagnosis.ProposedCommand), "short": false},
-					{"title": "AI Confidence", "value": fmt.Sprintf("%.0f%% via %s", p.Diagnosis.ConfidenceScore*100, p.Diagnosis.ProviderName), "short": true},
-					{"title": "Review & Authorize", "value": fmt.Sprintf("<%s|Open SRE Approval Console>", approveLink), "short": false},
-				},
+				"color":  color,
+				"title":  p.Diagnosis.Summary,
+				"text":   p.Diagnosis.RootCause,
+				"fields": fields,
 			},
 		},
 	}
@@ -214,21 +230,37 @@ func (n *WebhookNotifier) dispatchDiscordProposal(ctx context.Context, url strin
 		color = 0xE53E3E
 	}
 
+	headerContent := fmt.Sprintf("🚨 **SRE Alert: %s/%s Requires Human Approval**", p.Kind, p.Name)
+	if p.Diagnosis.ActionType == triage.ActionBumpVersion || p.Diagnosis.ActionType == triage.ActionUpgradeApp {
+		headerContent = fmt.Sprintf("🛡️ **SRE Security Fix / App Upgrade Approval Required: %s/%s**", p.Kind, p.Name)
+	}
+
+	fields := []map[string]interface{}{
+		{"name": "Namespace", "value": p.Namespace, "inline": true},
+		{"name": "Severity", "value": string(p.Diagnosis.Severity), "inline": true},
+		{"name": "Action", "value": string(p.Diagnosis.ActionType), "inline": true},
+	}
+	if p.Diagnosis.TargetImage != "" {
+		fields = append(fields, map[string]interface{}{"name": "Target Image", "value": fmt.Sprintf("`%s`", p.Diagnosis.TargetImage), "inline": true})
+	}
+	if p.Diagnosis.TargetVersion != "" {
+		fields = append(fields, map[string]interface{}{"name": "Target Version", "value": fmt.Sprintf("`%s`", p.Diagnosis.TargetVersion), "inline": true})
+	}
+	fields = append(fields,
+		map[string]interface{}{"name": "Proposed Fix", "value": fmt.Sprintf("```bash\n%s\n```", p.Diagnosis.ProposedCommand), "inline": false},
+		map[string]interface{}{"name": "Approve via Chat", "value": fmt.Sprintf("`/sre approve %s`", p.ID), "inline": true},
+		map[string]interface{}{"name": "Approve / Reject Action", "value": fmt.Sprintf("[Click here to Review on Dashboard](%s)", approveLink), "inline": false},
+	)
+
 	payload := map[string]interface{}{
-		"content": fmt.Sprintf("🚨 **SRE Alert: %s/%s Requires Human Approval**", p.Kind, p.Name),
+		"content": headerContent,
 		"embeds": []map[string]interface{}{
 			{
 				"title":       p.Diagnosis.Summary,
 				"description": p.Diagnosis.RootCause,
 				"url":         approveLink,
 				"color":       color,
-				"fields": []map[string]interface{}{
-					{"name": "Namespace", "value": p.Namespace, "inline": true},
-					{"name": "Severity", "value": string(p.Diagnosis.Severity), "inline": true},
-					{"name": "Action", "value": string(p.Diagnosis.ActionType), "inline": true},
-					{"name": "Proposed Fix", "value": fmt.Sprintf("```bash\n%s\n```", p.Diagnosis.ProposedCommand), "inline": false},
-					{"name": "Approve / Reject Action", "value": fmt.Sprintf("[Click here to Review on Dashboard](%s)", approveLink), "inline": false},
-				},
+				"fields":      fields,
 				"footer": map[string]interface{}{
 					"text": fmt.Sprintf("Kubebee SRE Agent • Diagnosed by %s", p.Diagnosis.ProviderName),
 				},

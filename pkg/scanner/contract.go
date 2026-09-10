@@ -55,6 +55,9 @@ func (s *ClusterScanner) RegisteredAnalyzers() []Analyzer {
 		analyzerAdapter{info: AnalyzerInfo{Name: "ConfigMapAnalyzer", Resource: "ConfigMap", Description: "Checks ConfigMap usage, size, and empty data", DocsURL: "https://kubernetes.io/docs/concepts/configuration/configmap/"}, run: s.scanConfigMaps},
 		analyzerAdapter{info: AnalyzerInfo{Name: "StorageAnalyzer", Resource: "Storage", Description: "Checks StorageClasses, PV phases, and PVC capacity", DocsURL: "https://kubernetes.io/docs/concepts/storage/"}, run: s.scanStorage},
 		analyzerAdapter{info: AnalyzerInfo{Name: "SecurityAnalyzer", Resource: "Security", Description: "Checks privileged workload and cluster-admin paths", DocsURL: "https://kubernetes.io/docs/concepts/security/pod-security-standards/"}, run: s.scanSecurity},
+		analyzerAdapter{info: AnalyzerInfo{Name: "VulnerabilityAnalyzer", Resource: "Pod", Description: "Scans container images for vulnerabilities, CVEs, and unpinned tags", DocsURL: "https://kubernetes.io/docs/concepts/security/"}, run: s.scanPodVulnerabilities},
+		analyzerAdapter{info: AnalyzerInfo{Name: "ClusterSecurityAnalyzer", Resource: "Security", Description: "Audits cluster environment for isolation, node pressure, and configuration risks", DocsURL: "https://kubernetes.io/docs/concepts/security/"}, run: s.scanClusterSecurity},
+		analyzerAdapter{info: AnalyzerInfo{Name: "AppUpgradeAnalyzer", Resource: "App", Description: "Checks workloads and Helm releases for available app version or chart upgrades", DocsURL: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"}, run: s.scanAppUpgrades},
 	}
 	if s != nil && s.custom != nil {
 		analyzers = append(analyzers, s.custom.List()...)
