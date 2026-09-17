@@ -31,6 +31,7 @@ async function assertModalClosed(page, reason) {
 }
 
 async function assertThemeModes(page) {
+  await page.waitForSelector('#triage-queue [data-issue-row]');
   const themeSelect = page.locator('#theme-select');
   assert.equal(await themeSelect.count(), 1, 'dashboard must expose a theme selector');
 
@@ -80,6 +81,7 @@ async function assertThemeModes(page) {
     searchColor: 'rgb(229, 231, 235)'
   });
 
+  await page.emulateMedia({colorScheme: 'dark'});
   await themeSelect.selectOption('system');
   await assertVisualState('system', {
     bodyBackground: 'rgb(13, 17, 23)',
