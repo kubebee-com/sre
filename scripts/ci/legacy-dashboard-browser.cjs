@@ -127,6 +127,12 @@ async function main() {
     const selectedIssue = await findIssueWithResourceLogs(page);
     const issueRow = selectedIssue.issueRow;
     const issueName = selectedIssue.issueName;
+    const issueCount = await page.locator('#triage-queue [data-issue-row]').count();
+    await page.waitForFunction(expected => {
+      const values = ['stat-issues', 'nav-issue-count', 'overview-review']
+        .map(id => Number(document.getElementById(id)?.textContent));
+      return values.every(value => value === expected);
+    }, issueCount);
 
     let modal = selectedIssue.modal;
     await modal.getByRole('button', {name: /close/i}).click();
