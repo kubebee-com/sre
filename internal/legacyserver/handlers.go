@@ -578,7 +578,7 @@ func (s *Server) handleValidatedVersionedScan(w http.ResponseWriter, r *http.Req
 	s.writeJSON(w, http.StatusOK, report)
 }
 
-// handleListAnalyzers returns all K8sGPT-compatible analyzers with active issue counts
+// handleListAnalyzers returns the analyzer catalog with active issue counts.
 func (s *Server) handleListAnalyzers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

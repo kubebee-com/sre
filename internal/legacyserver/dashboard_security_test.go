@@ -262,6 +262,16 @@ func TestDashboardThemeContract(t *testing.T) {
 	}
 }
 
+func TestDashboardDoesNotExposeExternalAnalyzerBrand(t *testing.T) {
+	index, err := staticFS.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read embedded dashboard index: %v", err)
+	}
+	if strings.Contains(strings.ToLower(string(index)), "k8sgpt") {
+		t.Fatal("dashboard must not expose the external analyzer brand")
+	}
+}
+
 func dashboardDialogMarkup(t *testing.T, indexText string) string {
 	t.Helper()
 

@@ -194,6 +194,7 @@ async function main() {
     assert.ok(await sidebar.isVisible(), 'grouped left navigation must be visible');
     assert.ok(await sidebar.locator('[data-nav-group]').count(), 'left navigation must contain grouped sections');
     assert.ok(await sidebar.locator('a, button').count(), 'left navigation must contain controls');
+    assert.doesNotMatch((await page.locator('body').innerText()), /k8sgpt/i, 'dashboard must not expose the external analyzer brand');
     await assertThemeModes(page);
 
     const selectedIssue = await findIssueWithResourceLogs(page);
