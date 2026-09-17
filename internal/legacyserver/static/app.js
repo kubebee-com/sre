@@ -4,8 +4,11 @@ let currentTab = 'anomalies';
 let activeIssues = [];
 let cleanablePods = [];
 const API_TOKEN_STORAGE_KEY = 'sre-agent-api-token';
+const THEME_STORAGE_KEY = 'sre-dashboard-theme';
+const THEME_VALUES = ['system', 'light', 'dark'];
 
 function initializeDashboard() {
+  initializeTheme();
   const authForm = document.getElementById('auth-form');
   if (authForm) authForm.addEventListener('submit', event => {
     event.preventDefault();
@@ -113,9 +116,56 @@ function handleDashboardClick(event) {
 function handleDashboardChange(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  if (target.dataset.action === 'theme-change') {
+    const theme = applyTheme(target.value);
+    storeThemePreference(theme);
+  }
   if (target.dataset.action === 'proposal-filter') loadProposals();
   if (target.dataset.action === 'issue-filter') applyAnomalyFilters();
   if (target.dataset.action === 'toggle-pods') toggleSelectAllPods();
+}
+
+function getStoredThemePreference() {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    return THEME_VALUES.includes(stored) ? stored : 'system';
+  } catch (err) {
+    return 'system';
+  }
+}
+
+function storeThemePreference(theme) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch (err) {
+    // Theme selection remains active for this page when storage is unavailable.
+  }
+}
+
+function applyTheme(theme) {
+  const selected = THEME_VALUES.includes(theme) ? theme : 'system';
+  document.documentElement.dataset.theme = selected;
+  if (selected === 'system') {
+    document.documentElement.dataset.systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  } else {
+    document.documentElement.removeAttribute('data-system-theme');
+  }
+  const selector = document.getElementById('theme-select');
+  if (selector && selector.value !== selected) selector.value = selected;
+  return selected;
+}
+
+function initializeTheme() {
+  applyTheme(getStoredThemePreference());
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  const updateSystemTheme = () => {
+    if (getStoredThemePreference() === 'system') applyTheme('system');
+  };
+  if (typeof media.addEventListener === 'function') {
+    media.addEventListener('change', updateSystemTheme);
+  } else if (typeof media.addListener === 'function') {
+    media.addListener(updateSystemTheme);
+  }
 }
 
 function handleDashboardInput(event) {

@@ -30,6 +30,77 @@ async function assertModalClosed(page, reason) {
   assert.equal(await modal.evaluate(element => getComputedStyle(element).display), 'none', `${reason}: modal must be display:none`);
 }
 
+async function assertThemeModes(page) {
+  const themeSelect = page.locator('#theme-select');
+  assert.equal(await themeSelect.count(), 1, 'dashboard must expose a theme selector');
+
+  const assertVisualState = async (mode, expected) => {
+    const styles = await page.evaluate(() => {
+      const issueName = document.querySelector('[data-issue-name]');
+      const issueDetails = document.querySelector('[data-issue-row] .text-gray-400');
+      const body = getComputedStyle(document.body);
+      const search = getComputedStyle(document.querySelector('#filter-search'));
+      return {
+        theme: document.documentElement.dataset.theme,
+        bodyBackground: body.backgroundColor,
+        bodyColor: body.color,
+        issueNameColor: issueName ? getComputedStyle(issueName).color : '',
+        issueDetailsColor: issueDetails ? getComputedStyle(issueDetails).color : '',
+        searchBackground: search.backgroundColor,
+        searchColor: search.color
+      };
+    });
+    assert.equal(styles.theme, mode, `${mode} theme must be selected`);
+    assert.equal(styles.bodyBackground, expected.bodyBackground, `${mode} body background must match theme`);
+    assert.equal(styles.bodyColor, expected.bodyColor, `${mode} body text must match theme`);
+    assert.equal(styles.issueNameColor, expected.issueNameColor, `${mode} issue names must be readable`);
+    assert.equal(styles.issueDetailsColor, expected.issueDetailsColor, `${mode} issue details must be readable`);
+    assert.equal(styles.searchBackground, expected.searchBackground, `${mode} controls must match theme`);
+    assert.equal(styles.searchColor, expected.searchColor, `${mode} control text must match theme`);
+  };
+
+  await page.emulateMedia({colorScheme: 'light'});
+  await themeSelect.selectOption('light');
+  await assertVisualState('light', {
+    bodyBackground: 'rgb(246, 248, 251)',
+    bodyColor: 'rgb(22, 32, 51)',
+    issueNameColor: 'rgb(22, 32, 51)',
+    issueDetailsColor: 'rgb(71, 84, 103)',
+    searchBackground: 'rgb(255, 255, 255)',
+    searchColor: 'rgb(22, 32, 51)'
+  });
+
+  await themeSelect.selectOption('dark');
+  await assertVisualState('dark', {
+    bodyBackground: 'rgb(13, 17, 23)',
+    bodyColor: 'rgb(240, 246, 252)',
+    issueNameColor: 'rgb(255, 255, 255)',
+    issueDetailsColor: 'rgb(156, 163, 175)',
+    searchBackground: 'rgb(13, 17, 23)',
+    searchColor: 'rgb(229, 231, 235)'
+  });
+
+  await themeSelect.selectOption('system');
+  await assertVisualState('system', {
+    bodyBackground: 'rgb(13, 17, 23)',
+    bodyColor: 'rgb(240, 246, 252)',
+    issueNameColor: 'rgb(255, 255, 255)',
+    issueDetailsColor: 'rgb(156, 163, 175)',
+    searchBackground: 'rgb(13, 17, 23)',
+    searchColor: 'rgb(229, 231, 235)'
+  });
+
+  await page.emulateMedia({colorScheme: 'light'});
+  await assertVisualState('system', {
+    bodyBackground: 'rgb(246, 248, 251)',
+    bodyColor: 'rgb(22, 32, 51)',
+    issueNameColor: 'rgb(22, 32, 51)',
+    issueDetailsColor: 'rgb(71, 84, 103)',
+    searchBackground: 'rgb(255, 255, 255)',
+    searchColor: 'rgb(22, 32, 51)'
+  });
+}
+
 async function openResourceLogs(page, issueRow, issueName) {
   const modal = page.locator('#modal-backdrop');
   await issueRow.getByRole('button', {name: /resource logs/i}).click();
@@ -123,6 +194,7 @@ async function main() {
     assert.ok(await sidebar.isVisible(), 'grouped left navigation must be visible');
     assert.ok(await sidebar.locator('[data-nav-group]').count(), 'left navigation must contain grouped sections');
     assert.ok(await sidebar.locator('a, button').count(), 'left navigation must contain controls');
+    await assertThemeModes(page);
 
     const selectedIssue = await findIssueWithResourceLogs(page);
     const issueRow = selectedIssue.issueRow;

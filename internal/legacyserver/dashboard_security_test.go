@@ -222,6 +222,46 @@ func TestDashboardShellAndModalContract(t *testing.T) {
 	}
 }
 
+func TestDashboardThemeContract(t *testing.T) {
+	index, err := staticFS.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read embedded dashboard index: %v", err)
+	}
+	app, err := staticFS.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read embedded dashboard app: %v", err)
+	}
+
+	indexText := string(index)
+	appText := string(app)
+	for _, marker := range []string{
+		`<html lang="en" data-theme="system">`,
+		`id="theme-select"`,
+		`data-action="theme-change"`,
+		`<option value="light">Light</option>`,
+		`<option value="dark">Dark</option>`,
+		`<option value="system">System</option>`,
+		`@media (prefers-color-scheme: dark)`,
+		`color-scheme: light`,
+		`color-scheme: dark`,
+	} {
+		if !strings.Contains(indexText, marker) {
+			t.Errorf("dashboard theme shell is missing %q", marker)
+		}
+	}
+	for _, marker := range []string{
+		`THEME_STORAGE_KEY`,
+		`applyTheme`,
+		`localStorage`,
+		`theme-change`,
+		`prefers-color-scheme`,
+	} {
+		if !strings.Contains(appText, marker) {
+			t.Errorf("dashboard theme behavior is missing %q", marker)
+		}
+	}
+}
+
 func dashboardDialogMarkup(t *testing.T, indexText string) string {
 	t.Helper()
 
