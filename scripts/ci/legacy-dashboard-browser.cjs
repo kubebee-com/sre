@@ -197,6 +197,12 @@ async function main() {
     assert.ok(await sidebar.locator('[data-nav-group]').count(), 'left navigation must contain grouped sections');
     assert.ok(await sidebar.locator('a, button').count(), 'left navigation must contain controls');
     assert.doesNotMatch((await page.locator('body').innerText()), /k8sgpt/i, 'dashboard must not expose the external analyzer brand');
+    const analyzerResponse = await page.evaluate(async () => {
+      const response = await fetch('/api/analyzers', {credentials: 'same-origin'});
+      return {ok: response.ok, text: await response.text()};
+    });
+    assert.equal(analyzerResponse.ok, true, 'analyzer catalog must remain available');
+    assert.doesNotMatch(analyzerResponse.text, /k8sgpt/i, 'analyzer API must not expose the external analyzer brand');
     await assertThemeModes(page);
 
     const selectedIssue = await findIssueWithResourceLogs(page);
