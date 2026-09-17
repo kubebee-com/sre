@@ -272,6 +272,7 @@ async function loadStatus() {
     document.getElementById('stat-issues').textContent = data.active_issues_count;
     document.getElementById('stat-pending').textContent = data.pending_proposals_count;
     document.getElementById('stat-completed').textContent = data.completed_proposals_count;
+    setDashboardText('nav-approval-count', data.pending_proposals_count);
     document.getElementById('llm-provider-label').textContent = data.llm_provider;
     updateRuntimeSettings(data);
 
@@ -508,6 +509,7 @@ async function loadIssues() {
     const res = await apiFetch('/api/issues');
     const payload = await res.json();
     activeIssues = Array.isArray(payload) ? payload : [];
+    updateIssueSummary();
     applyAnomalyFilters();
   } catch (err) {
     console.error('Failed to load issues:', err);
