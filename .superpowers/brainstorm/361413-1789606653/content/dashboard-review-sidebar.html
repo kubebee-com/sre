@@ -1,0 +1,115 @@
+<style>
+  .sidebar-review { min-height: 100vh; display: grid; grid-template-columns: 250px minmax(0, 1fr); background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .sidebar-review * { box-sizing: border-box; }
+  .sidebar-review-aside { min-height: 100vh; display: flex; flex-direction: column; border-right: 1px solid #30363d; background: #11161d; }
+  .sidebar-review-brand { display: flex; align-items: center; gap: 0.7rem; padding: 1rem 0.9rem; border-bottom: 1px solid #21262d; }
+  .sidebar-review-mark { display: grid; place-items: center; width: 2rem; height: 2rem; flex: 0 0 auto; border: 1px solid #238636; border-radius: 50%; color: #3fb950; font-size: 0.84rem; font-weight: 700; }
+  .sidebar-review-brand strong { display: block; color: #f0f6fc; font-size: 0.82rem; line-height: 1.2; }
+  .sidebar-review-brand span { display: block; margin-top: 0.2rem; color: #8b949e; font-size: 0.66rem; }
+  .sidebar-review-cluster { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0.85rem 0.75rem 0.4rem; padding: 0.55rem 0.6rem; border: 1px solid #30363d; border-radius: 6px; background: #161b22; }
+  .sidebar-review-cluster-copy { min-width: 0; }
+  .sidebar-review-cluster strong { display: block; overflow: hidden; color: #c9d1d9; font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar-review-cluster span { display: block; margin-top: 0.15rem; color: #8b949e; font-size: 0.62rem; }
+  .sidebar-review-dot { width: 0.45rem; height: 0.45rem; flex: 0 0 auto; border-radius: 50%; background: #3fb950; box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.12); }
+  .sidebar-review-nav { flex: 1; padding: 0.55rem 0.65rem; overflow-y: auto; }
+  .sidebar-review-section { margin-top: 0.9rem; }
+  .sidebar-review-section:first-child { margin-top: 0.2rem; }
+  .sidebar-review-section-label { padding: 0 0.5rem 0.35rem; color: #6e7681; font-size: 0.61rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .sidebar-review-link { width: 100%; display: flex; align-items: center; gap: 0.55rem; min-height: 2rem; margin: 0.12rem 0; padding: 0.42rem 0.5rem; border: 1px solid transparent; border-radius: 5px; color: #8b949e; background: transparent; font: inherit; font-size: 0.73rem; text-align: left; cursor: pointer; }
+  .sidebar-review-link:hover { color: #f0f6fc; background: #21262d; }
+  .sidebar-review-link.active { border-color: #1f6feb; color: #f0f6fc; background: #0d1f38; }
+  .sidebar-review-icon { display: grid; place-items: center; width: 1.35rem; height: 1.35rem; flex: 0 0 auto; border: 1px solid #484f58; border-radius: 4px; color: #8b949e; font: 0.59rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .sidebar-review-link.active .sidebar-review-icon { border-color: #388bfd; color: #58a6ff; }
+  .sidebar-review-link-label { min-width: 0; flex: 1; }
+  .sidebar-review-count { min-width: 1.35rem; padding: 0.12rem 0.28rem; border: 1px solid #9e6a03; border-radius: 999px; color: #d29922; background: #2d2000; font: 0.61rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
+  .sidebar-review-footer { display: flex; align-items: center; gap: 0.55rem; margin: 0.65rem; padding: 0.65rem 0.55rem; border-top: 1px solid #21262d; color: #8b949e; }
+  .sidebar-review-footer strong { display: block; color: #c9d1d9; font-size: 0.67rem; }
+  .sidebar-review-footer span { display: block; margin-top: 0.15rem; font-size: 0.61rem; }
+  .sidebar-review-content { min-width: 0; min-height: 100vh; }
+  .sidebar-review-frame { width: 100%; height: 100vh; display: block; border: 0; background: #0d1117; }
+  @media (max-width: 850px) {
+    .sidebar-review { grid-template-columns: 76px minmax(0, 1fr); }
+    .sidebar-review-brand { justify-content: center; padding-inline: 0.5rem; }
+    .sidebar-review-brand-copy, .sidebar-review-cluster-copy, .sidebar-review-section-label, .sidebar-review-link-label, .sidebar-review-count, .sidebar-review-footer-copy { display: none; }
+    .sidebar-review-cluster { justify-content: center; margin-inline: 0.65rem; }
+    .sidebar-review-nav { padding-inline: 0.45rem; }
+    .sidebar-review-link { justify-content: center; padding-inline: 0.3rem; }
+    .sidebar-review-icon { width: 1.65rem; height: 1.65rem; }
+    .sidebar-review-footer { justify-content: center; padding-inline: 0; }
+  }
+  @media (max-width: 560px) {
+    .sidebar-review { display: block; }
+    .sidebar-review-aside { min-height: auto; border-right: 0; border-bottom: 1px solid #30363d; }
+    .sidebar-review-brand { justify-content: flex-start; padding: 0.7rem 0.75rem; }
+    .sidebar-review-brand-copy { display: block; }
+    .sidebar-review-cluster { display: none; }
+    .sidebar-review-nav { display: flex; gap: 0.5rem; padding: 0.5rem 0.65rem 0.65rem; overflow-x: auto; }
+    .sidebar-review-section { display: contents; }
+    .sidebar-review-section-label { display: none; }
+    .sidebar-review-link { width: auto; flex: 0 0 auto; justify-content: flex-start; margin: 0; }
+    .sidebar-review-link-label { display: block; white-space: nowrap; }
+    .sidebar-review-count { display: inline-block; }
+    .sidebar-review-footer { display: none; }
+    .sidebar-review-frame { height: 1500px; min-height: 100vh; }
+  }
+</style>
+
+<div class="sidebar-review">
+  <aside class="sidebar-review-aside" aria-label="SRE Agent navigation">
+    <div class="sidebar-review-brand">
+      <div class="sidebar-review-mark">S</div>
+      <div class="sidebar-review-brand-copy"><strong>Kubebee SRE Agent</strong><span>Cluster operations workspace</span></div>
+    </div>
+    <div class="sidebar-review-cluster">
+      <div class="sidebar-review-cluster-copy"><strong>production / kubebee</strong><span>ARM64 · connected</span></div>
+      <span class="sidebar-review-dot" aria-label="Cluster connected"></span>
+    </div>
+    <nav class="sidebar-review-nav" aria-label="Dashboard categories">
+      <div class="sidebar-review-section">
+        <div class="sidebar-review-section-label">Workspace</div>
+        <button class="sidebar-review-link active" data-sidebar-tab="approvals" title="Pending approvals" type="button"><span class="sidebar-review-icon">AP</span><span class="sidebar-review-link-label">Pending approvals</span><span class="sidebar-review-count">86</span></button>
+        <button class="sidebar-review-link" data-sidebar-tab="anomalies" title="Cluster anomalies" type="button"><span class="sidebar-review-icon">AN</span><span class="sidebar-review-link-label">Cluster anomalies</span><span class="sidebar-review-count">955</span></button>
+      </div>
+      <div class="sidebar-review-section">
+        <div class="sidebar-review-section-label">Observability</div>
+        <button class="sidebar-review-link" data-sidebar-tab="metrics" title="Runtime metrics" type="button"><span class="sidebar-review-icon">ME</span><span class="sidebar-review-link-label">Runtime metrics</span></button>
+        <button class="sidebar-review-link" data-sidebar-tab="analyzers" title="Analyzer matrix" type="button"><span class="sidebar-review-icon">MX</span><span class="sidebar-review-link-label">Analyzer matrix</span><span class="sidebar-review-count">42</span></button>
+      </div>
+      <div class="sidebar-review-section">
+        <div class="sidebar-review-section-label">Operations</div>
+        <button class="sidebar-review-link" data-sidebar-tab="hygiene" title="Pod hygiene" type="button"><span class="sidebar-review-icon">PH</span><span class="sidebar-review-link-label">Pod hygiene</span></button>
+        <button class="sidebar-review-link" data-sidebar-tab="playbooks" title="Playbooks" type="button"><span class="sidebar-review-icon">PB</span><span class="sidebar-review-link-label">Playbooks</span></button>
+      </div>
+      <div class="sidebar-review-section">
+        <div class="sidebar-review-section-label">Assistant</div>
+        <button class="sidebar-review-link" data-sidebar-tab="chat" title="SRE AI assistant" type="button"><span class="sidebar-review-icon">AI</span><span class="sidebar-review-link-label">SRE AI assistant</span></button>
+      </div>
+      <div class="sidebar-review-section">
+        <div class="sidebar-review-section-label">Administration</div>
+        <button class="sidebar-review-link" data-sidebar-tab="settings" title="Settings" type="button"><span class="sidebar-review-icon">ST</span><span class="sidebar-review-link-label">Settings</span></button>
+      </div>
+    </nav>
+    <div class="sidebar-review-footer"><span class="sidebar-review-dot"></span><div class="sidebar-review-footer-copy"><strong>Cluster healthy</strong><span>Last scan 00:24 UTC</span></div></div>
+  </aside>
+  <main class="sidebar-review-content"><iframe class="sidebar-review-frame" id="sidebar-review-frame" src="/files/dashboard-review.html" title="Full Kubebee SRE dashboard"></iframe></main>
+</div>
+
+<script>
+  (() => {
+    const frame = document.getElementById('sidebar-review-frame');
+    const links = Array.from(document.querySelectorAll('[data-sidebar-tab]'));
+    function showTab(tabName, activeLink) {
+      links.forEach(link => link.classList.toggle('active', link === activeLink));
+      const target = frame.contentDocument && frame.contentDocument.querySelector(`[data-tab="${tabName}"]`);
+      if (target) target.click();
+    }
+    links.forEach(link => link.addEventListener('click', () => showTab(link.dataset.sidebarTab, link)));
+    frame.addEventListener('load', () => {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      const style = doc.createElement('style');
+      style.textContent = 'html, body { margin: 0; min-width: 0; background: #0d1117; } .review-topbar { border-top: 0; border-right: 0; border-left: 0; position: sticky; top: 0; z-index: 5; } .review-main { max-width: none; } .review-tabs { display: none !important; }';
+      doc.head.appendChild(style);
+    });
+  })();
+</script>

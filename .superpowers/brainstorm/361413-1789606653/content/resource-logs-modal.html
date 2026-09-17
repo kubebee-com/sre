@@ -1,0 +1,78 @@
+<style>
+  .demo-shell { max-width: 980px; margin: 0 auto; }
+  .demo-panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+  .demo-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid #30363d; }
+  .demo-panel-header strong { font-size: 0.95rem; }
+  .demo-muted { color: #8b949e; font-size: 0.8rem; }
+  .demo-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; }
+  .demo-row-copy { min-width: 0; }
+  .demo-row-title { color: #f0f6fc; font-size: 0.85rem; font-weight: 600; }
+  .demo-row-detail { color: #8b949e; font-size: 0.78rem; margin-top: 0.25rem; }
+  .demo-button { border: 1px solid #3b82f6; background: #1f6feb; color: white; border-radius: 6px; padding: 0.5rem 0.8rem; font-size: 0.78rem; cursor: pointer; white-space: nowrap; }
+  .demo-button:hover { background: #388bfd; }
+  .demo-state { display: inline-flex; align-items: center; gap: 0.4rem; color: #3fb950; font-size: 0.75rem; }
+  .demo-state::before { content: ''; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: #3fb950; }
+  .demo-modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 1.5rem; background: rgba(0, 0, 0, 0.72); }
+  .demo-modal[hidden] { display: none; }
+  .demo-dialog { width: min(720px, 100%); max-height: min(620px, 80vh); display: flex; flex-direction: column; background: #161b22; border: 1px solid #30363d; border-radius: 8px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
+  .demo-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem; border-bottom: 1px solid #30363d; }
+  .demo-dialog-header strong { color: #f0f6fc; font-size: 0.9rem; }
+  .demo-close { display: inline-grid; place-items: center; width: 2rem; height: 2rem; border: 1px solid #484f58; border-radius: 4px; background: #21262d; color: #c9d1d9; font-size: 1.15rem; line-height: 1; cursor: pointer; }
+  .demo-close:hover { color: white; border-color: #8b949e; }
+  .demo-log { margin: 1rem; padding: 0.9rem; overflow: auto; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #c9d1d9; font: 0.72rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+  @media (max-width: 640px) {
+    .demo-row { align-items: flex-start; flex-direction: column; }
+    .demo-button { width: 100%; }
+  }
+</style>
+
+<div class="demo-shell">
+  <h2>Resource Logs</h2>
+  <p class="subtitle">The modal is hidden on first render, opens with the selected resource's logs, and closes without leaving an overlay behind.</p>
+
+  <div class="demo-panel">
+    <div class="demo-panel-header">
+      <div>
+        <strong>Detected Cluster Anomalies</strong>
+        <div class="demo-muted">Telemetry from pods, nodes, workloads, and services</div>
+      </div>
+      <span class="demo-state">Modal ready</span>
+    </div>
+    <div class="demo-row">
+      <div class="demo-row-copy">
+        <div class="demo-row-title">PodLogError · longhorn-system/csi-provisioner</div>
+        <div class="demo-row-detail">Current error patterns in the regular container logs</div>
+      </div>
+      <button class="demo-button" type="button" onclick="openResourceLogs()">Open Resource Logs</button>
+    </div>
+  </div>
+</div>
+
+<div id="demo-modal" class="demo-modal" hidden aria-hidden="true">
+  <section class="demo-dialog" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title">
+    <div class="demo-dialog-header">
+      <strong id="demo-modal-title">csi-provisioner</strong>
+      <button class="demo-close" type="button" aria-label="Close Resource Logs" onclick="closeResourceLogs()">&times;</button>
+    </div>
+    <pre class="demo-log">E0916 17:12:03.184720  leaderelection.go:436  error retrieving resource lock
+longhorn-system/driver-longhorn-io: tls: failed to verify certificate:
+x509: certificate signed by unknown authority
+
+E0916 17:12:13.134599  leaderelection.go:436  retrying leader election
+longhorn-system/driver-longhorn-io</pre>
+  </section>
+</div>
+
+<script>
+  function openResourceLogs() {
+    const modal = document.getElementById('demo-modal');
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeResourceLogs() {
+    const modal = document.getElementById('demo-modal');
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+  }
+</script>

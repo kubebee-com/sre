@@ -1,0 +1,252 @@
+<style>
+  .review-dashboard { min-height: 100%; background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .review-dashboard * { box-sizing: border-box; }
+  .review-topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border: 1px solid #30363d; background: #161b22; }
+  .review-brand { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
+  .review-brand-mark { display: grid; place-items: center; width: 2.1rem; height: 2.1rem; flex: 0 0 auto; border: 1px solid #238636; border-radius: 50%; color: #3fb950; font-weight: 700; }
+  .review-brand h1 { color: #f0f6fc; font-size: 0.95rem; line-height: 1.2; }
+  .review-brand p { color: #8b949e; font-size: 0.7rem; margin-top: 0.2rem; }
+  .review-top-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .review-provider { color: #8b949e; font-size: 0.72rem; }
+  .review-provider strong { color: #c9d1d9; font-weight: 600; }
+  .review-button { border: 1px solid #30363d; border-radius: 6px; padding: 0.5rem 0.8rem; color: #c9d1d9; background: #21262d; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+  .review-button:hover { border-color: #8b949e; background: #30363d; }
+  .review-button.primary { border-color: #1f6feb; background: #1f6feb; color: white; }
+  .review-button.primary:hover { background: #388bfd; }
+  .review-button.success { border-color: #238636; background: #238636; color: white; }
+  .review-button.danger { color: #ff7b72; }
+  .review-main { max-width: 1180px; margin: 0 auto; padding: 1.25rem; }
+  .review-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; }
+  .review-metric { min-width: 0; padding: 1rem; border: 1px solid #30363d; border-radius: 8px; background: #161b22; }
+  .review-metric-label { color: #8b949e; font-size: 0.72rem; }
+  .review-metric-value { color: #f0f6fc; font-size: 1.65rem; font-weight: 700; margin-top: 0.35rem; }
+  .review-metric-note { color: #8b949e; font-size: 0.7rem; margin-top: 0.25rem; }
+  .review-metric.warning .review-metric-value { color: #d29922; }
+  .review-metric.success .review-metric-value { color: #3fb950; }
+  .review-tabs { display: flex; gap: 0.25rem; overflow-x: auto; margin-top: 1.35rem; border-bottom: 1px solid #30363d; }
+  .review-tab { flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; padding: 0.7rem 0.75rem; color: #8b949e; background: transparent; font-size: 0.76rem; cursor: pointer; }
+  .review-tab:hover { color: #f0f6fc; }
+  .review-tab.active { border-bottom-color: #1f6feb; color: #f0f6fc; }
+  .review-view { display: none; padding-top: 1.25rem; }
+  .review-view.active { display: block; }
+  .review-view-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+  .review-view-heading h2 { color: #f0f6fc; font-size: 1rem; }
+  .review-view-heading p { color: #8b949e; font-size: 0.76rem; margin-top: 0.3rem; }
+  .review-toolbar { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; }
+  .review-input, .review-select { border: 1px solid #30363d; border-radius: 6px; padding: 0.5rem 0.65rem; color: #c9d1d9; background: #0d1117; font-size: 0.74rem; }
+  .review-input { min-width: 190px; }
+  .review-list { display: grid; gap: 0.75rem; }
+  .review-card { border: 1px solid #30363d; border-radius: 8px; background: #161b22; }
+  .review-card.proposal { border-left: 3px solid #d29922; }
+  .review-card.issue { border-left: 3px solid #388bfd; }
+  .review-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border-bottom: 1px solid #21262d; }
+  .review-card-title { color: #f0f6fc; font-size: 0.82rem; font-weight: 650; }
+  .review-card-meta { color: #8b949e; font-size: 0.7rem; margin-top: 0.25rem; }
+  .review-card-body { padding: 0.9rem 1rem; }
+  .review-card-body p { color: #c9d1d9; font-size: 0.76rem; line-height: 1.5; }
+  .review-card-body p + p { margin-top: 0.45rem; color: #8b949e; }
+  .review-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .review-badge { display: inline-flex; align-items: center; border: 1px solid #30363d; border-radius: 999px; padding: 0.18rem 0.45rem; color: #8b949e; font: 0.65rem ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  .review-badge.high { border-color: #9e6a03; color: #d29922; background: #2d2000; }
+  .review-badge.medium { border-color: #1f6feb; color: #58a6ff; background: #0d1f38; }
+  .review-badge.low { color: #8b949e; }
+  .review-badge.green { border-color: #238636; color: #3fb950; background: #0d2818; }
+  .review-command { margin-top: 0.7rem; padding: 0.65rem; overflow-x: auto; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #7ee787; font: 0.7rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .review-card-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0 1rem 1rem; }
+  .review-empty { padding: 2rem 1rem; border: 1px dashed #30363d; border-radius: 8px; color: #8b949e; text-align: center; font-size: 0.78rem; }
+  .review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+  .review-analyzer { padding: 0.85rem; border: 1px solid #30363d; border-radius: 8px; background: #161b22; }
+  .review-analyzer h3 { color: #f0f6fc; font-size: 0.8rem; }
+  .review-analyzer p { color: #8b949e; font-size: 0.7rem; line-height: 1.45; margin-top: 0.3rem; }
+  .review-analyzer footer { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.7rem; color: #58a6ff; font-size: 0.66rem; }
+  .review-table-wrap { overflow-x: auto; border: 1px solid #30363d; border-radius: 8px; }
+  .review-table { width: 100%; border-collapse: collapse; min-width: 650px; }
+  .review-table th, .review-table td { padding: 0.7rem 0.8rem; border-bottom: 1px solid #21262d; text-align: left; font-size: 0.72rem; }
+  .review-table th { color: #8b949e; background: #161b22; font-weight: 600; }
+  .review-table td { color: #c9d1d9; }
+  .review-table tr:last-child td { border-bottom: 0; }
+  .review-progress { width: 120px; height: 0.4rem; overflow: hidden; border-radius: 999px; background: #30363d; }
+  .review-progress span { display: block; height: 100%; background: #3fb950; }
+  .review-columns { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 0.8rem; }
+  .review-panel { border: 1px solid #30363d; border-radius: 8px; background: #161b22; }
+  .review-panel h3 { padding: 0.9rem 1rem; border-bottom: 1px solid #21262d; color: #f0f6fc; font-size: 0.82rem; }
+  .review-panel-body { padding: 1rem; }
+  .review-chat { min-height: 320px; display: flex; flex-direction: column; gap: 0.65rem; }
+  .review-message { max-width: 85%; padding: 0.65rem 0.75rem; border-radius: 7px; color: #c9d1d9; font-size: 0.74rem; line-height: 1.45; }
+  .review-message.agent { align-self: flex-start; border: 1px solid #30363d; background: #21262d; }
+  .review-message.operator { align-self: flex-end; border: 1px solid #1f6feb; background: #0d1f38; }
+  .review-chat-form { display: flex; gap: 0.5rem; margin-top: auto; }
+  .review-chat-form input { flex: 1; min-width: 0; }
+  .review-setting { display: grid; grid-template-columns: 190px 1fr; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid #21262d; }
+  .review-setting:last-child { border-bottom: 0; }
+  .review-setting label { color: #8b949e; font-size: 0.72rem; }
+  .review-setting output { color: #c9d1d9; font: 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .review-modal { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 1.5rem; background: rgba(0, 0, 0, 0.74); }
+  .review-modal[hidden] { display: none; }
+  .review-dialog { width: min(760px, 100%); max-height: 80vh; display: flex; flex-direction: column; border: 1px solid #30363d; border-radius: 8px; background: #161b22; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); }
+  .review-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border-bottom: 1px solid #30363d; }
+  .review-dialog-head strong { color: #f0f6fc; font-size: 0.84rem; }
+  .review-close { width: 2rem; height: 2rem; border: 1px solid #484f58; border-radius: 4px; background: #21262d; color: #c9d1d9; font-size: 1.15rem; cursor: pointer; }
+  .review-log { margin: 1rem; padding: 0.9rem; overflow: auto; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #c9d1d9; font: 0.7rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+  .review-toast { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 30; display: none; padding: 0.7rem 0.9rem; border: 1px solid #238636; border-radius: 6px; background: #0d2818; color: #7ee787; font-size: 0.74rem; }
+  .review-toast.show { display: block; }
+  @media (max-width: 900px) { .review-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .review-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .review-columns { grid-template-columns: 1fr; } .review-provider { display: none; } }
+  @media (max-width: 600px) { .review-topbar, .review-view-heading { align-items: flex-start; flex-direction: column; } .review-top-actions { width: 100%; justify-content: space-between; } .review-metrics, .review-grid { grid-template-columns: 1fr; } .review-main { padding: 0.75rem; } .review-setting { grid-template-columns: 1fr; gap: 0.3rem; } }
+</style>
+
+<div class="review-dashboard">
+  <header class="review-topbar">
+    <div class="review-brand">
+      <div class="review-brand-mark">S</div>
+      <div>
+        <h1>Kubebee SRE Agent <span class="review-badge green">v1.2.0</span></h1>
+        <p>Autonomous Cluster Triage &amp; Remediation</p>
+      </div>
+    </div>
+    <div class="review-top-actions">
+      <div class="review-provider">Provider: <strong>Rule-Based SRE Engine</strong></div>
+      <button class="review-button primary" id="review-scan" type="button">Scan Cluster</button>
+      <span class="review-badge green">api-token</span>
+    </div>
+  </header>
+
+  <main class="review-main">
+    <section class="review-metrics" aria-label="Dashboard summary">
+      <div class="review-metric warning"><div class="review-metric-label">Active Anomalies</div><div class="review-metric-value">955</div><div class="review-metric-note">Detected in cluster</div></div>
+      <div class="review-metric warning"><div class="review-metric-label">Pending Approvals</div><div class="review-metric-value">86</div><div class="review-metric-note">Requires human permission</div></div>
+      <div class="review-metric success"><div class="review-metric-label">Remediations Completed</div><div class="review-metric-value">0</div><div class="review-metric-note">Executed safely</div></div>
+      <div class="review-metric"><div class="review-metric-label">Active Analyzers</div><div class="review-metric-value">42</div><div class="review-metric-note">K8sGPT-compatible</div></div>
+    </section>
+
+    <nav class="review-tabs" aria-label="Dashboard tabs">
+      <button class="review-tab active" data-tab="approvals" type="button">Pending Approvals <span class="review-badge high">86</span></button>
+      <button class="review-tab" data-tab="anomalies" type="button">Cluster Anomalies</button>
+      <button class="review-tab" data-tab="metrics" type="button">Metrics</button>
+      <button class="review-tab" data-tab="analyzers" type="button">Analyzers Matrix</button>
+      <button class="review-tab" data-tab="hygiene" type="button">Pod Hygiene &amp; Cleanup</button>
+      <button class="review-tab" data-tab="chat" type="button">SRE AI Assistant</button>
+      <button class="review-tab" data-tab="playbooks" type="button">Playbooks</button>
+      <button class="review-tab" data-tab="settings" type="button">Settings</button>
+    </nav>
+
+    <section class="review-view active" data-view="approvals">
+      <div class="review-view-heading"><div><h2>Remediation Proposals and Outcomes</h2><p>Human-in-the-loop: no write action executes without explicit SRE authorization.</p></div><div class="review-toolbar"><select class="review-select"><option>All categories</option><option>Errors</option><option>Vulnerability</option><option>Upgrade</option></select><select class="review-select"><option>All statuses</option><option>Pending approval</option><option>Approved</option><option>Failed</option></select></div></div>
+      <div class="review-list">
+        <article class="review-card proposal">
+          <div class="review-card-head"><div><div class="review-badges"><span class="review-badge high">HIGH</span><span class="review-badge">Errors</span><span class="review-badge">Deployment</span></div><div class="review-card-title" style="margin-top:.55rem">vpn-gateway/vpn-gateway-iad</div><div class="review-card-meta">Proposed by Rule-Based SRE Engine · PENDING_APPROVAL</div></div><span class="review-badge high">PENDING_APPROVAL</span></div>
+          <div class="review-card-body"><p>Deployment replica count is degraded for Deployment/vpn-gateway-iad.</p><p>The deployment has one unavailable replica. The Available condition is False: MinimumReplicasUnavailable.</p><div class="review-command">kubectl describe deployment vpn-gateway-iad -n vpn-gateway</div></div>
+          <div class="review-card-actions"><button class="review-button danger" data-approve type="button">Reject</button><button class="review-button success" data-approve type="button">Approve &amp; Execute</button></div>
+        </article>
+        <article class="review-card proposal">
+          <div class="review-card-head"><div><div class="review-badges"><span class="review-badge medium">MEDIUM</span><span class="review-badge">Vulnerability</span><span class="review-badge">Pod</span></div><div class="review-card-title" style="margin-top:.55rem">openbb/openbb-859d45d9bc-bsqkx</div><div class="review-card-meta">Proposed by Rule-Based SRE Engine · PENDING_APPROVAL</div></div><span class="review-badge high">PENDING_APPROVAL</span></div>
+          <div class="review-card-body"><p>Pod container vulnerability detected for Pod/openbb-859d45d9bc-bsqkx.</p><p>Container main uses an unpinned mutable image tag. Review the image update before approving.</p><div class="review-command">kubectl set image deployment/openbb openbb=updated-image -n openbb</div></div>
+          <div class="review-card-actions"><button class="review-button danger" data-approve type="button">Reject</button><button class="review-button success" data-approve type="button">Approve &amp; Execute</button></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="review-view" data-view="anomalies">
+      <div class="review-view-heading"><div><h2>Detected Cluster Anomalies</h2><p>Telemetry aggregated from pods, nodes, PVCs, services, and workloads.</p></div><div class="review-toolbar"><input class="review-input" id="review-filter" placeholder="Search name/namespace..." type="search"><select class="review-select"><option>All categories</option><option>Errors</option><option>Vulnerability</option><option>Improvement</option></select></div></div>
+      <div class="review-list" id="review-issues">
+        <article class="review-card issue" data-search="csi-provisioner longhorn-system podlogerror">
+          <div class="review-card-head"><div><div class="review-badges"><span class="review-badge medium">MEDIUM</span><span class="review-badge">Improvement</span><span class="review-badge">Pod</span></div><div class="review-card-title" style="margin-top:.55rem">longhorn-system/csi-provisioner</div><div class="review-card-meta">PodLogError · observed 2026-09-16 17:12 UTC</div></div><button class="review-button" data-open-logs type="button">Logs</button></div>
+          <div class="review-card-body"><p>Pod longhorn-system/csi-provisioner has current error patterns in regular container logs.</p><p>The bounded log snippet is available for review before any action is proposed.</p></div>
+        </article>
+        <article class="review-card issue" data-search="keycloak service no endpoints errors">
+          <div class="review-card-head"><div><div class="review-badges"><span class="review-badge high">HIGH</span><span class="review-badge">Errors</span><span class="review-badge">Service</span></div><div class="review-card-title" style="margin-top:.55rem">keycloak/keycloak</div><div class="review-card-meta">ServiceNoEndpoints · observed 2026-09-15 08:34 UTC</div></div><button class="review-button" data-open-logs type="button">Ask AI</button></div>
+          <div class="review-card-body"><p>Service keycloak has zero ready endpoints.</p><p>Review service selectors and the current workload before considering a remediation proposal.</p></div>
+        </article>
+        <article class="review-card issue" data-search="onehumancorp powersync hpa metrics">
+          <div class="review-card-head"><div><div class="review-badges"><span class="review-badge high">HIGH</span><span class="review-badge">Improvement</span><span class="review-badge">HorizontalPodAutoscaler</span></div><div class="review-card-title" style="margin-top:.55rem">default/onehumancorp-powersync</div><div class="review-card-meta">HPAMetricsUnavailable · observed 2026-07-22 05:18 UTC</div></div><button class="review-button" data-open-logs type="button">Ask AI</button></div>
+          <div class="review-card-body"><p>HPA cannot compute replica count because the resource metrics API returned no CPU data.</p><p>Metric server health should be checked before changing the workload.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="review-view" data-view="metrics">
+      <div class="review-view-heading"><div><h2>Runtime Metrics</h2><p>Protected counters for cluster errors, analyzer health, and provider usage.</p></div><button class="review-button" type="button">Refresh Metrics</button></div>
+      <div class="review-grid">
+        <div class="review-metric"><div class="review-metric-label">Error Count</div><div class="review-metric-value">324</div><div class="review-metric-note">Analyzer errors in current window</div></div>
+        <div class="review-metric"><div class="review-metric-label">Provider Requests</div><div class="review-metric-value">0</div><div class="review-metric-note">Rule-based provider active</div></div>
+        <div class="review-metric"><div class="review-metric-label">Cache Operations</div><div class="review-metric-value">0</div><div class="review-metric-note">Cache disabled</div></div>
+        <div class="review-metric"><div class="review-metric-label">Last Refresh</div><div class="review-metric-value" style="font-size:1.1rem">00:24 UTC</div><div class="review-metric-note">Updated</div></div>
+      </div>
+      <div class="review-panel" style="margin-top:.8rem"><h3>Counter overview</h3><div class="review-panel-body"><div class="review-setting"><label>Scanner runs</label><output>1,284 total · 324 errors</output></div><div class="review-setting"><label>Analyzer runs</label><output>53,220 total · 324 errors</output></div><div class="review-setting"><label>Provider token usage</label><output>Unavailable for rule-based provider</output></div><div class="review-setting"><label>Last scan duration</label><output>2.4s · 955 findings</output></div></div></div>
+    </section>
+
+    <section class="review-view" data-view="analyzers">
+      <div class="review-view-heading"><div><h2>K8sGPT-compatible Analyzer Coverage</h2><p>Built-in analyzers inspecting cluster resources against health criteria.</p></div><span class="review-badge green">42 active</span></div>
+      <div class="review-grid">
+        <article class="review-analyzer"><h3>PodAnalyzer</h3><p>Checks readiness, phase, restart count, and scheduling state.</p><footer><span>Pod</span><span class="review-badge green">12 issues</span></footer></article>
+        <article class="review-analyzer"><h3>DeploymentAnalyzer</h3><p>Checks desired replicas, availability conditions, and rollout progress.</p><footer><span>Deployment</span><span class="review-badge green">4 issues</span></footer></article>
+        <article class="review-analyzer"><h3>VulnerabilityAnalyzer</h3><p>Reports unpinned images and known image vulnerability findings.</p><footer><span>Workloads</span><span class="review-badge green">32 issues</span></footer></article>
+        <article class="review-analyzer"><h3>EventAnalyzer</h3><p>Collects bounded warning events and associates them with resources.</p><footer><span>Events</span><span class="review-badge green">293 issues</span></footer></article>
+        <article class="review-analyzer"><h3>SecurityAnalyzer</h3><p>Checks privilege, host paths, bindings, and workload security posture.</p><footer><span>Security</span><span class="review-badge green">337 issues</span></footer></article>
+        <article class="review-analyzer"><h3>FalcoSecurityAnalyzer</h3><p>Consumes sanitized Falco runtime alerts from Kubernetes events.</p><footer><span>Runtime</span><span class="review-badge green">Enabled</span></footer></article>
+      </div>
+    </section>
+
+    <section class="review-view" data-view="hygiene">
+      <div class="review-view-heading"><div><h2>Cluster Pod Hygiene &amp; Auto-Cleaner</h2><p>Review stale or failed pods before requesting a bounded cleanup operation.</p></div><button class="review-button" type="button">Refresh Pods</button></div>
+      <div class="review-table-wrap"><table class="review-table"><thead><tr><th>Namespace / Pod</th><th>Reason</th><th>Age</th><th>Action</th></tr></thead><tbody><tr><td>openbb/openbb-859d45d9bc-bsqkx</td><td><span class="review-badge high">CrashLoopBackOff</span></td><td>2h 14m</td><td><button class="review-button danger" type="button">Review</button></td></tr><tr><td>longhorn-system/csi-provisioner-845c5df44-szxlt</td><td><span class="review-badge medium">Log errors</span></td><td>18m</td><td><button class="review-button" type="button">Review</button></td></tr><tr><td>vpn-gateway/vpn-gateway-icn</td><td><span class="review-badge low">Pending</span></td><td>6m</td><td><button class="review-button" type="button">Review</button></td></tr></tbody></table></div>
+    </section>
+
+    <section class="review-view" data-view="chat">
+      <div class="review-view-heading"><div><h2>Interactive SRE AI Assistant</h2><p>Discuss cluster anomalies, diagnostic evidence, and read-only commands.</p></div><span class="review-badge green">Rule-Based SRE Engine</span></div>
+      <div class="review-columns"><div class="review-panel"><h3>Conversation</h3><div class="review-panel-body review-chat"><div class="review-message agent">I found 955 active anomalies. The highest-impact current signal is degraded availability for vpn-gateway-iad. I can summarize evidence or suggest the next read-only check.</div><div class="review-message operator">Summarize the evidence for the gateway issue.</div><div class="review-message agent">The Deployment reports one unavailable replica and Available=False. The first safe check is the deployment condition and recent events; no write operation is proposed by this answer.</div><form class="review-chat-form"><input class="review-input" placeholder="Ask about an issue..." type="text"><button class="review-button primary" type="submit">Send</button></form></div></div><div class="review-panel"><h3>Suggested context</h3><div class="review-panel-body"><div class="review-setting"><label>Selected issue</label><output>vpn-gateway-iad</output></div><div class="review-setting"><label>Evidence</label><output>3 current items</output></div><div class="review-setting"><label>Write access</label><output>Never implied by chat</output></div></div></div></div>
+    </section>
+
+    <section class="review-view" data-view="playbooks">
+      <div class="review-view-heading"><div><h2>Playbooks</h2><p>Review imported runbooks, evidence, provenance, and lifecycle state.</p></div><div class="review-toolbar"><button class="review-button" type="button">Refresh</button><button class="review-button primary" type="button">Import Runbook</button></div></div>
+      <div class="review-list"><article class="review-card"><div class="review-card-head"><div><div class="review-card-title">Restart a crashing application pod</div><div class="review-card-meta">playbook.restart-crash · v3 · ACTIVE · confidence 0.91</div></div><span class="review-badge green">ACTIVE</span></div><div class="review-card-body"><p>Inspect bounded events and logs, confirm the owning controller, then propose a controller-safe recovery step.</p><p>Source: operator runbook · 4 evidence items · independent review complete</p></div><div class="review-card-actions"><button class="review-button" type="button">Review steps, evidence, and provenance</button><button class="review-button danger" type="button">Retire release</button></div></article><article class="review-card"><div class="review-card-head"><div><div class="review-card-title">ExternalSecret reconciliation failure</div><div class="review-card-meta">playbook.externalsecret-sync · v1 · CANDIDATE · confidence 0.68</div></div><span class="review-badge medium">CANDIDATE</span></div><div class="review-card-body"><p>Draft requires steward review and frozen evaluation before publication.</p></div><div class="review-card-actions"><button class="review-button primary" type="button">Evaluate and publish</button><button class="review-button" type="button">Retire candidate</button></div></article></div>
+    </section>
+
+    <section class="review-view" data-view="settings">
+      <div class="review-view-heading"><div><h2>Runtime Settings &amp; Integrations</h2><p>Review safe runtime configuration. Credential values and custom headers remain unavailable.</p></div><span class="review-badge green">Protected</span></div>
+      <div class="review-columns"><div class="review-panel"><h3>Runtime configuration</h3><div class="review-panel-body"><div class="review-setting"><label>LLM provider</label><output>rule-based</output></div><div class="review-setting"><label>Scan interval</label><output>2m0s</output></div><div class="review-setting"><label>Event-driven scanning</label><output>enabled</output></div><div class="review-setting"><label>Event queue capacity</label><output>256</output></div><div class="review-setting"><label>Event debounce</label><output>2s</output></div><div class="review-setting"><label>Cache</label><output>disabled</output></div><div class="review-setting"><label>Public URL</label><output>https://sre.infra.kubeb.com</output></div></div></div><div class="review-panel"><h3>Notification destinations</h3><div class="review-panel-body"><p class="review-card-meta" style="margin:0 0 .8rem">Approved routes are managed separately from diagnostic evidence.</p><div class="review-setting"><label>Slack</label><output>Not configured</output></div><div class="review-setting"><label>Discord</label><output>Not configured</output></div><div class="review-setting"><label>Microsoft Teams</label><output>Not configured</output></div><button class="review-button primary" style="margin-top:1rem" type="button">Add destination</button></div></div></div>
+    </section>
+  </main>
+</div>
+
+<div class="review-modal" id="review-logs-modal" hidden aria-hidden="true">
+  <section class="review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-logs-title">
+    <div class="review-dialog-head"><strong id="review-logs-title">csi-provisioner-845c5df44-szxlt</strong><button class="review-close" data-close-logs aria-label="Close Resource Logs" type="button">&times;</button></div>
+    <pre class="review-log">E0916 17:12:03.184720       1 leaderelection.go:436] error retrieving resource lock longhorn-system/driver-longhorn-io: Get "https://10.43.0.1:443/apis/coordination.k8s.io/v1/namespaces/longhorn-system/leases/driver-longhorn-io": tls: failed to verify certificate: x509: certificate signed by unknown authority
+E0916 17:12:13.134599       1 leaderelection.go:436] retrying leader election
+E0916 17:12:19.284072       1 leaderelection.go:436] error retrieving resource lock longhorn-system/driver-longhorn-io</pre>
+  </section>
+</div>
+<div class="review-toast" id="review-toast" role="status">Dashboard scan requested</div>
+
+<script>
+  (() => {
+    const tabs = Array.from(document.querySelectorAll('[data-tab]'));
+    const views = Array.from(document.querySelectorAll('[data-view]'));
+    const modal = document.getElementById('review-logs-modal');
+    const toast = document.getElementById('review-toast');
+    function switchView(name) {
+      tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
+      views.forEach(view => view.classList.toggle('active', view.dataset.view === name));
+    }
+    tabs.forEach(tab => tab.addEventListener('click', () => switchView(tab.dataset.tab)));
+    document.querySelectorAll('[data-open-logs]').forEach(button => button.addEventListener('click', () => { modal.hidden = false; modal.setAttribute('aria-hidden', 'false'); }));
+    document.querySelector('[data-close-logs]').addEventListener('click', () => { modal.hidden = true; modal.setAttribute('aria-hidden', 'true'); });
+    modal.addEventListener('click', event => { if (event.target === modal) { modal.hidden = true; modal.setAttribute('aria-hidden', 'true'); } });
+    document.getElementById('review-filter').addEventListener('input', event => {
+      const query = event.target.value.toLowerCase().trim();
+      document.querySelectorAll('#review-issues [data-search]').forEach(card => { card.hidden = query !== '' && !card.dataset.search.includes(query); });
+    });
+    document.getElementById('review-scan').addEventListener('click', event => {
+      const button = event.currentTarget;
+      button.textContent = 'Scanning...';
+      button.disabled = true;
+      setTimeout(() => { button.textContent = 'Scan Cluster'; button.disabled = false; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); }, 700);
+    });
+    document.querySelectorAll('[data-approve]').forEach(button => button.addEventListener('click', () => {
+      const card = button.closest('.review-card');
+      card.querySelector('.review-card-meta').textContent = button.textContent === 'Reject' ? 'Rejected for review · no action executed' : 'Approved for execution · awaiting bounded worker receipt';
+      card.querySelectorAll('[data-approve]').forEach(control => control.remove());
+    }));
+    document.querySelector('.review-chat-form').addEventListener('submit', event => event.preventDefault());
+  })();
+</script>

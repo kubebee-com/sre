@@ -1,0 +1,250 @@
+<style>
+  .triage-dashboard { min-height: 100vh; background: #eef3f8; color: #26364d; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .triage-dashboard * { box-sizing: border-box; }
+  .triage-topbar { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 64px; padding: 0 1.4rem; border-bottom: 1px solid #dbe3ed; background: #f7faff; }
+  .triage-global-nav, .triage-account { display: flex; align-items: center; gap: 0.2rem; }
+  .triage-account { justify-content: flex-end; gap: 0.8rem; }
+  .triage-global-link { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 2.2rem; padding: 0.45rem 0.65rem; border: 0; border-radius: 5px; color: #53657d; background: transparent; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+  .triage-global-link:hover, .triage-global-link.active { color: #26364d; background: #e6edf6; }
+  .triage-global-icon { display: grid; place-items: center; width: 1.1rem; height: 1.1rem; border-radius: 3px; color: #687b93; font: 0.56rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .triage-logo { display: flex; align-items: center; gap: 0.55rem; color: #26364d; font-size: 0.95rem; font-weight: 750; letter-spacing: 0.02em; white-space: nowrap; }
+  .triage-logo-mark { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 6px; color: #fff; background: #238b78; font-size: 0.82rem; }
+  .triage-account button { border: 0; background: transparent; color: #53657d; cursor: pointer; }
+  .triage-account-user { display: flex; align-items: center; gap: 0.45rem; color: #53657d; font-size: 0.72rem; }
+  .triage-avatar { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: 50%; color: #fff; background: #596b85; font-size: 0.65rem; font-weight: 700; }
+  .triage-shell { display: grid; grid-template-columns: 238px minmax(0, 1fr); min-height: calc(100vh - 64px); }
+  .triage-sidebar { min-width: 0; border-right: 1px solid #dbe3ed; background: #f4f8fc; }
+  .triage-context { margin: 1rem 0.8rem 0.75rem; padding: 0.75rem; border-radius: 7px; color: #fff; background: #273852; box-shadow: 0 7px 16px rgba(46, 69, 98, 0.16); }
+  .triage-context-label { color: #b9c8da; font-size: 0.61rem; }
+  .triage-context-name { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; margin-top: 0.25rem; font-size: 0.75rem; font-weight: 650; }
+  .triage-context-name span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .triage-context-status { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.45rem; color: #b9e7ce; font-size: 0.63rem; }
+  .triage-status-dot { width: 0.42rem; height: 0.42rem; flex: 0 0 auto; border-radius: 50%; background: #3dbb78; }
+  .triage-status-dot.warn { background: #d99a26; }
+  .triage-nav { padding: 0.35rem 0.65rem 1rem; }
+  .triage-nav-group { margin-top: 0.95rem; }
+  .triage-nav-group:first-child { margin-top: 0.25rem; }
+  .triage-nav-label { padding: 0 0.55rem 0.35rem; color: #8b9bb0; font-size: 0.6rem; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; }
+  .triage-nav-link { display: flex; align-items: center; gap: 0.55rem; width: 100%; min-height: 2rem; margin: 0.12rem 0; padding: 0.42rem 0.55rem; border: 0; border-radius: 5px; color: #53657d; background: transparent; font: inherit; font-size: 0.72rem; text-align: left; cursor: pointer; }
+  .triage-nav-link:hover { color: #26364d; background: #e6edf6; }
+  .triage-nav-link.active { color: #16856e; background: #dff3eb; font-weight: 650; }
+  .triage-nav-icon { display: grid; place-items: center; width: 1.25rem; height: 1.25rem; flex: 0 0 auto; border: 1px solid #b6c4d4; border-radius: 4px; color: #687b93; font: 0.55rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .triage-nav-link.active .triage-nav-icon { border-color: #4fbb9c; color: #16856e; background: #eefbf6; }
+  .triage-nav-text { min-width: 0; flex: 1; }
+  .triage-nav-count { padding: 0.12rem 0.32rem; border-radius: 999px; color: #9a6514; background: #fff0c9; font: 0.61rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .triage-sidebar-footer { margin: 0 0.8rem; padding: 0.75rem 0; border-top: 1px solid #dbe3ed; color: #7a8ba0; font-size: 0.62rem; line-height: 1.5; }
+  .triage-main { min-width: 0; width: 100%; padding: 1.55rem clamp(1rem, 3vw, 2.6rem) 2.5rem; }
+  .triage-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+  .triage-eyebrow { color: #16856e; font-size: 0.65rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+  .triage-intro h1 { margin-top: 0.3rem; color: #26364d; font-size: clamp(1.25rem, 2vw, 1.7rem); line-height: 1.2; }
+  .triage-intro p { margin-top: 0.35rem; color: #75879c; font-size: 0.74rem; }
+  .triage-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .triage-button { min-height: 2.15rem; padding: 0.45rem 0.75rem; border: 1px solid #c6d2e0; border-radius: 5px; color: #53657d; background: #fff; font-size: 0.7rem; font-weight: 650; cursor: pointer; }
+  .triage-button:hover { border-color: #93a6bc; background: #f8fbff; }
+  .triage-button.primary { border-color: #238b78; color: #fff; background: #238b78; }
+  .triage-button.primary:hover { background: #1c7565; }
+  .triage-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+  .triage-summary-card { min-width: 0; padding: 0.9rem 1rem; border: 1px solid #dbe3ed; border-radius: 7px; background: #fff; box-shadow: 0 3px 10px rgba(50, 74, 103, 0.04); }
+  .triage-summary-card.critical { border-top: 3px solid #ce5a56; }
+  .triage-summary-card.review { border-top: 3px solid #d99a26; }
+  .triage-summary-card.ai { border-top: 3px solid #5f7bd8; }
+  .triage-summary-card.safe { border-top: 3px solid #42ae7f; }
+  .triage-summary-label { color: #7b8da2; font-size: 0.67rem; }
+  .triage-summary-value { margin-top: 0.25rem; color: #26364d; font-size: 1.55rem; font-weight: 750; }
+  .triage-summary-note { margin-top: 0.2rem; color: #8b9bb0; font-size: 0.63rem; }
+  .triage-body-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(270px, 0.75fr); gap: 0.85rem; margin-top: 0.9rem; }
+  .triage-primary, .triage-rail { display: grid; align-content: start; gap: 0.85rem; min-width: 0; }
+  .triage-panel { border: 1px solid #dbe3ed; border-radius: 7px; background: #fff; box-shadow: 0 3px 10px rgba(50, 74, 103, 0.04); }
+  .triage-panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.85rem 1rem; border-bottom: 1px solid #e5ebf2; }
+  .triage-panel-header h2 { color: #344761; font-size: 0.88rem; }
+  .triage-panel-header p { margin-top: 0.25rem; color: #8999ab; font-size: 0.66rem; }
+  .triage-panel-header a { color: #2b8fc0; font-size: 0.66rem; text-decoration: none; cursor: pointer; }
+  .triage-posture { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.55rem; padding: 0.85rem; }
+  .triage-posture-item { padding: 0.65rem; border: 1px solid #e3eaf2; border-radius: 5px; background: #f8fbfe; }
+  .triage-posture-item strong { display: block; color: #344761; font-size: 0.72rem; }
+  .triage-posture-item span { display: block; margin-top: 0.3rem; color: #77899e; font-size: 0.62rem; }
+  .triage-posture-state { display: flex !important; align-items: center; gap: 0.3rem; margin-top: 0.55rem !important; color: #16856e !important; font-size: 0.62rem !important; font-weight: 650; }
+  .triage-posture-state.warn { color: #a86b12 !important; }
+  .triage-posture-state.bad { color: #b34e4a !important; }
+  .triage-queue-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; padding: 0.7rem 0.85rem; border-bottom: 1px solid #e5ebf2; }
+  .triage-segment { display: inline-flex; padding: 0.18rem; border: 1px solid #ced9e5; border-radius: 5px; background: #f7faff; }
+  .triage-segment button { padding: 0.38rem 0.55rem; border: 0; border-radius: 4px; color: #788a9f; background: transparent; font-size: 0.64rem; cursor: pointer; }
+  .triage-segment button.active { color: #fff; background: #344761; }
+  .triage-search { min-width: 150px; flex: 1; padding: 0.45rem 0.55rem; border: 1px solid #ced9e5; border-radius: 5px; color: #344761; background: #fff; font-size: 0.66rem; }
+  .triage-queue { overflow-x: auto; }
+  .triage-queue-table { width: 100%; min-width: 680px; border-collapse: collapse; }
+  .triage-queue-table th, .triage-queue-table td { padding: 0.72rem 0.85rem; border-bottom: 1px solid #edf1f5; text-align: left; vertical-align: middle; }
+  .triage-queue-table th { color: #8b9bb0; background: #fbfcfe; font-size: 0.62rem; font-weight: 650; }
+  .triage-queue-table td { color: #53657d; font-size: 0.68rem; }
+  .triage-issue-name { color: #344761; font-weight: 650; }
+  .triage-issue-meta { margin-top: 0.22rem; color: #91a0b0; font-size: 0.6rem; }
+  .triage-severity { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.38rem; border-radius: 4px; font-size: 0.58rem; font-weight: 700; }
+  .triage-severity.high { color: #a94742; background: #fde4e1; }
+  .triage-severity.medium { color: #986216; background: #fff0ca; }
+  .triage-severity.low { color: #337c64; background: #def3e9; }
+  .triage-confidence { color: #596fc3; font: 0.64rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .triage-state { color: #8a621d; font-size: 0.61rem; font-weight: 650; }
+  .triage-state.ready { color: #2f866b; }
+  .triage-row-actions { display: flex; gap: 0.35rem; }
+  .triage-icon-button { width: 1.8rem; height: 1.8rem; border: 1px solid #cbd7e3; border-radius: 4px; color: #5e7188; background: #fff; font: 0.6rem ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
+  .triage-icon-button:hover { border-color: #7c93ab; background: #f5f9fd; }
+  .triage-briefing { padding: 0.95rem; }
+  .triage-briefing-lead { display: flex; align-items: flex-start; gap: 0.6rem; }
+  .triage-ai-mark { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; flex: 0 0 auto; border-radius: 6px; color: #fff; background: #5f7bd8; font: 0.62rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .triage-briefing h3 { color: #344761; font-size: 0.78rem; }
+  .triage-briefing p { margin-top: 0.25rem; color: #72849a; font-size: 0.67rem; line-height: 1.45; }
+  .triage-evidence { display: grid; gap: 0.5rem; margin-top: 0.8rem; }
+  .triage-evidence-item { display: grid; grid-template-columns: 0.48rem 1fr; gap: 0.45rem; color: #53657d; font-size: 0.64rem; line-height: 1.4; }
+  .triage-evidence-item i { width: 0.4rem; height: 0.4rem; margin-top: 0.2rem; border-radius: 50%; background: #5f7bd8; }
+  .triage-briefing-actions { display: flex; gap: 0.45rem; margin-top: 0.85rem; }
+  .triage-briefing-actions .triage-button { flex: 1; min-width: 0; padding-inline: 0.45rem; font-size: 0.63rem; }
+  .triage-review-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; padding: 0.9rem; }
+  .triage-review-stat { padding: 0.65rem; border-radius: 5px; background: #f5f8fc; }
+  .triage-review-stat strong { display: block; color: #344761; font-size: 1.15rem; }
+  .triage-review-stat span { display: block; margin-top: 0.2rem; color: #8797aa; font-size: 0.61rem; }
+  .triage-progress { height: 0.38rem; margin-top: 0.55rem; overflow: hidden; border-radius: 999px; background: #dde6ef; }
+  .triage-progress span { display: block; height: 100%; border-radius: inherit; background: #5f7bd8; }
+  .triage-help-list { display: grid; gap: 0.5rem; padding: 0.85rem 1rem; }
+  .triage-help-list button { padding: 0.55rem 0; border: 0; border-bottom: 1px solid #edf1f5; color: #53657d; background: transparent; font-size: 0.65rem; text-align: left; cursor: pointer; }
+  .triage-help-list button:last-child { border-bottom: 0; }
+  .triage-help-list button:hover { color: #16856e; }
+  .triage-toast { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 20; display: none; padding: 0.7rem 0.85rem; border: 1px solid #94cdb8; border-radius: 5px; color: #17694f; background: #e6f7ef; font-size: 0.68rem; box-shadow: 0 8px 20px rgba(33, 84, 68, 0.16); }
+  .triage-toast.show { display: block; }
+  .triage-modal { position: fixed; inset: 0; z-index: 15; display: flex; align-items: center; justify-content: center; padding: 1.5rem; background: rgba(30, 45, 66, 0.52); }
+  .triage-modal[hidden] { display: none; }
+  .triage-dialog { width: min(760px, 100%); max-height: 85vh; overflow: auto; border: 1px solid #ccd8e5; border-radius: 7px; background: #fff; box-shadow: 0 24px 60px rgba(28, 47, 70, 0.28); }
+  .triage-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem; border-bottom: 1px solid #e2e9f1; }
+  .triage-dialog-header h2 { color: #344761; font-size: 0.92rem; }
+  .triage-dialog-header p { margin-top: 0.25rem; color: #8292a5; font-size: 0.64rem; }
+  .triage-close { width: 2rem; height: 2rem; border: 1px solid #cbd7e3; border-radius: 4px; color: #53657d; background: #fff; font-size: 1.1rem; cursor: pointer; }
+  .triage-dialog-body { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1rem; padding: 1rem; }
+  .triage-dialog-section h3 { color: #53657d; font-size: 0.7rem; }
+  .triage-dialog-section p { margin-top: 0.45rem; color: #687b93; font-size: 0.68rem; line-height: 1.5; }
+  .triage-log { margin-top: 0.7rem; padding: 0.7rem; overflow: auto; border: 1px solid #dbe3ed; border-radius: 5px; background: #f5f8fc; color: #53657d; font: 0.62rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+  .triage-dialog-actions { display: flex; justify-content: flex-end; gap: 0.45rem; padding: 0 1rem 1rem; }
+  @media (max-width: 1100px) { .triage-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .triage-body-grid { grid-template-columns: 1fr; } .triage-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 760px) { .triage-topbar { grid-template-columns: 1fr auto; padding-inline: 0.75rem; } .triage-global-nav { display: none; } .triage-logo { justify-self: start; } .triage-account-user span { display: none; } .triage-shell { grid-template-columns: 1fr; } .triage-sidebar { border-right: 0; border-bottom: 1px solid #dbe3ed; } .triage-context { margin-bottom: 0.45rem; } .triage-nav { display: flex; gap: 0.4rem; padding: 0 0.7rem 0.65rem; overflow-x: auto; } .triage-nav-group { display: contents; } .triage-nav-label { display: none; } .triage-nav-link { width: auto; flex: 0 0 auto; white-space: nowrap; } .triage-sidebar-footer { display: none; } .triage-main { padding: 1.15rem 0.75rem 2rem; } .triage-intro { align-items: flex-start; flex-direction: column; } .triage-rail { grid-template-columns: 1fr; } .triage-dialog-body { grid-template-columns: 1fr; } }
+  @media (max-width: 480px) { .triage-summary { grid-template-columns: 1fr; } .triage-posture { grid-template-columns: repeat(2, minmax(0, 1fr)); } .triage-account { gap: 0.3rem; } }
+</style>
+
+<div class="triage-dashboard">
+  <header class="triage-topbar">
+    <nav class="triage-global-nav" aria-label="Global navigation">
+      <button class="triage-global-link active" type="button"><span class="triage-global-icon">TR</span>Triage Center</button>
+      <button class="triage-global-link" type="button"><span class="triage-global-icon">CL</span>Clusters</button>
+      <button class="triage-global-link" type="button"><span class="triage-global-icon">AI</span>AI Operations</button>
+    </nav>
+    <div class="triage-logo"><span class="triage-logo-mark">S</span>KUBEBEE SRE</div>
+    <div class="triage-account"><button type="button" title="Open documentation">Docs</button><div class="triage-account-user"><span class="triage-avatar">SR</span><span>SRE operator</span><button type="button" aria-label="Open account menu">v</button></div></div>
+  </header>
+
+  <div class="triage-shell">
+    <aside class="triage-sidebar" aria-label="Triage navigation">
+      <div class="triage-context">
+        <div class="triage-context-label">Active cluster</div>
+        <div class="triage-context-name"><span>production / kubebee</span><span>v</span></div>
+        <div class="triage-context-status"><span class="triage-status-dot"></span>Connected · ARM64</div>
+      </div>
+      <nav class="triage-nav">
+        <div class="triage-nav-group">
+          <div class="triage-nav-label">Triage</div>
+          <button class="triage-nav-link active" data-scroll="triage-overview" type="button"><span class="triage-nav-icon">OV</span><span class="triage-nav-text">Overview</span></button>
+          <button class="triage-nav-link" data-scroll="triage-queue" type="button"><span class="triage-nav-icon">IQ</span><span class="triage-nav-text">Issue queue</span><span class="triage-nav-count">955</span></button>
+          <button class="triage-nav-link" data-scroll="triage-queue" type="button"><span class="triage-nav-icon">RV</span><span class="triage-nav-text">Needs review</span><span class="triage-nav-count">86</span></button>
+        </div>
+        <div class="triage-nav-group">
+          <div class="triage-nav-label">Evidence</div>
+          <button class="triage-nav-link" data-scroll="triage-posture" type="button"><span class="triage-nav-icon">HP</span><span class="triage-nav-text">Health posture</span></button>
+          <button class="triage-nav-link" data-open-logs type="button"><span class="triage-nav-icon">LG</span><span class="triage-nav-text">Resource logs</span></button>
+        </div>
+        <div class="triage-nav-group">
+          <div class="triage-nav-label">Automation</div>
+          <button class="triage-nav-link" data-toast="Playbook catalog opened" type="button"><span class="triage-nav-icon">PB</span><span class="triage-nav-text">Playbooks</span></button>
+          <button class="triage-nav-link" data-toast="AI workspace opened" type="button"><span class="triage-nav-icon">AI</span><span class="triage-nav-text">AI workspace</span></button>
+        </div>
+        <div class="triage-nav-group">
+          <div class="triage-nav-label">Governance</div>
+          <button class="triage-nav-link" data-toast="Approval policy opened" type="button"><span class="triage-nav-icon">AP</span><span class="triage-nav-text">Approval policy</span></button>
+          <button class="triage-nav-link" data-toast="Settings opened" type="button"><span class="triage-nav-icon">ST</span><span class="triage-nav-text">Settings</span></button>
+        </div>
+      </nav>
+      <div class="triage-sidebar-footer">AI recommendations remain read-only until an operator approves a bounded action.<br>Last scan: 00:24 UTC</div>
+    </aside>
+
+    <main class="triage-main" id="triage-overview">
+      <div class="triage-intro">
+        <div><div class="triage-eyebrow">Production / kubebee</div><h1>Issue triage overview</h1><p>AI-ranked signals, evidence, and safe next actions for the current cluster.</p></div>
+        <div class="triage-actions"><button class="triage-button" type="button" data-toast="Dashboard refreshed">Refresh</button><button class="triage-button primary" id="triage-scan" type="button">Run cluster scan</button></div>
+      </div>
+
+      <section class="triage-summary" aria-label="Triage summary">
+        <div class="triage-summary-card critical"><div class="triage-summary-label">Open issues</div><div class="triage-summary-value">955</div><div class="triage-summary-note">12 high-impact signals</div></div>
+        <div class="triage-summary-card review"><div class="triage-summary-label">Needs review</div><div class="triage-summary-value">86</div><div class="triage-summary-note">Human decision required</div></div>
+        <div class="triage-summary-card ai"><div class="triage-summary-label">AI-triaged</div><div class="triage-summary-value">742</div><div class="triage-summary-note">Evidence linked and ranked</div></div>
+        <div class="triage-summary-card safe"><div class="triage-summary-label">Actions executed</div><div class="triage-summary-value">0</div><div class="triage-summary-note">No unapproved writes</div></div>
+      </section>
+
+      <div class="triage-body-grid">
+        <div class="triage-primary">
+          <section class="triage-panel" id="triage-posture">
+            <div class="triage-panel-header"><div><h2>Cluster health posture</h2><p>Signal coverage across the resources the agent can inspect.</p></div><a data-toast="Health posture details opened">View details</a></div>
+            <div class="triage-posture">
+              <div class="triage-posture-item"><strong>Workloads</strong><span>612 inspected</span><span class="triage-posture-state bad"><i class="triage-status-dot"></i>12 degraded</span></div>
+              <div class="triage-posture-item"><strong>Events</strong><span>1,204 recent</span><span class="triage-posture-state warn"><i class="triage-status-dot warn"></i>293 warnings</span></div>
+              <div class="triage-posture-item"><strong>Security</strong><span>42 analyzers active</span><span class="triage-posture-state warn"><i class="triage-status-dot warn"></i>337 findings</span></div>
+              <div class="triage-posture-item"><strong>Capacity</strong><span>1 node · 4 signals</span><span class="triage-posture-state"><i class="triage-status-dot"></i>Within budget</span></div>
+            </div>
+          </section>
+
+          <section class="triage-panel" id="triage-queue">
+            <div class="triage-panel-header"><div><h2>AI priority queue</h2><p>Issues are ranked by impact, evidence quality, and reversibility of the next action.</p></div><a data-toast="Queue export requested">Export</a></div>
+            <div class="triage-queue-tools"><div class="triage-segment"><button class="active" type="button">All</button><button type="button">Needs review</button><button type="button">AI triaged</button></div><input class="triage-search" placeholder="Search issue, namespace, or signal" type="search"></div>
+            <div class="triage-queue"><table class="triage-queue-table"><thead><tr><th>Issue</th><th>Impact</th><th>AI confidence</th><th>State</th><th>Actions</th></tr></thead><tbody>
+              <tr><td><div class="triage-issue-name">vpn-gateway-iad</div><div class="triage-issue-meta">vpn-gateway · Deployment availability</div></td><td><span class="triage-severity high">HIGH</span></td><td><span class="triage-confidence">0.94</span></td><td><span class="triage-state">Needs review</span></td><td><div class="triage-row-actions"><button class="triage-icon-button" data-review="vpn-gateway-iad" title="Review AI assessment" type="button">RV</button><button class="triage-icon-button" data-open-logs title="Open resource logs" type="button">LG</button></div></td></tr>
+              <tr><td><div class="triage-issue-name">openbb-859d45d9bc-bsqkx</div><div class="triage-issue-meta">openbb · Mutable image tag</div></td><td><span class="triage-severity medium">MEDIUM</span></td><td><span class="triage-confidence">0.88</span></td><td><span class="triage-state">Needs review</span></td><td><div class="triage-row-actions"><button class="triage-icon-button" data-review="openbb-859d45d9bc-bsqkx" title="Review AI assessment" type="button">RV</button><button class="triage-icon-button" data-open-logs title="Open resource logs" type="button">LG</button></div></td></tr>
+              <tr><td><div class="triage-issue-name">csi-provisioner-845c5df44-szxlt</div><div class="triage-issue-meta">longhorn-system · Pod log error</div></td><td><span class="triage-severity medium">MEDIUM</span></td><td><span class="triage-confidence">0.81</span></td><td><span class="triage-state ready">AI triaged</span></td><td><div class="triage-row-actions"><button class="triage-icon-button" data-review="csi-provisioner-845c5df44-szxlt" title="Review AI assessment" type="button">RV</button><button class="triage-icon-button" data-open-logs title="Open resource logs" type="button">LG</button></div></td></tr>
+              <tr><td><div class="triage-issue-name">keycloak</div><div class="triage-issue-meta">keycloak · Service without endpoints</div></td><td><span class="triage-severity high">HIGH</span></td><td><span class="triage-confidence">0.76</span></td><td><span class="triage-state">Needs review</span></td><td><div class="triage-row-actions"><button class="triage-icon-button" data-review="keycloak" title="Review AI assessment" type="button">RV</button><button class="triage-icon-button" data-open-logs title="Open resource logs" type="button">LG</button></div></td></tr>
+            </tbody></table></div>
+          </section>
+        </div>
+
+        <aside class="triage-rail">
+          <section class="triage-panel">
+            <div class="triage-panel-header"><div><h2>AI briefing</h2><p>Generated from current evidence</p></div><span class="triage-severity medium">LIVE</span></div>
+            <div class="triage-briefing"><div class="triage-briefing-lead"><div class="triage-ai-mark">AI</div><div><h3>Start with vpn-gateway-iad</h3><p>Availability is degraded and the issue has the strongest evidence-to-impact ratio.</p></div></div><div class="triage-evidence"><div class="triage-evidence-item"><i></i><span>Deployment reports one unavailable replica.</span></div><div class="triage-evidence-item"><i></i><span>Available condition is False: MinimumReplicasUnavailable.</span></div><div class="triage-evidence-item"><i></i><span>Suggested next step is read-only inspection of events and pod state.</span></div></div><div class="triage-briefing-actions"><button class="triage-button" data-review="vpn-gateway-iad" type="button">Explain</button><button class="triage-button primary" data-review="vpn-gateway-iad" type="button">Review issue</button></div></div>
+          </section>
+          <section class="triage-panel">
+            <div class="triage-panel-header"><div><h2>Review workload</h2><p>Operator queue health</p></div></div>
+            <div class="triage-review-stats"><div class="triage-review-stat"><strong>86</strong><span>Awaiting decision</span><div class="triage-progress"><span style="width:72%"></span></div></div><div class="triage-review-stat"><strong>14m</strong><span>Oldest review</span><div class="triage-progress"><span style="width:38%; background:#d99a26"></span></div></div><div class="triage-review-stat"><strong>92%</strong><span>Evidence attached</span><div class="triage-progress"><span style="width:92%; background:#42ae7f"></span></div></div><div class="triage-review-stat"><strong>0</strong><span>Unbounded actions</span><div class="triage-progress"><span style="width:4%; background:#42ae7f"></span></div></div></div>
+          </section>
+          <section class="triage-panel"><div class="triage-panel-header"><div><h2>Help information</h2><p>Keep reviews consistent</p></div></div><div class="triage-help-list"><button data-toast="Evidence model opened" type="button">How the AI evidence score is calculated</button><button data-toast="Approval policy opened" type="button">What requires explicit approval?</button><button data-toast="Playbook guide opened" type="button">How to evaluate a playbook safely</button></div></section>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="triage-toast" id="triage-toast" role="status">Action requested</div>
+<div class="triage-modal" id="triage-issue-modal" hidden aria-hidden="true"><section class="triage-dialog" role="dialog" aria-modal="true" aria-labelledby="triage-issue-title"><div class="triage-dialog-header"><div><h2 id="triage-issue-title">Issue assessment</h2><p>AI reasoning is advisory; no write operation is implied.</p></div><button class="triage-close" data-close-modal aria-label="Close issue assessment" type="button">&times;</button></div><div class="triage-dialog-body"><div class="triage-dialog-section"><h3>Suggested assessment</h3><p id="triage-issue-summary">The agent has linked the current resource state, recent events, and bounded logs to this issue. Review the evidence before approving a proposed action.</p><pre class="triage-log" id="triage-issue-evidence">Evidence chain\n- controller condition: degraded\n- recent warning events: 3\n- bounded resource logs: available\n- proposed action: read-only inspection first</pre></div><div class="triage-dialog-section"><h3>Decision context</h3><p><strong>Confidence:</strong> <span id="triage-issue-confidence">0.94</span></p><p><strong>Risk:</strong> bounded and reversible</p><p><strong>Approval:</strong> required before execution</p></div></div><div class="triage-dialog-actions"><button class="triage-button" data-close-modal type="button">Close</button><button class="triage-button primary" data-toast="Issue assigned for human review" data-close-modal type="button">Assign for review</button></div></section></div>
+<div class="triage-modal" id="triage-logs-modal" hidden aria-hidden="true"><section class="triage-dialog" role="dialog" aria-modal="true" aria-labelledby="triage-logs-title"><div class="triage-dialog-header"><div><h2 id="triage-logs-title">Resource Logs</h2><p>csi-provisioner-845c5df44-szxlt · longhorn-system</p></div><button class="triage-close" data-close-logs aria-label="Close Resource Logs" type="button">&times;</button></div><div class="triage-dialog-body"><div class="triage-dialog-section" style="grid-column:1/-1"><h3>Bounded log snippet</h3><pre class="triage-log">E0916 17:12:03.184720       1 leaderelection.go:436] error retrieving resource lock longhorn-system/driver-longhorn-io: Get "https://10.43.0.1:443/apis/coordination.k8s.io/v1/namespaces/longhorn-system/leases/driver-longhorn-io": tls: failed to verify certificate: x509: certificate signed by unknown authority\nE0916 17:12:13.134599       1 leaderelection.go:436] retrying leader election\nE0916 17:12:19.284072       1 leaderelection.go:436] error retrieving resource lock longhorn-system/driver-longhorn-io</pre></div></div><div class="triage-dialog-actions"><button class="triage-button" data-close-logs type="button">Close</button></div></section></div>
+
+<script>
+  (() => {
+    const toast = document.getElementById('triage-toast');
+    const issueModal = document.getElementById('triage-issue-modal');
+    const logsModal = document.getElementById('triage-logs-modal');
+    let toastTimer;
+    function showToast(message) { toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2200); }
+    function closeModal(modal) { modal.hidden = true; modal.setAttribute('aria-hidden', 'true'); }
+    function showIssue(name) { document.getElementById('triage-issue-title').textContent = `${name} assessment`; issueModal.hidden = false; issueModal.setAttribute('aria-hidden', 'false'); }
+    document.querySelectorAll('[data-scroll]').forEach(link => link.addEventListener('click', () => { document.querySelectorAll('.triage-nav-link').forEach(item => item.classList.remove('active')); link.classList.add('active'); document.getElementById(link.dataset.scroll).scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+    document.querySelectorAll('[data-toast]').forEach(button => button.addEventListener('click', () => { if (button.dataset.closeModal) closeModal(button.closest('.triage-modal')); showToast(button.dataset.toast); }));
+    document.querySelectorAll('[data-review]').forEach(button => button.addEventListener('click', () => showIssue(button.dataset.review)));
+    document.querySelectorAll('[data-open-logs]').forEach(button => button.addEventListener('click', () => { logsModal.hidden = false; logsModal.setAttribute('aria-hidden', 'false'); }));
+    document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', () => closeModal(issueModal)));
+    document.querySelectorAll('[data-close-logs]').forEach(button => button.addEventListener('click', () => closeModal(logsModal)));
+    [issueModal, logsModal].forEach(modal => modal.addEventListener('click', event => { if (event.target === modal) closeModal(modal); }));
+    document.getElementById('triage-scan').addEventListener('click', event => { const button = event.currentTarget; button.disabled = true; button.textContent = 'Scanning...'; setTimeout(() => { button.disabled = false; button.textContent = 'Run cluster scan'; showToast('Cluster scan completed: 955 signals ranked'); }, 800); });
+    document.querySelectorAll('.triage-segment button').forEach(button => button.addEventListener('click', () => { button.parentElement.querySelectorAll('button').forEach(item => item.classList.remove('active')); button.classList.add('active'); }));
+  })();
+</script>
