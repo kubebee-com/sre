@@ -572,6 +572,7 @@ function updateIssueSummary() {
   setDashboardText('overview-high', counts.HIGH);
   setDashboardText('overview-evidence', counts.evidence);
   setDashboardText('overview-review', activeIssues.length);
+  setDashboardText('stat-issues', activeIssues.length);
   setDashboardText('nav-issue-count', activeIssues.length);
   setDashboardText('health-posture', activeIssues.some(issue => issue.severity === 'CRITICAL') ? 'Critical attention' : activeIssues.length ? 'Review required' : 'Healthy');
 }
