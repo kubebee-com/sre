@@ -44,6 +44,7 @@ type Config struct {
 	Verifier       Verifier
 	Investigations *investigation.Service
 	PublicURL      string
+	FalcoSecret    string
 }
 type Server struct {
 	requests   chan struct{}
@@ -81,6 +82,7 @@ func New(config Config) (*Server, error) {
 	}
 	mux.Handle("/channels/", channels)
 	s.registerInteractionRoutes(mux)
+	mux.HandleFunc("POST /api/webhooks/falco", s.falcoWebhook)
 	mux.HandleFunc("POST /agent/diagnostics/claim", s.agentDiagnosticClaim)
 	mux.HandleFunc("POST /agent/diagnostics/{job}/heartbeat", s.agentDiagnosticHeartbeat)
 	mux.HandleFunc("POST /agent/diagnostics/{job}/refresh", s.agentDiagnosticRefresh)

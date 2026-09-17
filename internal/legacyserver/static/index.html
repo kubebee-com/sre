@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kubebee SRE Agent — Autonomous Cluster Triage & Remediation</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     body { background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
     .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; }
@@ -209,6 +208,99 @@
     @media (min-width: 1024px) {
       [class~="lg:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
+
+    :root {
+      --surface: #ffffff;
+      --surface-muted: #f6f8fb;
+      --surface-selected: #edf4ff;
+      --border: #dce3ec;
+      --ink: #162033;
+      --muted: #667085;
+      --blue: #2563eb;
+      --green: #18864b;
+      --red: #c43d4b;
+      --amber: #a56b00;
+    }
+    body { margin: 0; background: var(--surface-muted); color: var(--ink); font-size: 14px; }
+    body.dashboard-modal-open { overflow: hidden; }
+    body > header { background: var(--surface) !important; border-color: var(--border) !important; min-height: 64px; }
+    body > header h1, body > header .text-white { color: var(--ink) !important; }
+    body > header .text-gray-400, body > header .text-gray-200 { color: var(--muted) !important; }
+    body > header .bg-emerald-500\/20 { background: #e8f7ef; }
+    body > header .border-emerald-500 { border-color: #b9e5ca; }
+    .workspace-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: calc(100vh - 64px); }
+    #left-nav { background: #fbfcfe; border-right: 1px solid var(--border); padding: 20px 12px; min-width: 0; }
+    #left-nav .nav-group-label { padding: 10px 10px 6px; color: #98a2b3; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    #left-nav [data-action] { display: flex; align-items: center; width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: #475467; text-align: left; cursor: pointer; }
+    #left-nav [data-action]:hover, #left-nav [data-action].active { background: var(--surface-selected); color: #174ea6; }
+    #left-nav [data-action] .nav-count { margin-left: auto; color: #98a2b3; font-size: 11px; }
+    .workspace-layout > main { width: 100%; max-width: none; min-width: 0; margin: 0; padding: 24px 28px 48px; }
+    .shell-context { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; min-width: 0; }
+    .shell-context h2 { margin: 0; color: var(--ink); font-size: 20px; line-height: 1.25; }
+    .shell-context p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+    #cluster-context { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #cluster-context select { min-height: 34px; max-width: 100%; padding: 0 30px 0 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--ink); }
+    #global-nav { display: flex; align-items: center; gap: 4px; margin-left: 30px; min-width: 0; }
+    #global-nav a, #global-nav button { border: 0; border-bottom: 2px solid transparent; padding: 21px 12px 19px; background: transparent; color: #667085; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
+    #global-nav a:hover, #global-nav button:hover, #global-nav .active { color: #174ea6; border-bottom-color: var(--blue); }
+    #scan-spinner { display: none; width: 12px; height: 12px; border: 2px solid rgb(255 255 255 / .45); border-top-color: #fff; border-radius: 50%; }
+    #scan-spinner[aria-busy="true"] { display: inline-block; animation: dashboard-spin .8s linear infinite; }
+    @keyframes dashboard-spin { to { transform: rotate(360deg); } }
+    .card { background: var(--surface); border-color: var(--border); border-radius: 6px; box-shadow: 0 1px 2px rgb(16 24 40 / .04); }
+    .overview-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr); gap: 16px; margin-bottom: 18px; }
+    .overview-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
+    .overview-panel h3 { margin: 0; color: var(--ink); font-size: 13px; }
+    .overview-panel .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .overview-panel .panel-body { min-width: 0; padding: 14px 16px; }
+    #triage-queue { min-width: 0; }
+    [data-issue-row] { min-width: 0; border-bottom: 1px solid var(--border); }
+    [data-issue-row]:last-child { border-bottom: 0; }
+    [data-issue-name] { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+    .issue-row-meta { min-width: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .issue-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .shell-kpi { min-width: 0; }
+    .shell-kpi .text-2xl { color: var(--ink) !important; }
+    .shell-health-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .shell-health-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--green); }
+    #section-approvals, #section-anomalies, #section-metrics, #section-analyzers, #section-hygiene, #section-chat, #section-playbooks, #section-settings { min-width: 0; }
+    #section-approvals h2, #section-anomalies h2, #section-metrics h2, #section-analyzers h2, #section-hygiene h2, #section-chat h2, #section-playbooks h2, #section-settings h2 { color: var(--ink); }
+    #section-anomalies { display: block; }
+    #section-anomalies > .flex:first-child { padding: 0 0 14px; }
+    #section-anomalies #issues-container { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    #section-anomalies #issues-container > .card { border: 0; border-radius: 0; box-shadow: none; }
+    .workspace-layout input:not([type="checkbox"]), .workspace-layout select, .workspace-layout textarea { color: var(--ink); background: var(--surface); border-color: var(--border); }
+    .dashboard-tabs { gap: 4px; border-color: var(--border) !important; }
+    .dashboard-tabs .nav-tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted) !important; cursor: pointer; padding: 10px 12px; }
+    .dashboard-tabs .nav-tab:hover, .dashboard-tabs .nav-tab.active { color: #174ea6 !important; border-bottom-color: var(--blue); }
+    #modal-backdrop { background: rgb(15 23 42 / .42); }
+    #modal-dialog { width: min(720px, calc(100vw - 32px)); max-height: min(80vh, 720px); min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 20px 50px rgb(15 23 42 / .25); }
+    #modal-dialog #modal-title { min-width: 0; color: var(--ink); overflow-wrap: anywhere; }
+    #modal-dialog #modal-content { max-height: calc(80vh - 96px); overflow: auto; color: #344054; background: #f8fafc; border-color: var(--border); }
+    #modal-backdrop.hidden { display: none; }
+    @media (max-width: 900px) {
+      .workspace-layout { grid-template-columns: 190px minmax(0, 1fr); }
+      .workspace-layout > main { padding: 20px 18px 36px; }
+      #global-nav { margin-left: 12px; }
+      #global-nav a, #global-nav button { padding-left: 8px; padding-right: 8px; }
+      .overview-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      body > header { padding-left: 14px !important; padding-right: 14px !important; align-items: flex-start; flex-wrap: wrap; }
+      body > header > div:first-child { min-width: 0; }
+      body > header > div:last-child { width: 100%; justify-content: space-between; padding-bottom: 10px; }
+      #global-nav { order: 3; width: 100%; margin: 0; overflow-x: auto; }
+      #global-nav a, #global-nav button { padding-top: 8px; padding-bottom: 8px; }
+      .workspace-layout { display: block; min-height: 0; }
+      #left-nav { border-right: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; overflow-x: auto; }
+      #left-nav .nav-group-label { display: inline-block; padding: 5px 8px; }
+      #left-nav [data-nav-group] { display: inline-flex; align-items: center; gap: 3px; margin-right: 10px; }
+      #left-nav [data-action] { width: auto; white-space: nowrap; }
+      .workspace-layout > main { padding: 16px 12px 28px; }
+      .shell-context { align-items: flex-start; flex-direction: column; }
+      .shell-context h2 { font-size: 18px; }
+      .dashboard-tabs { gap: 10px; }
+      .dashboard-tabs button { white-space: nowrap; }
+    }
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -216,29 +308,34 @@
   <header class="border-b border-[#30363d] px-6 py-4 flex items-center justify-between bg-[#161b22] sticky top-0 z-30">
     <div class="flex items-center space-x-3">
       <div class="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400">
-        <i class="fa-solid fa-shield-halved text-lg"></i>
+        <span aria-hidden="true" class="text-lg font-bold">S</span>
       </div>
       <div>
         <h1 class="text-base font-bold text-white tracking-wide flex items-center gap-2">
-          Kubebee SRE Agent
+          Kubebee SRE
           <span class="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">v1.2.0</span>
         </h1>
-        <p class="text-xs text-gray-400">K8sGPT-compatible Analyzers & Permission-Gated Remediation (<span id="domain-label" class="text-blue-400">sre.kubebee.com</span>)</p>
+        <p class="text-xs text-gray-400">AI-assisted Kubernetes issue triage (<span id="domain-label" class="text-blue-400">sre.kubebee.com</span>)</p>
       </div>
     </div>
+    <nav id="global-nav" aria-label="Global navigation">
+      <button type="button" data-action="nav-section" data-tab="anomalies" class="active">Triage Center</button>
+      <button type="button" data-action="nav-section" data-tab="analyzers">Clusters</button>
+      <button type="button" data-action="nav-section" data-tab="chat">AI Operations</button>
+    </nav>
     <div class="flex items-center space-x-4">
       <div class="text-xs text-gray-400 hidden sm:block">
         Provider: <strong id="llm-provider-label" class="text-gray-200">Loading...</strong>
       </div>
-      <button onclick="triggerScan()" id="btn-scan" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition">
-        <i class="fa-solid fa-arrows-rotate" id="scan-spinner"></i>
+      <button type="button" data-action="trigger-scan" id="btn-scan" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition">
+        <span id="scan-spinner" aria-hidden="true"></span>
         <span>Scan Cluster</span>
       </button>
       <div id="user-badge" class="hidden items-center gap-2 px-2.5 py-1 rounded-md bg-[#21262d] border border-[#30363d] text-xs">
-        <i class="fa-solid fa-user-shield text-emerald-400"></i>
+        <span aria-hidden="true" class="text-emerald-400">ID</span>
         <span id="user-name" class="text-gray-200 font-medium"></span>
-        <button onclick="dashboardLogout()" title="Sign out" class="text-gray-400 hover:text-red-400 ml-1 transition">
-          <i class="fa-solid fa-right-from-bracket"></i>
+        <button type="button" data-action="logout" title="Sign out" aria-label="Sign out" class="text-gray-400 hover:text-red-400 ml-1 transition">
+          <span aria-hidden="true">Exit</span>
         </button>
       </div>
     </div>
@@ -250,24 +347,82 @@
         <h2 class="text-sm font-semibold text-white">Dashboard authentication</h2>
         <p id="auth-message" class="text-xs text-gray-400 mt-1" aria-live="polite">An API token is required to use the dashboard.</p>
       </div>
-      <form id="auth-form" data-auth-bootstrap="true" onsubmit="return dashboardLogin(event)" class="flex flex-col sm:flex-row gap-2">
+      <form id="auth-form" data-auth-bootstrap="true" class="flex flex-col sm:flex-row gap-2">
         <label for="auth-token" class="sr-only">API token</label>
         <input id="auth-token" type="password" autocomplete="off" placeholder="API token" class="px-3 py-1.5 bg-[#161b22] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500 sm:w-64">
         <button type="submit" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">Sign in</button>
-        <button type="button" onclick="dashboardLogout()" class="px-3 py-1.5 rounded-md bg-[#21262d] hover:bg-[#30363d] text-gray-300 text-xs font-semibold transition">Clear session</button>
+        <button type="button" data-action="logout" class="px-3 py-1.5 rounded-md bg-[#21262d] hover:bg-[#30363d] text-gray-300 text-xs font-semibold transition">Clear session</button>
       </form>
     </div>
   </section>
 
   <!-- Main Container -->
-  <main class="max-w-7xl w-full mx-auto px-6 py-6 space-y-6 flex-1">
+  <div class="workspace-layout">
+    <aside id="left-nav" aria-label="Dashboard categories">
+      <div data-nav-group="triage">
+        <div class="nav-group-label">Triage</div>
+        <button type="button" data-action="nav-section" data-tab="anomalies" class="active">
+          <span>Issue queue</span><span class="nav-count" id="nav-issue-count">0</span>
+        </button>
+        <button type="button" data-action="nav-section" data-tab="approvals">
+          <span>Approvals</span><span class="nav-count" id="nav-approval-count">0</span>
+        </button>
+      </div>
+      <div data-nav-group="evidence">
+        <div class="nav-group-label">Evidence</div>
+        <button type="button" data-action="nav-section" data-tab="analyzers"><span>Analyzer coverage</span></button>
+        <button type="button" data-action="nav-section" data-tab="metrics"><span>Runtime metrics</span></button>
+        <button type="button" data-action="nav-section" data-tab="history"><span>Scan history</span></button>
+      </div>
+      <div data-nav-group="automation">
+        <div class="nav-group-label">Automation</div>
+        <button type="button" data-action="nav-section" data-tab="hygiene"><span>Pod hygiene</span></button>
+        <button type="button" data-action="nav-section" data-tab="playbooks"><span>Playbooks</span></button>
+        <button type="button" data-action="nav-section" data-tab="chat"><span>AI assistant</span></button>
+      </div>
+      <div data-nav-group="governance">
+        <div class="nav-group-label">Governance</div>
+        <button type="button" data-action="nav-section" data-tab="settings"><span>Settings</span></button>
+        <button type="button" data-action="nav-section" data-tab="audit"><span>Audit trail</span></button>
+      </div>
+    </aside>
+    <main class="max-w-7xl w-full mx-auto px-6 py-6 space-y-6 flex-1">
+      <section class="shell-context" id="cluster-context" aria-label="Cluster context">
+        <div>
+          <p class="uppercase font-semibold">Triage Center / Cluster context</p>
+          <h2>Production health and issue review</h2>
+          <p>Review evidence, understand AI recommendations, and approve changes only when the resource state is current.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="cluster-select" class="sr-only">Cluster</label>
+          <select id="cluster-select" aria-label="Cluster">
+            <option value="production">production</option>
+          </select>
+          <span class="text-xs text-gray-500">kubebee</span>
+        </div>
+      </section>
+      <section class="overview-grid" aria-label="Triage overview">
+        <div class="overview-panel">
+          <div class="panel-header"><h3>Cluster health posture</h3><span class="shell-health-line"><span class="shell-health-dot" aria-hidden="true"></span><span id="health-posture">Awaiting scan</span></span></div>
+          <div class="panel-body grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="shell-kpi"><div class="text-xs text-gray-500">Critical</div><div id="overview-critical" class="text-2xl font-bold">0</div></div>
+            <div class="shell-kpi"><div class="text-xs text-gray-500">High</div><div id="overview-high" class="text-2xl font-bold">0</div></div>
+            <div class="shell-kpi"><div class="text-xs text-gray-500">Evidence-backed</div><div id="overview-evidence" class="text-2xl font-bold">0</div></div>
+            <div class="shell-kpi"><div class="text-xs text-gray-500">Needs review</div><div id="overview-review" class="text-2xl font-bold">0</div></div>
+          </div>
+        </div>
+        <div class="overview-panel">
+          <div class="panel-header"><h3>AI briefing</h3><span class="text-xs text-gray-500" id="ai-briefing-status">Rule engine ready</span></div>
+          <div class="panel-body text-sm text-gray-600" id="ai-briefing">Select an issue to inspect evidence and request a bounded explanation.</div>
+        </div>
+      </section>
     <!-- Stats Row -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div class="card p-4">
         <div class="text-xs text-gray-400 font-medium">Active Anomalies</div>
         <div class="text-2xl font-bold text-white mt-1" id="stat-issues">0</div>
         <div class="text-xs text-amber-400 mt-1 flex items-center gap-1">
-          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span aria-hidden="true">!</span>
           <span>Detected in cluster</span>
         </div>
       </div>
@@ -290,34 +445,34 @@
 
     <!-- Navigation Tabs -->
     <div class="dashboard-tabs border-b border-[#30363d] flex space-x-6 text-sm overflow-x-auto">
-      <button onclick="switchTab('approvals')" id="tab-approvals" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition active flex items-center gap-2">
-        <i class="fa-solid fa-stamp"></i>
+      <button type="button" data-action="nav-section" data-tab="approvals" id="tab-approvals" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition active flex items-center gap-2">
+        <span aria-hidden="true">Review</span>
         <span>Pending Approvals</span>
         <span id="tab-badge-pending" class="px-1.5 py-0.2 rounded-full text-xs bg-amber-500/20 text-amber-300 font-mono hidden">0</span>
       </button>
-      <button onclick="switchTab('anomalies')" id="tab-anomalies" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
-        <i class="fa-solid fa-triangle-exclamation"></i>
+      <button type="button" data-action="nav-section" data-tab="anomalies" id="tab-anomalies" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <span aria-hidden="true">!</span>
         <span>Cluster Anomalies</span>
       </button>
-      <button onclick="switchTab('metrics')" id="tab-metrics" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
-        <i class="fa-solid fa-chart-line"></i>
+      <button type="button" data-action="nav-section" data-tab="metrics" id="tab-metrics" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <span aria-hidden="true">M</span>
         <span>Metrics</span>
       </button>
-      <button onclick="switchTab('analyzers')" id="tab-analyzers" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
-        <i class="fa-solid fa-cubes"></i>
+      <button type="button" data-action="nav-section" data-tab="analyzers" id="tab-analyzers" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <span aria-hidden="true">A</span>
         <span>Analyzers Matrix</span>
       </button>
-      <button onclick="switchTab('hygiene')" id="tab-hygiene" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
-        <i class="fa-solid fa-broom"></i>
+      <button type="button" data-action="nav-section" data-tab="hygiene" id="tab-hygiene" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <span aria-hidden="true">H</span>
         <span>Pod Hygiene & Cleanup</span>
       </button>
-      <button onclick="switchTab('chat')" id="tab-chat" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
-        <i class="fa-solid fa-robot"></i>
+      <button type="button" data-action="nav-section" data-tab="chat" id="tab-chat" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <span aria-hidden="true">AI</span>
         <span>SRE AI Assistant</span>
       </button>
       <button data-action="playbook-tab" id="tab-playbooks" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition">Playbooks</button>
-      <button onclick="switchTab('settings')" id="tab-settings" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
-        <i class="fa-solid fa-gear"></i>
+      <button type="button" data-action="nav-section" data-tab="settings" id="tab-settings" class="nav-tab py-2 text-gray-400 hover:text-gray-200 transition flex items-center gap-2">
+        <span aria-hidden="true">G</span>
         <span>Settings</span>
       </button>
     </div>
@@ -330,7 +485,7 @@
           <p class="text-xs text-gray-400">Human-in-the-Loop: No write actions will execute without explicit SRE authorization.</p>
         </div>
         <div class="flex items-center gap-2">
-          <select id="proposal-group-filter" onchange="loadProposals()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+          <select id="proposal-group-filter" data-action="proposal-filter" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
             <option value="">All Categories</option>
             <option value="Vulnerability">🛡️ Vulnerability</option>
             <option value="Upgrade">🚀 Upgrade</option>
@@ -338,7 +493,7 @@
             <option value="Errors">⚠️ Errors</option>
             <option value="Improvement">💡 Improvement</option>
           </select>
-          <select id="proposal-status-filter" onchange="loadProposals()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+          <select id="proposal-status-filter" data-action="proposal-filter" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
             <option value="">All statuses</option>
             <option value="PENDING_APPROVAL">Pending approval</option>
             <option value="APPROVED">Approved</option>
@@ -358,15 +513,15 @@
     </div>
 
     <!-- TAB 2: CLUSTER ANOMALIES -->
-    <div id="section-anomalies" class="space-y-4 hidden">
+    <div id="section-anomalies" class="space-y-4 hidden" data-view="triage">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-base font-semibold text-white">Detected Cluster Anomalies</h2>
           <p class="text-xs text-gray-400">Telemetry aggregated from pods, nodes, PVCs, services, and workloads.</p>
         </div>
         <div class="flex items-center gap-2">
-          <input type="text" id="filter-search" oninput="applyAnomalyFilters()" placeholder="Search name/namespace..." class="px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500 w-48">
-          <select id="filter-group" onchange="applyAnomalyFilters()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+          <input type="text" id="filter-search" data-action="issue-filter" placeholder="Search name/namespace..." class="px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500 w-48">
+          <select id="filter-group" data-action="issue-filter" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
             <option value="">All Categories</option>
             <option value="Vulnerability">🛡️ Vulnerability</option>
             <option value="Upgrade">🚀 Upgrade</option>
@@ -374,7 +529,7 @@
             <option value="Errors">⚠️ Errors</option>
             <option value="Improvement">💡 Improvement</option>
           </select>
-          <select id="filter-severity" onchange="applyAnomalyFilters()" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+          <select id="filter-severity" data-action="issue-filter" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
             <option value="">All Severities</option>
             <option value="CRITICAL">Critical</option>
             <option value="HIGH">High</option>
@@ -383,21 +538,44 @@
           </select>
         </div>
       </div>
-      <div id="issues-container" class="space-y-3">
+      <div id="triage-queue" class="space-y-3" aria-label="AI priority queue">
+        <div id="issues-container" class="space-y-3">
         <!-- Injected via JavaScript -->
         <div class="card p-6 text-center text-gray-500 text-sm">Loading anomalies...</div>
+        </div>
+      </div>
+      <div class="overview-grid">
+        <section id="issue-detail" class="overview-panel" aria-label="Issue detail">
+          <div class="panel-header"><h3>Issue assessment</h3><span id="issue-detail-state" class="text-xs text-gray-500">Select an issue</span></div>
+          <div class="panel-body text-sm text-gray-600" id="issue-detail-content">Select an issue from the queue to inspect its resource, evidence, and AI confidence.</div>
+        </section>
+        <section id="evidence-panel" class="overview-panel" aria-label="Evidence">
+          <div class="panel-header"><h3>Evidence posture</h3><span id="evidence-state" class="text-xs text-gray-500">Awaiting issue</span></div>
+          <div class="panel-body text-sm text-gray-600" id="evidence-content">Sanitized logs, warning events, and resource snippets appear here for the selected issue.</div>
+        </section>
+      </div>
+      <div class="overview-grid">
+        <section id="approval-panel" class="overview-panel" aria-label="Approval workload">
+          <div class="panel-header"><h3>Review workload</h3><span id="approval-state" class="text-xs text-gray-500">Human approval required</span></div>
+          <div class="panel-body text-sm text-gray-600">Mutations remain disabled until an exact proposal and current resource version are approved.</div>
+        </section>
+        <section id="audit-panel" class="overview-panel" aria-label="Audit trail">
+          <div class="panel-header"><h3>Audit trail</h3><span class="text-xs text-gray-500">Traceable actions</span></div>
+          <div class="panel-body text-sm text-gray-600">Scan, explanation, approval, and execution events are recorded with their actor and scope.</div>
+        </section>
       </div>
     </div>
 
     <!-- TAB 3: RUNTIME METRICS -->
     <div id="section-metrics" class="space-y-4 hidden">
+      <div id="metrics-panel">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-base font-semibold text-white">Runtime Metrics</h2>
           <p class="text-xs text-gray-400">Protected Prometheus counters for cluster errors, analyzer health, and provider usage.</p>
         </div>
-        <button onclick="loadDashboardMetrics()" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs rounded-md font-semibold transition flex items-center gap-1.5">
-          <i class="fa-solid fa-arrows-rotate"></i>
+        <button type="button" data-action="metrics-refresh" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs rounded-md font-semibold transition flex items-center gap-1.5">
+          <span aria-hidden="true">Refresh</span>
           <span>Refresh Metrics</span>
         </button>
       </div>
@@ -452,6 +630,7 @@
           </div>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- TAB 4: ANALYZERS MATRIX -->
@@ -473,11 +652,11 @@
           <p class="text-xs text-gray-400">Prune Evicted, Failed, Completed, and Stuck Terminating pods to keep nodes and etcd lean.</p>
         </div>
         <div class="flex items-center gap-2">
-          <button onclick="loadCleanablePods()" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs rounded-md font-semibold transition">
-            <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh Candidates
+          <button type="button" data-action="hygiene-refresh" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs rounded-md font-semibold transition">
+            Refresh Candidates
           </button>
-          <button onclick="cleanSelectedPods(false)" class="px-3 py-1.5 bg-red-700 hover:bg-red-600 text-white text-xs rounded-md font-semibold transition">
-            <i class="fa-solid fa-trash-can mr-1"></i> Clean Selected Pods
+          <button type="button" data-action="clean-selected" class="px-3 py-1.5 bg-red-700 hover:bg-red-600 text-white text-xs rounded-md font-semibold transition">
+            Clean Selected Pods
           </button>
         </div>
       </div>
@@ -486,7 +665,7 @@
           <table class="w-full text-left text-xs">
             <thead class="bg-[#21262d] text-gray-400 uppercase tracking-wider font-semibold">
               <tr>
-                <th class="p-3 w-10"><input type="checkbox" id="check-all-pods" onchange="toggleSelectAllPods()"></th>
+                <th class="p-3 w-10"><input type="checkbox" id="check-all-pods" data-action="toggle-pods"></th>
                 <th class="p-3">Namespace</th>
                 <th class="p-3">Pod Name</th>
                 <th class="p-3">Phase / Reason</th>
@@ -519,10 +698,10 @@
           </div>
         </div>
         <div class="p-3 border-t border-[#30363d] bg-[#161b22] flex gap-2">
-          <input type="text" id="chat-input" onkeydown="if(event.key==='Enter') sendChatMessage()" placeholder="Ask SRE AI (e.g. 'Why is local-path-provisioner crashing?' or 'How do I scale coredns?')..." class="flex-1 px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500">
-          <button onclick="sendChatMessage()" id="btn-chat-send" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5">
+          <input type="text" id="chat-input" data-action="chat-input" placeholder="Ask SRE AI about a cluster issue..." class="flex-1 px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500">
+          <button type="button" data-action="chat-send" id="btn-chat-send" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5">
             <span>Send</span>
-            <i class="fa-solid fa-paper-plane"></i>
+            <span aria-hidden="true">-></span>
           </button>
         </div>
       </div>
@@ -531,6 +710,7 @@
     <!-- TAB 7: SETTINGS & IM INTEGRATIONS -->
 
     <div id="section-playbooks" class="space-y-4 hidden">
+      <div id="playbook-panel">
       <div class="flex items-center justify-between">
         <h2 class="text-base font-semibold text-white">Playbooks</h2>
         <button data-action="playbook-refresh" type="button">Refresh</button>
@@ -575,9 +755,11 @@
       <h3 class="font-semibold">Catalog and review</h3>
       <p class="text-xs text-gray-400">Showing up to 256 versions. Activation makes a reviewed playbook eligible for matching; remediation still requires the existing proposal workflow.</p>
       <div id="playbook-catalog" class="space-y-4">Loading playbooks…</div>
+      </div>
     </div>
 
     <div id="section-settings" class="space-y-6 hidden">
+      <div id="settings-panel">
       <div>
         <h2 class="text-base font-semibold text-white">Runtime Settings & Integrations</h2>
         <p class="text-xs text-gray-400">Review safe runtime configuration and manage approved notification destinations.</p>
@@ -647,7 +829,7 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="card p-4 flex items-center gap-3">
           <div class="w-10 h-10 rounded bg-[#4A154B]/30 border border-[#E01E5A] flex items-center justify-center text-[#E01E5A] text-xl">
-            <i class="fa-brands fa-slack"></i>
+            <span aria-hidden="true">S</span>
           </div>
           <div>
             <div class="text-sm font-semibold text-white">Slack</div>
@@ -656,7 +838,7 @@
         </div>
         <div class="card p-4 flex items-center gap-3">
           <div class="w-10 h-10 rounded bg-[#5865F2]/20 border border-[#5865F2] flex items-center justify-center text-[#5865F2] text-xl">
-            <i class="fa-brands fa-discord"></i>
+            <span aria-hidden="true">D</span>
           </div>
           <div>
             <div class="text-sm font-semibold text-white">Discord</div>
@@ -665,7 +847,7 @@
         </div>
         <div class="card p-4 flex items-center gap-3">
           <div class="w-10 h-10 rounded bg-[#5059C9]/20 border border-[#5059C9] flex items-center justify-center text-[#5059C9] text-xl">
-            <i class="fa-brands fa-microsoft"></i>
+            <span aria-hidden="true">M</span>
           </div>
           <div>
             <div class="text-sm font-semibold text-white">Microsoft Teams</div>
@@ -679,25 +861,27 @@
         <p class="text-xs text-gray-400">Paste your Slack, Discord, or Microsoft Teams webhook endpoint below:</p>
         <div class="flex gap-2">
           <input type="text" id="settings-webhook-url" placeholder="https://hooks.slack.com/services/... or https://discord.com/api/webhooks/..." class="flex-1 px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none focus:border-blue-500">
-          <button onclick="saveWebhookConfig()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-md transition">Save</button>
+          <button type="button" data-action="save-webhook" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-md transition">Save</button>
         </div>
         <div>
-          <button onclick="testWebhookAlert()" id="btn-test-alert" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs font-semibold rounded-md transition flex items-center gap-1.5">
-            <i class="fa-solid fa-paper-plane"></i>
+          <button type="button" data-action="test-alert" id="btn-test-alert" class="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-gray-200 text-xs font-semibold rounded-md transition flex items-center gap-1.5">
+            <span aria-hidden="true">Send</span>
             <span>Send Test Alert Notification</span>
           </button>
           <div id="test-alert-status" class="mt-2 text-xs"></div>
         </div>
       </div>
+      </div>
     </div>
-  </main>
+    </main>
+  </div>
 
   <!-- Modal for Logs & Details -->
-  <div id="modal-backdrop" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-[#161b22] border border-[#30363d] rounded-lg max-w-3xl w-full max-h-[80vh] flex flex-col shadow-2xl">
+  <div id="modal-backdrop" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden" role="presentation" aria-hidden="true">
+    <div id="modal-dialog" class="bg-[#161b22] border border-[#30363d] rounded-lg max-w-3xl w-full max-h-[80vh] flex flex-col shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div class="p-4 border-b border-[#30363d] flex items-center justify-between">
         <h3 class="text-sm font-bold text-white flex items-center gap-2" id="modal-title">Resource Logs</h3>
-        <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-base"></i></button>
+        <button type="button" data-action="close-modal" aria-label="Close Resource Logs" class="text-gray-400 hover:text-white">Close</button>
       </div>
       <div class="p-4 overflow-y-auto flex-1 font-mono text-xs text-gray-300">
         <pre id="modal-content" class="p-3 text-xs leading-relaxed whitespace-pre-wrap"></pre>
@@ -709,6 +893,7 @@
     const DASHBOARD_TOKEN_STORAGE_KEY = 'sre-agent-api-token';
     let dashboardScriptLoaded = false;
     let dashboardScriptPromise = null;
+    let dashboardLoadPromise = null;
 
     function dashboardGetStoredToken() {
       try {

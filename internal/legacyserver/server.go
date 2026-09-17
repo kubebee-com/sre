@@ -705,6 +705,8 @@ func (s *Server) newHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/auth/config", s.handleAuthConfig)
 	mux.HandleFunc("/api/auth/me", s.handleAuthMe)
 	mux.HandleFunc("/api/auth/logout", s.handleAuthLogout)
+	mux.HandleFunc("/api/webhooks/falco", s.handleFalcoWebhook)
+	mux.HandleFunc("/api/v1/webhooks/falco", s.handleFalcoWebhook)
 
 	// SSO Endpoints
 	if s.oidcAuth != nil {

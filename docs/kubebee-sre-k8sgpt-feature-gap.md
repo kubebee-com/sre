@@ -18,6 +18,11 @@ Security improvements are part of the status decision. In particular,
 authenticated REST/gRPC, read-only query allowlists, secret-safe projections,
 and opt-in mutation are not downgraded to match an unsafe upstream default.
 
+Cloud-native delivery and runtime controls are tracked separately in the
+[cloud-native evidence checklist](kubebee-sre-k8sgpt-cncf-checklist.md). That
+checklist distinguishes repository coverage from live-cluster and provider
+evidence and does not make a CNCF certification claim.
+
 ## Current Matrix
 
 ### CLI And Analysis

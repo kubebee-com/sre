@@ -149,6 +149,8 @@ func ruleSpecFor(category scanner.IssueCategory) ruleSpec {
 		return manual("Workload has excessive privilege", "The workload requests a privileged or otherwise high-risk security capability.", "Remove unnecessary privilege and validate the change through policy and GitOps review.", "pod")
 	case scanner.CategorySecurityClusterBinding:
 		return manual("Cluster-wide binding grants broad access", "A cluster role binding grants permissions that may exceed the workload's intended scope.", "Review the binding subject and role rules, then reduce access through the authorization source.", "clusterrolebinding")
+	case scanner.CategoryFalcoSecurityAlert:
+		return ruleSpec{"Falco runtime security anomaly detected", "Falco detected unauthorized process execution, suspicious syscall, or security policy violation.", "Review Falco alert details and forensic logs, isolate or replace the compromised pod, or cordon the node if host escape is suspected.", ActionRestartPod, "pod", "describe"}
 	case scanner.CategoryEKSClusterHealth:
 		return manual("Cluster health signal is degraded", "The cluster integration reported a control-plane or managed-node health anomaly.", "Inspect cluster and node health through the provider's read-only diagnostics.", "nodes")
 	case scanner.CategoryWarningEvent:

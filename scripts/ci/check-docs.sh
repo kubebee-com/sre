@@ -120,8 +120,8 @@ total=$((covered + partial + missing))
 }
 
 analyzer_count=$(grep -c 'analyzerAdapter{info:' pkg/scanner/contract.go)
-[[ "$analyzer_count" -eq 25 ]] || {
-	printf 'docs check failed: built-in analyzer count is %s, expected 25\n' "$analyzer_count" >&2
+[[ "$analyzer_count" -eq 29 ]] || {
+	printf 'docs check failed: built-in analyzer count is %s, expected 29\n' "$analyzer_count" >&2
 	exit 1
 }
 

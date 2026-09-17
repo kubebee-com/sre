@@ -58,6 +58,7 @@ func (s *ClusterScanner) RegisteredAnalyzers() []Analyzer {
 		analyzerAdapter{info: AnalyzerInfo{Name: "VulnerabilityAnalyzer", Resource: "Pod", Description: "Scans container images for vulnerabilities, CVEs, and unpinned tags", DocsURL: "https://kubernetes.io/docs/concepts/security/"}, run: s.scanPodVulnerabilities},
 		analyzerAdapter{info: AnalyzerInfo{Name: "ClusterSecurityAnalyzer", Resource: "Security", Description: "Audits cluster environment for isolation, node pressure, and configuration risks", DocsURL: "https://kubernetes.io/docs/concepts/security/"}, run: s.scanClusterSecurity},
 		analyzerAdapter{info: AnalyzerInfo{Name: "AppUpgradeAnalyzer", Resource: "App", Description: "Checks workloads and Helm releases for available app version or chart upgrades", DocsURL: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"}, run: s.scanAppUpgrades},
+		analyzerAdapter{info: AnalyzerInfo{Name: "FalcoSecurityAnalyzer", Resource: "SecurityEvent", Description: "Detects runtime security intrusions and behavioral violations reported by Falco", DocsURL: "https://falco.org/docs/"}, run: s.scanFalcoEvents},
 	}
 	if s != nil && s.custom != nil {
 		analyzers = append(analyzers, s.custom.List()...)
@@ -320,32 +321,139 @@ func analyzerIssueFingerprint(issue *Issue) string {
 	return fmt.Sprintf("issue/v1|%s|%s|%s|%s|%s", issueFingerprint(issue), issue.Namespace, issue.Kind, issue.Name, issue.Category)
 }
 
-func deduplicateIssues(issues []*Issue) []*Issue {
-	seen := make(map[string]*Issue, len(issues))
-	for _, issue := range issues {
-		if issue == nil {
+// DeduplicateIssues merges identical or redundant findings into a single canonical issue.
+// Issues are deduplicated by ID (if present) and by semantic identity (Namespace, Kind, Name, Category, Summary).
+func DeduplicateIssues(issues []*Issue) []*Issue {
+	byId := make(map[string]*Issue, len(issues))
+	bySemantic := make(map[string]*Issue, len(issues))
+	order := make([]*Issue, 0, len(issues))
+
+	for _, raw := range issues {
+		if raw == nil {
 			continue
 		}
+		issue := cloneIssue(raw)
 		normalizeIssue(issue, issue.DocsURL)
-		key := analyzerIssueFingerprint(issue)
-		if existing, ok := seen[key]; ok {
-			names := appendUniqueField(append([]string(nil), existing.AnalyzerNames...), issue.AnalyzerNames...)
-			sort.Strings(names)
-			if issueLess(issue, existing) {
-				issue.AnalyzerNames = names
-				seen[key] = issue
-			} else {
-				existing.AnalyzerNames = names
+
+		semKey := fmt.Sprintf("%s|%s|%s|%s|%s", issue.Namespace, issue.Kind, issue.Name, issue.Category, issue.Summary)
+		var existing *Issue
+		if issue.ID != "" {
+			existing = byId[issue.ID]
+		}
+		if existing == nil {
+			existing = bySemantic[semKey]
+		}
+
+		if existing != nil {
+			mergeIssues(existing, issue)
+			if issue.ID != "" {
+				byId[issue.ID] = existing
 			}
+			if existing.ID != "" {
+				byId[existing.ID] = existing
+			}
+			bySemantic[semKey] = existing
 		} else {
-			seen[key] = issue
+			if issue.ID != "" {
+				byId[issue.ID] = issue
+			}
+			bySemantic[semKey] = issue
+			order = append(order, issue)
 		}
 	}
-	result := make([]*Issue, 0, len(seen))
-	for _, issue := range seen {
-		result = append(result, issue)
+
+	seen := make(map[*Issue]bool, len(order))
+	result := make([]*Issue, 0, len(order))
+	for _, issue := range order {
+		if !seen[issue] {
+			seen[issue] = true
+			result = append(result, issue)
+		}
 	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return issueLess(result[i], result[j])
+	})
 	return result
+}
+
+func deduplicateIssues(issues []*Issue) []*Issue {
+	return DeduplicateIssues(issues)
+}
+
+func mergeIssues(target, source *Issue) {
+	if target == nil || source == nil || target == source {
+		return
+	}
+	target.AnalyzerNames = appendUniqueField(target.AnalyzerNames, source.AnalyzerNames...)
+	sort.Strings(target.AnalyzerNames)
+
+	if !source.FirstObserved.IsZero() {
+		if target.FirstObserved.IsZero() || source.FirstObserved.Before(target.FirstObserved) {
+			target.FirstObserved = source.FirstObserved
+		}
+	}
+	if !source.LastObserved.IsZero() {
+		if target.LastObserved.IsZero() || source.LastObserved.After(target.LastObserved) {
+			target.LastObserved = source.LastObserved
+		}
+	}
+
+	if target.TargetUID == "" && source.TargetUID != "" {
+		target.TargetUID = source.TargetUID
+	}
+	if target.TargetResourceVersion == "" && source.TargetResourceVersion != "" {
+		target.TargetResourceVersion = source.TargetResourceVersion
+	}
+
+	if severityRank(source.Severity) > severityRank(target.Severity) {
+		target.Severity = source.Severity
+	}
+
+	if target.Parent == nil && source.Parent != nil {
+		target.Parent = source.Parent
+	}
+
+	if len(source.Details) > len(target.Details) {
+		target.Details = source.Details
+	}
+	if target.LogsSnippet == "" && source.LogsSnippet != "" {
+		target.LogsSnippet = source.LogsSnippet
+	}
+	if target.SpecSnippet == "" && source.SpecSnippet != "" {
+		target.SpecSnippet = source.SpecSnippet
+	}
+	if target.DocsURL == "" && source.DocsURL != "" {
+		target.DocsURL = source.DocsURL
+	}
+
+	for _, ev := range source.Events {
+		target.Events = appendUniqueField(target.Events, ev)
+	}
+	if len(target.Events) > maxIssueEventCount {
+		target.Events = target.Events[:maxIssueEventCount]
+	}
+
+	if target.ID == "" && source.ID != "" {
+		target.ID = source.ID
+	}
+	if target.Group == "" && source.Group != "" {
+		target.Group = source.Group
+	}
+}
+
+func severityRank(s Severity) int {
+	switch s {
+	case SeverityCritical:
+		return 4
+	case SeverityHigh:
+		return 3
+	case SeverityMedium:
+		return 2
+	case SeverityLow:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func issueLess(left, right *Issue) bool {

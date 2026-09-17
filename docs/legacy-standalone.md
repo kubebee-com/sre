@@ -91,7 +91,7 @@ runtime config projection.
 
 ## Analyzer Coverage
 
-The typed scanner currently registers 25 built-in analyzers:
+The typed scanner currently registers 29 built-in analyzers:
 
 `PodAnalyzer`, `EventAnalyzer`, `LogAnalyzer`, `DeploymentAnalyzer`, `StatefulSetAnalyzer`,
 `DaemonSetAnalyzer`, `ReplicaSetAnalyzer`, `JobAnalyzer`, `CronJobAnalyzer`,
@@ -100,7 +100,8 @@ The typed scanner currently registers 25 built-in analyzers:
 `PersistentVolumeClaimAnalyzer`, `StorageAnalyzer`, `NodeAnalyzer`,
 `HPAAnalyzer`, `HPATargetAnalyzer`, `PDBAnalyzer`, `PDBSelectorAnalyzer`,
 `WorkloadGraphAnalyzer`, `AdmissionWebhookAnalyzer`, `ConfigMapAnalyzer`, and
-`SecurityAnalyzer`.
+`SecurityAnalyzer`, `VulnerabilityAnalyzer`, `ClusterSecurityAnalyzer`,
+`AppUpgradeAnalyzer`, and `FalcoSecurityAnalyzer`.
 
 The dynamic scanner can additionally expose capability-aware analyzers for:
 

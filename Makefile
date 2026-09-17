@@ -4,8 +4,13 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || printf 'd
 REVISION ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf 'unknown')
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 IMAGE_TAG ?= $(VERSION)
+SRE_PLAYWRIGHT_MODULE ?=
+SRE_LEGACY_DASHBOARD_CHROMIUM ?= /snap/bin/chromium
+SRE_LEGACY_DASHBOARD_ARTIFACTS ?=
 
-.PHONY: all build test run version check check-docs check-manifests check-image-metadata check-helm kind-shell-test unified-runner-test ci-syntax-test kind-test docker-build docker-push clean
+export SRE_LEGACY_DASHBOARD_URL SRE_PLAYWRIGHT_MODULE SRE_LEGACY_DASHBOARD_CHROMIUM SRE_LEGACY_DASHBOARD_ARTIFACTS SRE_UI_TOKEN
+
+.PHONY: all build test run version check check-docs check-manifests check-image-metadata check-helm kind-shell-test unified-runner-test ci-syntax-test kind-test legacy-browser-test docker-build docker-push clean
 
 all: test build
 
@@ -53,6 +58,15 @@ ci-syntax-test:
 	@for file in scripts/ci/*.cjs; do node --check "$$file"; done
 	@git diff --check
 	@if git rev-parse --verify HEAD^ >/dev/null 2>&1; then git diff --check HEAD^; fi
+
+legacy-browser-test:
+	@test -n "$${SRE_LEGACY_DASHBOARD_URL}" || { printf '%s\n' 'SRE_LEGACY_DASHBOARD_URL is required' >&2; exit 1; }
+	@test -n "$${SRE_UI_TOKEN}" || { printf '%s\n' 'SRE_UI_TOKEN is required' >&2; exit 1; }
+	@test -n "$${SRE_PLAYWRIGHT_MODULE}" || { printf '%s\n' 'SRE_PLAYWRIGHT_MODULE is required' >&2; exit 1; }
+	@config="$$(mktemp)"; \
+	trap 'rm -f "$$config"' EXIT; \
+	node -e 'const fs = require("node:fs"); const output = process.argv[1]; fs.writeFileSync(output, JSON.stringify({url: process.env.SRE_LEGACY_DASHBOARD_URL, module: process.env.SRE_PLAYWRIGHT_MODULE, chromium: process.env.SRE_LEGACY_DASHBOARD_CHROMIUM, artifacts: process.env.SRE_LEGACY_DASHBOARD_ARTIFACTS || ""}));' "$$config"; \
+	node scripts/ci/legacy-dashboard-browser.cjs "$$config"
 
 kind-test:
 	./scripts/ci/unified-kind.sh

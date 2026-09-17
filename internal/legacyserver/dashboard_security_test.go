@@ -152,3 +152,124 @@ func TestDashboardPlaybookContentRemainsText(t *testing.T) {
 		t.Fatalf("dashboard DOM security check: %v\n%s", err, output)
 	}
 }
+
+func TestDashboardShellAndModalContract(t *testing.T) {
+	index, err := staticFS.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read embedded dashboard index: %v", err)
+	}
+	app, err := staticFS.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read embedded dashboard app: %v", err)
+	}
+	indexText := string(index)
+	appText := string(app)
+
+	flexRule := strings.Index(indexText, ".flex {")
+	modalHiddenRule := strings.Index(indexText, "#modal-backdrop.hidden")
+	if flexRule < 0 {
+		t.Fatal("dashboard styles are missing the generic .flex rule")
+	}
+	if modalHiddenRule < 0 || modalHiddenRule <= flexRule {
+		t.Fatalf("dashboard modal needs a selector-specific #modal-backdrop.hidden rule after .flex so .flex cannot override .hidden")
+	}
+	if !regexp.MustCompile(`#modal-backdrop\.hidden\s*\{\s*display:\s*none\s*;?\s*\}`).MatchString(indexText[modalHiddenRule:]) {
+		t.Fatal("#modal-backdrop.hidden must set display: none")
+	}
+
+	dialogText := dashboardDialogMarkup(t, indexText)
+	for _, marker := range []string{
+		`role="dialog"`,
+		`aria-modal="true"`,
+		`aria-labelledby="modal-title"`,
+		`id="modal-title"`,
+		`id="modal-content"`,
+		`aria-label="Close Resource Logs"`,
+		`<button type="button"`,
+	} {
+		if !strings.Contains(dialogText, marker) {
+			t.Errorf("dashboard modal is missing %q", marker)
+		}
+	}
+
+	for _, marker := range []string{
+		`id="global-nav"`,
+		`id="left-nav"`,
+		`data-nav-group`,
+		`id="cluster-context"`,
+		`id="triage-queue"`,
+		`id="issue-detail"`,
+		`id="evidence-panel"`,
+		`id="approval-panel"`,
+		`id="metrics-panel"`,
+		`id="settings-panel"`,
+		`id="playbook-panel"`,
+		`id="audit-panel"`,
+		`id="stat-issues"`,
+		`id="section-approvals"`,
+		`id="tab-metrics"`,
+		`id="section-metrics"`,
+		`id="settings-provider"`,
+	} {
+		if !strings.Contains(indexText, marker) {
+			t.Errorf("dashboard shell is missing approved marker %q", marker)
+		}
+	}
+	for _, marker := range []string{`data-issue-row`, `data-issue-name`, `data-action="resource-logs"`} {
+		if !strings.Contains(appText, marker) {
+			t.Errorf("dashboard app is missing generated marker %q", marker)
+		}
+	}
+}
+
+func dashboardDialogMarkup(t *testing.T, indexText string) string {
+	t.Helper()
+
+	modalPattern := regexp.MustCompile(`(?is)<([A-Za-z][A-Za-z0-9:-]*)\b[^>]*\bid\s*=\s*["']modal-backdrop["'][^>]*>`)
+	modalMatch := modalPattern.FindStringSubmatchIndex(indexText)
+	if len(modalMatch) != 4 {
+		t.Fatal("dashboard is missing #modal-backdrop")
+	}
+	modalStart := modalMatch[0]
+	modalEnd := modalMatch[1]
+	modalTagName := indexText[modalMatch[2]:modalMatch[3]]
+	modalText := dashboardElementMarkup(t, indexText, modalStart, modalEnd, modalTagName)
+
+	dialogPattern := regexp.MustCompile(`(?is)<([A-Za-z][A-Za-z0-9:-]*)\b[^>]*\brole\s*=\s*["']dialog["'][^>]*>`)
+	match := dialogPattern.FindStringSubmatchIndex(modalText)
+	if len(match) != 4 {
+		t.Fatal("dashboard is missing a role=dialog element inside #modal-backdrop")
+	}
+	openStart := match[0]
+	openEnd := match[1]
+	tagName := modalText[match[2]:match[3]]
+	return dashboardElementMarkup(t, modalText, openStart, openEnd, tagName)
+}
+
+func dashboardElementMarkup(t *testing.T, html string, openStart, openEnd int, tagName string) string {
+	t.Helper()
+
+	tagPattern := regexp.MustCompile(`(?is)</?` + regexp.QuoteMeta(tagName) + `(?:\s[^>]*?)?/?>`)
+	depth := 1
+	for cursor := openEnd; cursor < len(html); {
+		tag := tagPattern.FindStringIndex(html[cursor:])
+		if tag == nil {
+			t.Fatalf("dashboard <%s> element is not closed", tagName)
+		}
+		tagStart := cursor + tag[0]
+		tagEnd := cursor + tag[1]
+		tagText := html[tagStart:tagEnd]
+		if strings.HasPrefix(strings.TrimSpace(tagText), "</") {
+			depth--
+		} else if !strings.HasSuffix(strings.TrimSpace(tagText), "/>") {
+			depth++
+		}
+		if depth == 0 {
+			return html[openStart:tagEnd]
+		}
+		cursor = tagEnd
+	}
+
+	t.Fatalf("dashboard <%s> element is not closed", tagName)
+	return ""
+}

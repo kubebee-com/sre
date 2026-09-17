@@ -96,6 +96,7 @@ const (
 	CategoryEKSClusterHealth          IssueCategory = "EKSClusterHealth"
 	CategoryPodVulnerability          IssueCategory = "PodVulnerability"
 	CategoryClusterSecurityRisk       IssueCategory = "ClusterSecurityRisk"
+	CategoryFalcoSecurityAlert        IssueCategory = "FalcoSecurityAlert"
 	CategoryAppUpdateAvailable        IssueCategory = "AppUpdateAvailable"
 
 	// Generic events
@@ -136,7 +137,7 @@ func AllIssueCategories() []IssueCategory {
 		CategoryConfigMapUnused, CategoryConfigMapTooLarge, CategoryConfigMapReferenceMissing,
 		CategoryWebhookServiceMissing, CategoryWebhookNoActivePods, CategoryWebhookTargetMissing,
 		CategorySecurityPrivilege, CategorySecurityClusterBinding, CategoryEKSClusterHealth,
-		CategoryPodVulnerability, CategoryClusterSecurityRisk, CategoryAppUpdateAvailable,
+		CategoryPodVulnerability, CategoryClusterSecurityRisk, CategoryFalcoSecurityAlert, CategoryAppUpdateAvailable,
 		CategoryWarningEvent, CategoryGatewayClassNotAccepted, CategoryGatewayNotAccepted,
 		CategoryGatewayNotProgrammed, CategoryGatewayListenerInvalid, CategoryGatewaySpecInvalid,
 		CategoryHTTPRouteNoParent, CategoryHTTPRouteParentNotAccepted, CategoryHTTPRouteRefsNotResolved,
@@ -162,7 +163,8 @@ const (
 func ResolveFindingGroup(category IssueCategory) FindingGroup {
 	switch category {
 	case CategoryPodVulnerability, CategoryClusterSecurityRisk,
-		CategorySecurityPrivilege, CategorySecurityClusterBinding:
+		CategorySecurityPrivilege, CategorySecurityClusterBinding,
+		CategoryFalcoSecurityAlert:
 		return GroupVulnerability
 
 	case CategoryAppUpdateAvailable, CategoryStorageClassDeprecated:

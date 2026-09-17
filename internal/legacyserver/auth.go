@@ -263,7 +263,9 @@ func isPublicEndpoint(path string) bool {
 		path == "/auth/logout" ||
 		path == "/api/auth/config" ||
 		path == "/api/auth/me" ||
-		path == "/api/auth/logout"
+		path == "/api/auth/logout" ||
+		path == "/api/webhooks/falco" ||
+		path == "/api/v1/webhooks/falco"
 }
 
 func rejectLegacyIdentityMiddleware(next http.Handler) http.Handler {

@@ -1083,6 +1083,10 @@ func generateIssueID(namespace, kind, name, discriminator string) string {
 	return makeID(namespace, kind, name, discriminator)
 }
 
+func GenerateIssueID(namespace, kind, name, discriminator string) string {
+	return generateIssueID(namespace, kind, name, discriminator)
+}
+
 func makeID(namespace, kind, name, reason string) string {
 	raw := fmt.Sprintf("%s:%s:%s:%s", namespace, kind, name, reason)
 	hash := sha256.Sum256([]byte(raw))

@@ -1,5 +1,10 @@
 # KubeBee SRE K8sGPT Parity Roadmap
 
+The cloud-native runtime and supply-chain closure criteria are maintained in
+the [cloud-native evidence checklist](kubebee-sre-k8sgpt-cncf-checklist.md).
+Its status is independent of the 45-row K8sGPT parity count and must include
+live-cluster evidence before a release is described as fully deployed.
+
 This roadmap turns the [feature-gap table](kubebee-sre-k8sgpt-feature-gap.md) into dependency-ordered implementation work. It is deliberately safety-first: KubeBee SRE's approval gate, deterministic fallback, and sanitized evidence remain requirements while parity is added. A package is closed only when its acceptance evidence is linked from the [evidence index](kubebee-sre-k8sgpt-evidence.md) and the corresponding `KG-*` rows can move to `Covered` or an explicitly tested safer equivalent.
 
 ## Closure Gate

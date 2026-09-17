@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kubebee-com/sre/pkg/buildinfo"
+	"github.com/kubebee-com/sre/pkg/falco"
 	"github.com/kubebee-com/sre/pkg/remediation"
 	"github.com/kubebee-com/sre/pkg/sanitizer"
 	"github.com/kubebee-com/sre/pkg/scanner"
@@ -1113,4 +1115,69 @@ func writeDecodeError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeError(w, http.StatusBadRequest, "invalid request payload")
+}
+
+func (s *Server) handleFalcoWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	secret := os.Getenv("SRE_FALCO_WEBHOOK_SECRET")
+	events, err := falco.ParseWebhookPayload(w, r, secret)
+	if err != nil {
+		switch {
+		case errors.Is(err, falco.ErrUnauthorized):
+			s.writeError(w, http.StatusUnauthorized, "invalid or missing webhook authentication token")
+		case errors.Is(err, falco.ErrPayloadTooLarge):
+			s.writeError(w, http.StatusRequestEntityTooLarge, "payload exceeds maximum limit")
+		case errors.Is(err, falco.ErrInvalidJSON):
+			s.writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		default:
+			s.writeError(w, http.StatusBadRequest, "unable to process webhook: "+err.Error())
+		}
+		return
+	}
+
+	var newIssues []*scanner.Issue
+	for _, ev := range events {
+		if ev == nil {
+			continue
+		}
+		kind := "Pod"
+		name := ev.PodName()
+		if name == "" {
+			kind = "Node"
+			name = ev.Hostname
+			if name == "" {
+				name = "cluster"
+			}
+		}
+		ns := ev.Namespace()
+		if ns == "" {
+			ns = "default"
+		}
+		issue := &scanner.Issue{
+			ID:            scanner.GenerateIssueID(ns, kind, name, string(scanner.CategoryFalcoSecurityAlert)+"-"+ev.Rule),
+			Namespace:     ns,
+			Kind:          kind,
+			Name:          name,
+			Severity:      ev.ScannerSeverity(),
+			Category:      scanner.CategoryFalcoSecurityAlert,
+			Summary:       fmt.Sprintf("Falco security alert [%s]: %s on %s %s", ev.Priority, ev.Rule, kind, name),
+			Details:       ev.Output,
+			Events:        []string{ev.Output},
+			FirstObserved: ev.Time,
+			LastObserved:  ev.Time,
+		}
+		newIssues = append(newIssues, issue)
+	}
+
+	if len(newIssues) > 0 {
+		s.UpdateScanResults(newIssues)
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":           "accepted",
+		"events_processed": len(events),
+	})
 }

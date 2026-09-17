@@ -156,6 +156,40 @@ func reconcileReport(entries map[string]HistoryEntry, coverage map[string]Histor
 		if stale {
 			continue
 		}
+		// Resolve and merge any duplicate entry under a legacy/different fingerprint
+		for oldKey, oldEntry := range entries {
+			if oldKey == fingerprint || oldEntry.Issue == nil {
+				continue
+			}
+			sameID := raw.ID != "" && oldEntry.Issue.ID == raw.ID
+			sameSemantic := oldEntry.Issue.Namespace == raw.Namespace &&
+				oldEntry.Issue.Kind == raw.Kind &&
+				oldEntry.Issue.Name == raw.Name &&
+				oldEntry.Issue.Category == raw.Category &&
+				oldEntry.Issue.Summary == raw.Summary
+			if sameID || sameSemantic {
+				if !exists {
+					entry = HistoryEntry{
+						SchemaVersion: historySchemaVersion,
+						Fingerprint:   fingerprint,
+						FirstSeen:     oldEntry.FirstSeen,
+						Occurrences:   oldEntry.Occurrences,
+					}
+					exists = true
+				} else {
+					if !oldEntry.FirstSeen.IsZero() && (entry.FirstSeen.IsZero() || oldEntry.FirstSeen.Before(entry.FirstSeen)) {
+						entry.FirstSeen = oldEntry.FirstSeen
+					}
+					entry.Occurrences += oldEntry.Occurrences
+				}
+				if oldEntry.Issue != nil {
+					raw.AnalyzerNames = appendUniqueField(raw.AnalyzerNames, oldEntry.Issue.AnalyzerNames...)
+				}
+				oldEntry.Resolved = true
+				oldEntry.LastReportStartedAt = report.StartedAt
+				entries[oldKey] = oldEntry
+			}
+		}
 		if !exists {
 			entry = HistoryEntry{SchemaVersion: historySchemaVersion, Fingerprint: fingerprint, FirstSeen: report.FinishedAt}
 		}

@@ -1,19 +1,23 @@
 // Kubebee SRE Agent Frontend Application
 
-let currentTab = 'approvals';
+let currentTab = 'anomalies';
 let activeIssues = [];
 let cleanablePods = [];
 const API_TOKEN_STORAGE_KEY = 'sre-agent-api-token';
 
 function initializeDashboard() {
   const authForm = document.getElementById('auth-form');
-  if (authForm && !authForm.dataset.authBootstrap) authForm.addEventListener('submit', event => {
+  if (authForm) authForm.addEventListener('submit', event => {
     event.preventDefault();
     login();
   });
   document.addEventListener('click', handleDashboardClick);
+  document.addEventListener('change', handleDashboardChange);
+  document.addEventListener('input', handleDashboardInput);
+  document.addEventListener('keydown', handleDashboardKeydown);
   document.addEventListener('submit', handlePlaybookSubmit);
 
+  switchTab('anomalies');
   loadStatus();
   loadProposals();
   loadIssues();
@@ -25,10 +29,26 @@ function initializeDashboard() {
 }
 
 function handleDashboardClick(event) {
+  if (event.target instanceof Element && event.target.id === 'modal-backdrop') {
+    closeModal();
+    return;
+  }
   const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
   if (!target) return;
 
   switch (target.dataset.action) {
+    case 'nav-section':
+      switchTab(target.dataset.tab || 'anomalies');
+      break;
+    case 'trigger-scan':
+      triggerScan();
+      break;
+    case 'logout':
+      logout();
+      break;
+    case 'close-modal':
+      closeModal();
+      break;
     case 'playbook-tab':
       switchTab('playbooks');
       break;
@@ -44,9 +64,18 @@ function handleDashboardClick(event) {
     case 'reject-proposal':
       rejectProposal(target.dataset.proposalId);
       break;
-    case 'show-logs': {
+    case 'show-logs':
+    case 'resource-logs': {
       const issue = activeIssues.find(item => String(item.id) === target.dataset.issueId);
-      if (issue) showLogsModal(issue.name, issue.logs_snippet);
+      if (issue) {
+        renderIssueDetail(issue);
+        showLogsModal(issue.name, issue.logs_snippet);
+      }
+      break;
+    }
+    case 'select-issue': {
+      const issue = activeIssues.find(item => String(item.id) === target.dataset.issueId);
+      if (issue) renderIssueDetail(issue);
       break;
     }
     case 'ask-ai':
@@ -55,8 +84,53 @@ function handleDashboardClick(event) {
     case 'clean-pod':
       cleanSinglePod(target.dataset.namespace, target.dataset.podName);
       break;
+    case 'metrics-refresh':
+      loadDashboardMetrics();
+      break;
+    case 'hygiene-refresh':
+      loadCleanablePods();
+      break;
+    case 'clean-selected':
+      cleanSelectedPods(false);
+      break;
+    case 'toggle-pods':
+      toggleSelectAllPods();
+      break;
+    case 'chat-send':
+      sendChatMessage();
+      break;
+    case 'save-webhook':
+      saveWebhookConfig();
+      break;
+    case 'test-alert':
+      testWebhookAlert();
+      break;
     default:
       break;
+  }
+}
+
+function handleDashboardChange(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.dataset.action === 'proposal-filter') loadProposals();
+  if (target.dataset.action === 'issue-filter') applyAnomalyFilters();
+  if (target.dataset.action === 'toggle-pods') toggleSelectAllPods();
+}
+
+function handleDashboardInput(event) {
+  const target = event.target;
+  if (target instanceof Element && target.dataset.action === 'issue-filter') applyAnomalyFilters();
+}
+
+function handleDashboardKeydown(event) {
+  if (event.key === 'Escape') {
+    const modal = document.getElementById('modal-backdrop');
+    if (modal && !modal.classList.contains('hidden')) closeModal();
+  }
+  if (event.key === 'Enter' && event.target instanceof Element && event.target.dataset.action === 'chat-input') {
+    event.preventDefault();
+    sendChatMessage();
   }
 }
 
@@ -157,6 +231,8 @@ function apiFetch(input, options = {}) {
 }
 
 function switchTab(tab) {
+  const aliases = { history: 'anomalies', audit: 'approvals' };
+  tab = aliases[tab] || tab;
   currentTab = tab;
   ['approvals', 'anomalies', 'metrics', 'analyzers', 'hygiene', 'chat', 'playbooks', 'settings'].forEach(t => {
     const el = document.getElementById(`section-${t}`);
@@ -168,6 +244,11 @@ function switchTab(tab) {
       if (el) el.classList.add('hidden');
       if (tabBtn) tabBtn.classList.remove('active');
     }
+  });
+  document.querySelectorAll('#global-nav [data-action="nav-section"], #left-nav [data-action="nav-section"]').forEach(button => {
+    const active = (aliases[button.dataset.tab] || button.dataset.tab) === tab;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-current', active ? 'page' : 'false');
   });
 
   refreshActiveTab();
@@ -425,7 +506,8 @@ async function rejectProposal(id) {
 async function loadIssues() {
   try {
     const res = await apiFetch('/api/issues');
-    activeIssues = await res.json();
+    const payload = await res.json();
+    activeIssues = Array.isArray(payload) ? payload : [];
     applyAnomalyFilters();
   } catch (err) {
     console.error('Failed to load issues:', err);
@@ -445,30 +527,84 @@ function applyAnomalyFilters() {
   });
 
   const container = document.getElementById('issues-container');
+  if (!container) return;
   if (filtered.length === 0) {
     container.innerHTML = `<div class="card p-6 text-center text-gray-500 text-sm">No anomalies matching current filter.</div>`;
     return;
   }
 
-  container.innerHTML = filtered.map(i => `
-    <div class="card p-4 space-y-2">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span class="text-xs px-2 py-0.5 rounded font-mono ${getSeverityBadge(i.severity)}">${escapeHtml(i.severity)}</span>
-          <span class="text-xs px-2 py-0.5 rounded font-mono ${getGroupBadge(i.group)}"><i class="fa-solid ${getGroupIcon(i.group)} mr-1"></i>${escapeHtml(i.group || 'Improvement')}</span>
-          <span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono">${escapeHtml(i.kind)}</span>
-          <span class="text-xs font-bold text-white">${i.namespace ? escapeHtml(i.namespace) + '/' : ''}${escapeHtml(i.name)}</span>
-          <span class="text-xs text-gray-400 font-mono">(${escapeHtml(i.category)})</span>
-        </div>
-        <div class="flex items-center gap-2">
-          ${i.logs_snippet ? `<button type="button" data-action="show-logs" data-issue-id="${escapeHtml(i.id)}" class="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs"><i class="fa-solid fa-file-lines mr-1"></i>Logs</button>` : ''}
-          <button type="button" data-action="ask-ai" data-issue-id="${escapeHtml(i.id)}" class="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-400 border border-blue-500/50 rounded text-xs"><i class="fa-solid fa-robot mr-1"></i>Ask AI</button>
-        </div>
-      </div>
-      <div class="text-xs text-gray-300 font-medium">${escapeHtml(i.summary)}</div>
-      <div class="text-xs text-gray-400">${escapeHtml(i.details)}</div>
-    </div>
-  `).join('');
+  container.innerHTML = filtered.map(i => {
+    const issueID = escapeHtml(i.id);
+    const logButton = i.logs_snippet
+      ? '<button type="button" data-action="resource-logs" data-issue-id="' + issueID + '" class="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs">Resource Logs</button>'
+      : '';
+    const namespace = i.namespace ? escapeHtml(i.namespace) + '/' : '';
+    return '<div class="card p-4 space-y-2" data-issue-row data-issue-id="' + issueID + '">' +
+      '<div class="flex flex-wrap items-center justify-between gap-2">' +
+        '<button type="button" data-action="select-issue" data-issue-id="' + issueID + '" class="flex min-w-0 flex-wrap items-center gap-2 text-left">' +
+          '<span class="text-xs px-2 py-0.5 rounded font-mono ' + getSeverityBadge(i.severity) + '">' + escapeHtml(i.severity) + '</span>' +
+          '<span class="text-xs px-2 py-0.5 rounded font-mono ' + getGroupBadge(i.group) + '">' + escapeHtml(i.group || 'Improvement') + '</span>' +
+          '<span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono">' + escapeHtml(i.kind) + '</span>' +
+          '<span class="text-xs font-bold text-white" data-issue-name="' + escapeHtml(i.name) + '">' + escapeHtml(i.name) + '</span>' +
+          '<span class="text-xs text-gray-400 font-mono">(' + escapeHtml(i.category) + ')</span>' +
+        '</button>' +
+        '<div class="issue-row-actions">' + logButton +
+          '<button type="button" data-action="ask-ai" data-issue-id="' + issueID + '" class="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-400 border border-blue-500/50 rounded text-xs">Ask AI</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="issue-row-meta">' + namespace + escapeHtml(i.name) + ' - ' + escapeHtml(i.severity) + ' - ' + escapeHtml(i.category) + '</div>' +
+      '<div class="text-xs text-gray-300 font-medium">' + escapeHtml(i.summary) + '</div>' +
+      '<div class="text-xs text-gray-400">' + escapeHtml(i.details) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function updateIssueSummary() {
+  const counts = activeIssues.reduce((result, issue) => {
+    const severity = String(issue.severity || '').toUpperCase();
+    result[severity] = (result[severity] || 0) + 1;
+    if (issue.logs_snippet || (issue.events && issue.events.length)) result.evidence += 1;
+    return result;
+  }, {CRITICAL: 0, HIGH: 0, evidence: 0});
+  setDashboardText('overview-critical', counts.CRITICAL);
+  setDashboardText('overview-high', counts.HIGH);
+  setDashboardText('overview-evidence', counts.evidence);
+  setDashboardText('overview-review', activeIssues.length);
+  setDashboardText('nav-issue-count', activeIssues.length);
+  setDashboardText('health-posture', activeIssues.some(issue => issue.severity === 'CRITICAL') ? 'Critical attention' : activeIssues.length ? 'Review required' : 'Healthy');
+}
+
+function renderIssueDetail(issue) {
+  const detail = document.getElementById('issue-detail-content');
+  const evidence = document.getElementById('evidence-content');
+  if (!detail || !evidence || !issue) return;
+  const resource = (issue.namespace ? issue.namespace + '/' : '') + (issue.name || 'Unknown resource');
+  const detailParts = [
+    resource,
+    String(issue.kind || 'Resource') + ' - ' + String(issue.category || 'Uncategorized') + ' - ' + String(issue.severity || 'Unknown'),
+    issue.summary || 'No summary supplied.',
+    issue.details || 'No additional details supplied.'
+  ];
+  detail.replaceChildren(...detailParts.map(value => {
+    const paragraph = document.createElement('p');
+    paragraph.className = 'mb-2';
+    paragraph.textContent = value;
+    return paragraph;
+  }));
+  const evidenceParts = [];
+  if (issue.logs_snippet) evidenceParts.push('Sanitized container logs available.');
+  if (Array.isArray(issue.events) && issue.events.length) evidenceParts.push(String(issue.events.length) + ' warning event(s) available.');
+  if (issue.spec_snippet) evidenceParts.push('Sanitized resource specification available.');
+  if (!evidenceParts.length) evidenceParts.push('No additional sanitized evidence was collected.');
+  evidence.replaceChildren(...evidenceParts.map(value => {
+    const paragraph = document.createElement('p');
+    paragraph.className = 'mb-2';
+    paragraph.textContent = value;
+    return paragraph;
+  }));
+  setDashboardText('issue-detail-state', issue.severity || 'Selected');
+  setDashboardText('evidence-state', issue.logs_snippet ? 'Logs available' : 'Limited evidence');
+  setDashboardText('ai-briefing', issue.summary || 'Select an issue to inspect evidence and request a bounded explanation.');
 }
 
 async function loadAnalyzers() {
@@ -722,7 +858,7 @@ async function testWebhookAlert() {
 
 async function triggerScan() {
   const spinner = document.getElementById('scan-spinner');
-  spinner.classList.add('fa-spin');
+  if (spinner) spinner.setAttribute('aria-busy', 'true');
   try {
     const res = await apiFetch('/api/scan', { method: 'POST' });
     const data = await res.json();
@@ -730,18 +866,30 @@ async function triggerScan() {
   } catch (err) {
     alert(`Scan error: ${err.message}`);
   } finally {
-    spinner.classList.remove('fa-spin');
+    if (spinner) spinner.setAttribute('aria-busy', 'false');
   }
 }
 
 function showLogsModal(title, content) {
-  document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-content').textContent = content || 'No logs captured.';
-  document.getElementById('modal-backdrop').classList.remove('hidden');
+  const modal = document.getElementById('modal-backdrop');
+  const titleElement = document.getElementById('modal-title');
+  const contentElement = document.getElementById('modal-content');
+  if (!modal || !titleElement || !contentElement) return;
+  titleElement.textContent = title || 'Resource Logs';
+  contentElement.textContent = content || 'No sanitized logs were collected.';
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('dashboard-modal-open');
+  const closeButton = modal.querySelector('[data-action="close-modal"]');
+  if (closeButton) closeButton.focus();
 }
 
 function closeModal() {
-  document.getElementById('modal-backdrop').classList.add('hidden');
+  const modal = document.getElementById('modal-backdrop');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('dashboard-modal-open');
 }
 
 function getSeverityBadge(severity) {
