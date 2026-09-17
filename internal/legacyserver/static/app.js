@@ -269,7 +269,7 @@ async function loadStatus() {
   try {
     const res = await apiFetch('/api/status');
     const data = await res.json();
-    document.getElementById('stat-issues').textContent = data.active_issues_count;
+    setDashboardText('stat-issues', activeIssues.length > 0 ? activeIssues.length : data.active_issues_count);
     document.getElementById('stat-pending').textContent = data.pending_proposals_count;
     document.getElementById('stat-completed').textContent = data.completed_proposals_count;
     setDashboardText('nav-approval-count', data.pending_proposals_count);
