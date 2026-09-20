@@ -25,6 +25,7 @@ type HistoryEntry struct {
 	Occurrences         int             `json:"occurrences"`
 	LastReportStartedAt time.Time       `json:"last_report_started_at,omitempty"`
 	Resolved            bool            `json:"resolved"`
+	ResolvedAt          time.Time       `json:"resolved_at,omitempty"`
 }
 
 type HistoryStore interface {
@@ -106,6 +107,9 @@ func NewFileHistoryStore(directory string) (*FileHistoryStore, error) {
 	if err := store.load(); err != nil {
 		return nil, err
 	}
+	if _, err := store.pruneRetentionLocked(time.Now().UTC()); err != nil {
+		return nil, err
+	}
 	return store, nil
 }
 
@@ -116,6 +120,9 @@ func (s *FileHistoryStore) Record(issues []*Issue) error {
 	if err := recordHistory(entries, issues); err != nil {
 		return err
 	}
+	if _, _, err := pruneHistory(entries, time.Now().UTC()); err != nil {
+		return err
+	}
 	if err := s.writeLocked(entries, s.coverage); err != nil {
 		return err
 	}
@@ -124,14 +131,20 @@ func (s *FileHistoryStore) Record(issues []*Issue) error {
 }
 
 func (s *FileHistoryStore) List() ([]HistoryEntry, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.pruneRetentionLocked(time.Now().UTC()); err != nil {
+		return nil, err
+	}
 	return cloneHistoryEntries(s.entries), nil
 }
 
 func (s *FileHistoryStore) ListLimit(limit int) ([]HistoryEntry, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.pruneRetentionLocked(time.Now().UTC()); err != nil {
+		return nil, err
+	}
 	return cloneHistoryEntriesLimit(s.entries, limit), nil
 }
 
@@ -204,8 +217,7 @@ func (s *FileHistoryStore) writeLocked(entries map[string]HistoryEntry, coverage
 func recordHistory(entries map[string]HistoryEntry, issues []*Issue) error {
 	now := time.Now().UTC()
 	for fingerprint, entry := range entries {
-		entry.Resolved = true
-		entries[fingerprint] = entry
+		entries[fingerprint] = markHistoryResolved(entry, now)
 	}
 	for _, issue := range issues {
 		if issue == nil {
@@ -220,6 +232,7 @@ func recordHistory(entries map[string]HistoryEntry, issues []*Issue) error {
 		entry.LastSeen = now
 		entry.Occurrences++
 		entry.Resolved = false
+		entry.ResolvedAt = time.Time{}
 		entry.Issue = SanitizeIssue(issue)
 		entries[fingerprint] = entry
 	}

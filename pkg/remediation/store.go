@@ -260,47 +260,11 @@ func NewFileProposalStore(dir string) (*FileProposalStore, error) {
 		}
 		seenIDs[proposal.ID] = struct{}{}
 	}
-	store.pruneOldProposalsLocked()
+	if err := store.pruneOldProposalsLocked(); err != nil {
+		return nil, fmt.Errorf("prune inactive proposals: %w", err)
+	}
 	opened = true
 	return store, nil
-}
-
-func (s *FileProposalStore) pruneOldProposalsLocked() {
-	if len(s.state.Proposals) <= 200 {
-		return
-	}
-	now := time.Now().UTC()
-	survived := make([]*Proposal, 0, len(s.state.Proposals))
-	validIDs := make(map[string]bool)
-
-	for _, p := range s.state.Proposals {
-		if isActiveProposalStatus(p.Status) {
-			survived = append(survived, p)
-			validIDs[p.ID] = true
-			continue
-		}
-		if now.Sub(p.UpdatedAt) < 24*time.Hour {
-			survived = append(survived, p)
-			validIDs[p.ID] = true
-		}
-	}
-	if len(survived) > 500 {
-		survived = survived[len(survived)-500:]
-		validIDs = make(map[string]bool, len(survived))
-		for _, p := range survived {
-			validIDs[p.ID] = true
-		}
-	}
-	s.state.Proposals = survived
-
-	auditSurvived := make([]AuditEvent, 0, len(s.state.Audit))
-	for _, a := range s.state.Audit {
-		if validIDs[a.ProposalID] {
-			auditSurvived = append(auditSurvived, a)
-		}
-	}
-	s.state.Audit = auditSurvived
-	_ = s.writeStateLocked(s.state)
 }
 
 func (s *FileProposalStore) Create(proposal *Proposal) error {
@@ -343,10 +307,13 @@ func (s *FileProposalStore) Get(id string) (*Proposal, error) {
 }
 
 func (s *FileProposalStore) List() ([]*Proposal, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.closed {
 		return nil, ErrStoreClosed
+	}
+	if err := s.pruneOldProposalsLocked(); err != nil {
+		return nil, err
 	}
 	return cloneAndSortProposals(s.state.Proposals), nil
 }

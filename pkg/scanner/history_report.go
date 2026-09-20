@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kubebee-com/sre/pkg/scanplan"
 )
@@ -43,6 +44,9 @@ func (s *FileHistoryStore) RecordReport(report *ScanReport) error {
 	entries, coverage := copyHistoryMap(s.entries), copyCoverage(s.coverage)
 	if !reconcileReport(entries, coverage, report) {
 		return nil
+	}
+	if _, _, err := pruneHistory(entries, time.Now().UTC()); err != nil {
+		return err
 	}
 	if err := s.writeLocked(entries, coverage); err != nil {
 		return err
@@ -125,7 +129,7 @@ func reconcileReport(entries map[string]HistoryEntry, coverage map[string]Histor
 	c = detached
 	for key, entry := range entries {
 		if entry.Issue != nil && report.StartedAt.After(entry.LastReportStartedAt) && coveredBy(c, entry.Issue.AsIssue()) {
-			entry.Resolved = true
+			entry = markHistoryResolved(entry, time.Now().UTC())
 			entry.LastReportStartedAt = report.StartedAt
 			entries[key] = entry
 		}
@@ -185,7 +189,7 @@ func reconcileReport(entries map[string]HistoryEntry, coverage map[string]Histor
 				if oldEntry.Issue != nil {
 					raw.AnalyzerNames = appendUniqueField(raw.AnalyzerNames, oldEntry.Issue.AnalyzerNames...)
 				}
-				oldEntry.Resolved = true
+				oldEntry = markHistoryResolved(oldEntry, time.Now().UTC())
 				oldEntry.LastReportStartedAt = report.StartedAt
 				entries[oldKey] = oldEntry
 			}
@@ -198,6 +202,7 @@ func reconcileReport(entries map[string]HistoryEntry, coverage map[string]Histor
 		}
 		entry.Issue = SanitizeIssue(raw)
 		entry.Resolved = false
+		entry.ResolvedAt = time.Time{}
 		entry.LastSeen = report.FinishedAt
 		entry.LastReportStartedAt = report.StartedAt
 		entry.Occurrences++
