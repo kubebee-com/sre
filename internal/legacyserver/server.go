@@ -1026,11 +1026,11 @@ func waitForDone(ctx context.Context, done <-chan struct{}) error {
 func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	enabled := s.oidcAuth != nil
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
-		"oidc_enabled":        enabled,
-		"provider_name":       "Keycloak",
-		"login_url":           "/auth/login",
-		"logout_url":          "/auth/logout",
-		"api_token_required":  s.requireAPIToken,
+		"oidc_enabled":       enabled,
+		"provider_name":      "Keycloak",
+		"login_url":          "/auth/login",
+		"logout_url":         "/auth/logout",
+		"api_token_required": s.requireAPIToken,
 	})
 }
 

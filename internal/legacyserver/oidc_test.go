@@ -87,11 +87,11 @@ func TestServerOIDCAuthenticateRequest(t *testing.T) {
 	sessionID := identity.NewID()
 	auth.sessions[sessionID] = browserSession{
 		principal: identity.Principal{
-			ID:                identity.NewID(),
-			Issuer:            auth.issuer,
-			Email:             "alice@kubeb.com",
-			IssuedAt:          time.Now(),
-			ExpiresAt:         time.Now().Add(10 * time.Minute),
+			ID:        identity.NewID(),
+			Issuer:    auth.issuer,
+			Email:     "alice@kubeb.com",
+			IssuedAt:  time.Now(),
+			ExpiresAt: time.Now().Add(10 * time.Minute),
 		},
 		expires: time.Now().Add(10 * time.Minute),
 	}
