@@ -206,8 +206,15 @@ func NewEngineWithVerificationOptions(client kubernetes.Interface, options Engin
 		outcomeObserverTimeout: outcomeObserverTimeout,
 		proposalTTL:            proposalTTL,
 	}
+	// Capture recovery state before exposing the engine to new approvals. Reading
+	// it later could misclassify a newly executing action as an interrupted one.
+	proposals, recoveryErr := store.List()
 	engine.startWorkers(workerCount)
-	go engine.recoverApprovedWork()
+	engine.workers.Add(1)
+	go func() {
+		defer engine.workers.Done()
+		engine.recoverApprovedWork(proposals, recoveryErr)
+	}()
 	return engine
 }
 
@@ -218,14 +225,16 @@ func (e *Engine) startWorkers(count int) {
 	}
 }
 
-func (e *Engine) recoverApprovedWork() {
-	proposals, err := e.store.List()
+func (e *Engine) recoverApprovedWork(proposals []*Proposal, err error) {
 	if err != nil {
 		log.Printf("Remediation: Failed to list stored proposals for recovery: %v", err)
 		return
 	}
 	log.Printf("Remediation: evaluating %d stored proposals for recovery...", len(proposals))
 	for _, proposal := range proposals {
+		if e.workerContext.Err() != nil {
+			return
+		}
 		if proposalExpired(proposal, time.Now().UTC()) {
 			switch proposal.Status {
 			case StatusPending:

@@ -393,6 +393,20 @@ func LegacyMain() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	stopRetention, err := startRetentionWorkers(ctx, map[string]any{
+		"scan-history": scanHistory, "proposals": proposalStore,
+	}, retentionSweepInterval, func(name string, removed int, sweepErr error) {
+		if sweepErr != nil {
+			log.Printf("Retention sweep failed store=%s: %s", name, sanitizeLog(cfg, sweepErr.Error()))
+			return
+		}
+		log.Printf("Retention sweep completed store=%s removed=%d", name, removed)
+	})
+	if err != nil {
+		log.Fatalf("Failed to initialize retention: %s", sanitizeLog(cfg, err.Error()))
+	}
+	defer stopRetention()
+	log.Printf("Retention policy active: resolved findings=72h terminal proposals=7d interval=%s; active work and audit records preserved", retentionSweepInterval)
 
 	// 5. Start Web UI & API Server
 	log.Printf("Startup: Launching API server goroutine...")
@@ -413,6 +427,8 @@ func LegacyMain() {
 	log.Printf("Startup: SRE Agent initialization complete, waiting for signals...")
 	<-sigCh
 	log.Println("Received termination signal, shutting down Kubebee SRE Agent...")
+	cancel()
+	stopRetention()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
@@ -1369,4 +1385,3 @@ func notifyNewProposal(ctx context.Context, notifier proposalCreationNotifier, p
 	}
 	return notifier.NotifyProposalCreated(ctx, proposal)
 }
-

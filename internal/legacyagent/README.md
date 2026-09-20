@@ -1,6 +1,10 @@
-# Historical standalone compatibility tests
+# Standalone compatibility runtime
 
-This internal package retains the old standalone regression fixtures during the
-migration. Neither sre-agent nor sre-orchestrator imports it. Its HTTP/CLI entry
-path is unexported and unavailable from the product binaries. Shared provider,
-scanner and action libraries remain the implementations used by maintained code.
+`cmd/sre-agent/managed.go` invokes the exported `LegacyMain` entrypoint for
+standalone mode. `deploy/Dockerfile` builds that compatible HTTP/gRPC service;
+managed deployments use the explicit orchestrator configuration instead.
+
+The standalone service starts a cancellation-aware retention sweep every five
+minutes and joins it before closing its stores. Inactive findings expire after
+72 hours and terminal proposals after seven days; active work and audit records
+are preserved. See `docs/retention-policy.md` for the per-store size/count budgets.
