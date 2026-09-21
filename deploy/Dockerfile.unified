@@ -4,15 +4,21 @@ ARG RUNTIME_IMAGE=cgr.dev/chainguard/static@sha256:f51c2493951313c3ad4069080b281
 ARG VERSION=dev
 ARG REVISION=unknown
 ARG BUILD_DATE=unknown
-FROM ${GO_IMAGE} AS build
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build-base
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -p 1 -trimpath \
+
+FROM build-base AS build-agent
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -p 1 -trimpath \
     -ldflags="-s -w -X github.com/kubebee-com/sre/pkg/buildinfo.Version=${VERSION} -X github.com/kubebee-com/sre/pkg/buildinfo.Revision=${REVISION} -X github.com/kubebee-com/sre/pkg/buildinfo.BuildDate=${BUILD_DATE}" \
-    -o /out/sre-agent ./cmd/sre-agent && \
-    CGO_ENABLED=0 go build -p 1 -trimpath \
+    -o /out/sre-agent ./cmd/sre-agent
+
+FROM build-base AS build-orchestrator
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -p 1 -trimpath \
     -ldflags="-s -w -X github.com/kubebee-com/sre/pkg/buildinfo.Version=${VERSION} -X github.com/kubebee-com/sre/pkg/buildinfo.Revision=${REVISION} -X github.com/kubebee-com/sre/pkg/buildinfo.BuildDate=${BUILD_DATE}" \
     -o /out/sre-orchestrator ./cmd/sre-orchestrator
 FROM ${RUNTIME_IMAGE} AS orchestrator
@@ -27,7 +33,7 @@ LABEL org.opencontainers.image.title="KubeBee SRE Orchestrator" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.licenses="Apache-2.0"
 USER 65532:65532
-COPY --from=build /out/sre-orchestrator /usr/local/bin/sre-orchestrator
+COPY --from=build-orchestrator /out/sre-orchestrator /usr/local/bin/sre-orchestrator
 ENTRYPOINT ["/usr/local/bin/sre-orchestrator"]
 FROM ${RUNTIME_IMAGE} AS agent
 ARG VERSION=dev
@@ -41,5 +47,5 @@ LABEL org.opencontainers.image.title="KubeBee SRE Agent" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.licenses="Apache-2.0"
 USER 65532:65532
-COPY --from=build /out/sre-agent /usr/local/bin/sre-agent
+COPY --from=build-agent /out/sre-agent /usr/local/bin/sre-agent
 ENTRYPOINT ["/usr/local/bin/sre-agent", "--managed"]
