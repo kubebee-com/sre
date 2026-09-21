@@ -7,7 +7,7 @@ resources:
   - ../../k8s
 
 images:
-  - name: ghcr.io/kubebee-com/sre
+  - name: ghcr.io/kubebee-com/sre-agent
     newName: sre-agent
     newTag: kind
 

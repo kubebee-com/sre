@@ -59,6 +59,8 @@ spec:
       containers:
         - name: sre-agent
           image: {{ include "sre-agent.image" . | quote }}
+          # Retain standalone HTTP/scanner mode with the unified GHCR image.
+          command: ["/usr/local/bin/sre-agent"]
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}

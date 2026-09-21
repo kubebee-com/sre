@@ -1,7 +1,13 @@
 # Unified SRE chart
 
 Install the orchestrator centrally and an agent-only release in each scoped cluster.
-Use your published images built from `deploy/Dockerfile.unified`.
+The defaults use `ghcr.io/kubebee-com/sre-orchestrator` and
+`ghcr.io/kubebee-com/sre-agent`, built from `deploy/Dockerfile.unified`.
+The bundled image tag is the published `sha-d94b738` release; override `imageTag`
+for another reviewed GHCR release. The standalone compatibility chart under
+`deploy/legacy/helm/sre-agent` uses the same agent repository with an explicit
+standalone command; it does not switch an existing standalone cluster to the
+orchestrator architecture. Its `image.digest` option supports production pinning.
 
 The orchestrator requires an existing ConfigMap with key `config.json`, using the
 deployment configuration schema in `deploy/examples/enterprise/config.json` (the

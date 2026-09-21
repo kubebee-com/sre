@@ -15,6 +15,7 @@ class UnifiedChart(unittest.TestCase):
         self.assertEqual(dep['spec']['replicas'],2)
         self.assertEqual(dep['spec']['strategy']['type'],'RollingUpdate')
         pod=dep['spec']['template']['spec']
+        self.assertEqual(pod['containers'][0]['image'], 'ghcr.io/kubebee-com/sre-orchestrator:sha-d94b738')
         self.assertFalse(pod['automountServiceAccountToken'])
         self.assertTrue(pod['topologySpreadConstraints'])
         self.assertTrue(any(d['kind']=='PodDisruptionBudget' for d in docs))
@@ -25,6 +26,8 @@ class UnifiedChart(unittest.TestCase):
         deps=[d for d in docs if d['kind']=='Deployment']
         self.assertEqual(len(deps),1)
         pod=deps[0]['spec']['template']['spec']
+        for container in pod['containers'] + pod.get('initContainers', []):
+            self.assertEqual(container['image'], 'ghcr.io/kubebee-com/sre-agent:sha-d94b738')
         self.assertEqual(len(pod['containers']),1)
         self.assertIn('--in-cluster',pod['containers'][0]['args'])
         self.assertNotIn('--execution-enabled',pod['containers'][0]['args'])

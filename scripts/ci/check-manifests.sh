@@ -44,7 +44,8 @@ if grep -Fq -- 'verbs: ["delete", "patch"]' "$ROOT_DIR/deploy/k8s/rbac.yaml" || 
 fi
 reject_text "$rendered" 'secretRef:'
 
-require_text "$rendered" 'image: ghcr.io/kubebee-com/sre:'
+require_text "$rendered" 'image: ghcr.io/kubebee-com/sre-agent:sha-d94b738'
+require_text "$rendered" '/usr/local/bin/sre-agent'
 require_text "$rendered" 'livenessProbe:'
 require_text "$rendered" 'path: /healthz'
 require_text "$rendered" 'readinessProbe:'

@@ -2,8 +2,8 @@ apiVersion: v2
 name: sre
 description: Unified SRE orchestrator and agent
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.2.1
+appVersion: "sha-d94b738"
 dependencies:
   - name: falco
     version: 9.1.0

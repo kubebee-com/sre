@@ -1,5 +1,5 @@
 BINARY_NAME ?= sre-agent
-IMAGE_NAME ?= ghcr.io/kubebee-com/sre
+IMAGE_NAME ?= ghcr.io/kubebee-com/sre-agent
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || printf 'dev')
 REVISION ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf 'unknown')
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)

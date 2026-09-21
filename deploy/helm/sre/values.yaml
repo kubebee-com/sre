@@ -1,4 +1,5 @@
-imageTag: "0.2.0"
+# Published by the verified GHCR workflow; override for a different reviewed release.
+imageTag: "sha-d94b738"
 imagePullPolicy: IfNotPresent
 tlsCASecret: ""
 orchestrator:

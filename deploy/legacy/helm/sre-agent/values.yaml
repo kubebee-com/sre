@@ -6,9 +6,9 @@ fullnameOverride: ""
 commonLabels: {}
 
 image:
-  repository: ghcr.io/kubebee-com/sre
-  # A fixed release tag is supported for development. Use digest in production.
-  tag: "0.1.0"
+  repository: ghcr.io/kubebee-com/sre-agent
+  # Published release tag. Set image.digest to its verified digest for production.
+  tag: "sha-d94b738"
   digest: ""
   pullPolicy: IfNotPresent
   pullSecrets: []

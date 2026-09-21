@@ -59,7 +59,9 @@ spec:
               readOnly: true
       containers:
         - name: sre-agent
-          image: ghcr.io/kubebee-com/sre:0.1.0
+          image: ghcr.io/kubebee-com/sre-agent:sha-d94b738
+          # Preserve standalone mode instead of the image's managed entrypoint.
+          command: ["/usr/local/bin/sre-agent"]
           imagePullPolicy: IfNotPresent
           securityContext:
             readOnlyRootFilesystem: true
