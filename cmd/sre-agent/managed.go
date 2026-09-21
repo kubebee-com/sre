@@ -55,7 +55,7 @@ func main() {
 		}
 	}
 
-	if isManaged && hasOrchestrator {
+	if hasOrchestrator {
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 		if err := agent.Run(ctx, args, os.Stdin, os.Stdout); err != nil {
