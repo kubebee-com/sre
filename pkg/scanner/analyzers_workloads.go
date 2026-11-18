@@ -3,8 +3,11 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -175,53 +178,163 @@ func (s *ClusterScanner) scanJobs(ctx context.Context, namespace string) ([]*Iss
 		return nil, err
 	}
 
+	// Only a failing Job owned by a CronJob needs the CronJobs, so they are
+	// listed on first use and at most once.
+	cronJobs := sync.OnceValues(func() (map[string]*batchv1.CronJob, error) {
+		return s.cronJobsByKey(ctx, namespace)
+	})
+	var cronJobLookupErr error
+
+	now := time.Now().UTC()
 	var issues []*Issue
-	for _, j := range jobs.Items {
-		complete := false
-		for _, cond := range j.Status.Conditions {
-			if cond.Type == "Complete" && cond.Status == "True" {
-				complete = true
-			}
-			if cond.Type == "Failed" && cond.Status == "True" {
-				issues = append(issues, &Issue{
-					ID:        generateIssueID(j.Namespace, "Job", j.Name, string(CategoryJobFailed)),
-					Namespace: j.Namespace,
-					Kind:      "Job",
-					Name:      j.Name,
-					Severity:  SeverityMedium,
-					Category:  CategoryJobFailed,
-					Summary:   fmt.Sprintf("Batch Job failed: %s", cond.Reason),
-					Details:   fmt.Sprintf("Job '%s' failed. Message: %s. Failed pods: %d", j.Name, cond.Message, j.Status.Failed),
-					TargetUID: string(j.UID), TargetResourceVersion: j.ResourceVersion,
-					FirstObserved: workloadObservedTime(cond.LastTransitionTime),
-					LastObserved:  time.Now().UTC(), Parent: ownerReferenceForObject(&j),
-				})
-			}
-		}
-		if complete {
+	for index := range jobs.Items {
+		job := &jobs.Items[index]
+		jobIssues := analyzeJobFailures(job, now)
+		if len(jobIssues) == 0 {
 			continue
 		}
-		if j.Spec.BackoffLimit != nil && j.Status.Failed > *j.Spec.BackoffLimit {
-			issues = append(issues, &Issue{
-				ID: generateIssueID(j.Namespace, "Job", j.Name, string(CategoryJobBackoffExceeded)), Namespace: j.Namespace,
-				Kind: "Job", Name: j.Name, TargetUID: string(j.UID), TargetResourceVersion: j.ResourceVersion,
-				Severity: SeverityHigh, Category: CategoryJobBackoffExceeded,
-				Summary:       fmt.Sprintf("Job exceeded its backoff limit (%d)", *j.Spec.BackoffLimit),
-				Details:       fmt.Sprintf("Job %s has %d failed pod attempts, greater than backoffLimit %d.", j.Name, j.Status.Failed, *j.Spec.BackoffLimit),
-				FirstObserved: workloadObservedTime(j.CreationTimestamp), LastObserved: time.Now().UTC(), Parent: ownerReferenceForObject(&j),
-			})
+		if owner := controllingCronJobName(job); owner != "" {
+			owners, lookupErr := cronJobs()
+			if lookupErr != nil {
+				// Without the CronJob's status the failure cannot be shown to
+				// be superseded, so it is reported.
+				cronJobLookupErr = lookupErr
+			} else if isSupersededCronJobRun(job, owners[namespaceKey(job.Namespace, owner)], now) {
+				continue
+			}
 		}
-		if j.Spec.ActiveDeadlineSeconds != nil && j.Status.StartTime != nil && time.Now().After(j.Status.StartTime.Time.Add(time.Duration(*j.Spec.ActiveDeadlineSeconds)*time.Second)) {
+		issues = append(issues, jobIssues...)
+	}
+	return issues, cronJobLookupErr
+}
+
+// cronJobsByKey indexes the CronJobs of the scanned namespace. They are a
+// dependency of the Jobs under analysis, so the plan selectors do not apply.
+func (s *ClusterScanner) cronJobsByKey(ctx context.Context, namespace string) (map[string]*batchv1.CronJob, error) {
+	list, err := s.client.BatchV1().CronJobs(namespace).List(ctx, unscopedDependencyListOptions(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("list CronJobs owning failed Jobs in namespace %q: %w", namespace, err)
+	}
+	byKey := make(map[string]*batchv1.CronJob, len(list.Items))
+	for index := range list.Items {
+		cronJob := &list.Items[index]
+		byKey[namespaceKey(cronJob.Namespace, cronJob.Name)] = cronJob
+	}
+	return byKey, nil
+}
+
+func analyzeJobFailures(j *batchv1.Job, now time.Time) []*Issue {
+	var issues []*Issue
+	complete := false
+	for _, cond := range j.Status.Conditions {
+		if cond.Type == batchv1.JobComplete && cond.Status == corev1.ConditionTrue {
+			complete = true
+		}
+		if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
 			issues = append(issues, &Issue{
-				ID: generateIssueID(j.Namespace, "Job", j.Name, string(CategoryJobDeadlineExceeded)), Namespace: j.Namespace,
-				Kind: "Job", Name: j.Name, TargetUID: string(j.UID), TargetResourceVersion: j.ResourceVersion,
-				Severity: SeverityHigh, Category: CategoryJobDeadlineExceeded,
-				Summary: fmt.Sprintf("Job %s exceeded its active deadline", j.Name), Details: "The Job ran longer than spec.activeDeadlineSeconds without completing.",
-				FirstObserved: workloadObservedTime(*j.Status.StartTime), LastObserved: time.Now().UTC(), Parent: ownerReferenceForObject(&j),
+				ID:        generateIssueID(j.Namespace, "Job", j.Name, string(CategoryJobFailed)),
+				Namespace: j.Namespace,
+				Kind:      "Job",
+				Name:      j.Name,
+				Severity:  SeverityMedium,
+				Category:  CategoryJobFailed,
+				Summary:   fmt.Sprintf("Batch Job failed: %s", cond.Reason),
+				Details:   fmt.Sprintf("Job '%s' failed. Message: %s. Failed pods: %d", j.Name, cond.Message, j.Status.Failed),
+				TargetUID: string(j.UID), TargetResourceVersion: j.ResourceVersion,
+				FirstObserved: workloadObservedTime(cond.LastTransitionTime),
+				LastObserved:  now, Parent: ownerReferenceForObject(j),
 			})
 		}
 	}
-	return issues, nil
+	if complete {
+		return issues
+	}
+	if j.Spec.BackoffLimit != nil && j.Status.Failed > *j.Spec.BackoffLimit {
+		issues = append(issues, &Issue{
+			ID: generateIssueID(j.Namespace, "Job", j.Name, string(CategoryJobBackoffExceeded)), Namespace: j.Namespace,
+			Kind: "Job", Name: j.Name, TargetUID: string(j.UID), TargetResourceVersion: j.ResourceVersion,
+			Severity: SeverityHigh, Category: CategoryJobBackoffExceeded,
+			Summary:       fmt.Sprintf("Job exceeded its backoff limit (%d)", *j.Spec.BackoffLimit),
+			Details:       fmt.Sprintf("Job %s has %d failed pod attempts, greater than backoffLimit %d.", j.Name, j.Status.Failed, *j.Spec.BackoffLimit),
+			FirstObserved: workloadObservedTime(j.CreationTimestamp), LastObserved: now, Parent: ownerReferenceForObject(j),
+		})
+	}
+	if deadline, ok := jobActiveDeadline(j); ok && now.After(deadline) {
+		issues = append(issues, &Issue{
+			ID: generateIssueID(j.Namespace, "Job", j.Name, string(CategoryJobDeadlineExceeded)), Namespace: j.Namespace,
+			Kind: "Job", Name: j.Name, TargetUID: string(j.UID), TargetResourceVersion: j.ResourceVersion,
+			Severity: SeverityHigh, Category: CategoryJobDeadlineExceeded,
+			Summary: fmt.Sprintf("Job %s exceeded its active deadline", j.Name), Details: "The Job ran longer than spec.activeDeadlineSeconds without completing.",
+			FirstObserved: workloadObservedTime(*j.Status.StartTime), LastObserved: now, Parent: ownerReferenceForObject(j),
+		})
+	}
+	return issues
+}
+
+// jobActiveDeadline returns the moment the Job's spec.activeDeadlineSeconds
+// runs out, for a Job that has a deadline and has started.
+func jobActiveDeadline(job *batchv1.Job) (time.Time, bool) {
+	if job.Spec.ActiveDeadlineSeconds == nil || job.Status.StartTime == nil {
+		return time.Time{}, false
+	}
+	return job.Status.StartTime.Add(time.Duration(*job.Spec.ActiveDeadlineSeconds) * time.Second), true
+}
+
+// controllingCronJobName returns the name of the CronJob that controls the
+// Job, or "" for a Job that no CronJob controls.
+func controllingCronJobName(job *batchv1.Job) string {
+	for _, owner := range job.OwnerReferences {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == "CronJob" {
+			return owner.Name
+		}
+	}
+	return ""
+}
+
+// isSupersededCronJobRun reports whether the owning CronJob has completed a
+// run since the Job failed. Such a failure is history: the schedule has
+// recovered, and the old Job leaves nothing to act on. A success at the very
+// moment of the failure does not count.
+func isSupersededCronJobRun(job *batchv1.Job, cronJob *batchv1.CronJob, now time.Time) bool {
+	if cronJob == nil || cronJob.Status.LastSuccessfulTime == nil {
+		return false
+	}
+	failedAt := jobFailureTime(job, now)
+	return !failedAt.IsZero() && cronJob.Status.LastSuccessfulTime.After(failedAt)
+}
+
+// jobFailureTime returns the latest moment at which the Job is known to have
+// been failing: its creation or start, the transition of its Failed condition,
+// or, while it has no terminal condition, the expiry of its active deadline.
+// A Job that started before its CronJob's last success can still breach its
+// deadline after it, and that breach is not superseded.
+func jobFailureTime(job *batchv1.Job, now time.Time) time.Time {
+	latest := job.CreationTimestamp.Time
+	consider := func(candidate time.Time) {
+		if candidate.After(latest) {
+			latest = candidate
+		}
+	}
+	if job.Status.StartTime != nil {
+		consider(job.Status.StartTime.Time)
+	}
+	terminal := false
+	for _, cond := range job.Status.Conditions {
+		if cond.Status != corev1.ConditionTrue {
+			continue
+		}
+		switch cond.Type {
+		case batchv1.JobComplete:
+			terminal = true
+		case batchv1.JobFailed:
+			terminal = true
+			consider(cond.LastTransitionTime.Time)
+		}
+	}
+	if deadline, ok := jobActiveDeadline(job); ok && !terminal && now.After(deadline) {
+		consider(deadline)
+	}
+	return latest
 }
 
 // scanCronJobs analyzes CronJobs for suspended status or failing executions

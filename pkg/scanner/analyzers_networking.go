@@ -172,13 +172,10 @@ func validIngressPath(path networkingv1.HTTPIngressPath) bool {
 }
 
 func ingressDependencyListOptions(ctx context.Context) metav1.ListOptions {
-	options := listOptionsForScan(ctx)
 	// Plan selectors choose Ingress objects. Referenced Services and Secrets
 	// may have different labels and names, so dependency lookups must be broad
 	// within the already scoped namespace.
-	options.LabelSelector = ""
-	options.FieldSelector = ""
-	return options
+	return unscopedDependencyListOptions(ctx)
 }
 
 // scanNetworkPolicies analyzes NetworkPolicies for orphaned policies that match 0 pods

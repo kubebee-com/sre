@@ -6,12 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/kubebee-com/sre/pkg/scanner"
+	"github.com/kubebee-com/sre/pkg/triage"
 )
 
 func TestNewAlertmanagerNotifierNormalizesEndpointAndRejectsInvalid(t *testing.T) {
@@ -150,6 +152,350 @@ func TestAlertmanagerNotifierSyncsFoldedSeriousAlertsFiltersPostureAndResolves(t
 	for _, resolved := range requests[2] {
 		if !resolved.EndsAt.Equal(now) {
 			t.Fatalf("resolved alert %s EndsAt = %s, want %s", resolved.Labels["fold_key"], resolved.EndsAt, now)
+		}
+	}
+}
+
+// alertSink is an Alertmanager stand-in that records every posted batch.
+type alertSink struct {
+	mu      sync.Mutex
+	batches [][]alertmanagerAlert
+}
+
+func newAlertSink(t *testing.T) (*alertSink, string) {
+	t.Helper()
+	sink := &alertSink{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var batch []alertmanagerAlert
+		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+			t.Errorf("decode alert payload: %v", err)
+		}
+		sink.mu.Lock()
+		sink.batches = append(sink.batches, batch)
+		sink.mu.Unlock()
+	}))
+	t.Cleanup(server.Close)
+	return sink, server.URL
+}
+
+// lastByFoldKey returns the alerts of the most recent batch by fold_key label.
+func (s *alertSink) lastByFoldKey(t *testing.T) map[string]alertmanagerAlert {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.batches) == 0 {
+		t.Fatal("Alertmanager received no alerts")
+	}
+	alerts := make(map[string]alertmanagerAlert)
+	for _, alert := range s.batches[len(s.batches)-1] {
+		alerts[alert.Labels["fold_key"]] = alert
+	}
+	return alerts
+}
+
+func testDiagnosis(issue *scanner.Issue) *triage.Diagnosis {
+	return &triage.Diagnosis{
+		IssueID:         issue.ID,
+		Summary:         "summary",
+		RootCause:       "root cause",
+		Severity:        issue.Severity,
+		RemediationPlan: "plan",
+		ActionType:      triage.ActionManual,
+		ProposedCommand: "kubectl describe pod worker-0 -n prod",
+		ConfidenceScore: 0.9,
+		ProviderName:    "test-provider",
+	}
+}
+
+func TestAlertmanagerNotifierEligibleIssuesAreTheFindingsThatAlert(t *testing.T) {
+	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: "http://alertmanager.invalid:9093", MinSeverity: "HIGH"})
+	if err != nil {
+		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
+	}
+	folded := []*scanner.Issue{
+		nil,
+		{ID: "critical", Severity: scanner.SeverityCritical, Category: scanner.CategoryCrashLoop, FoldKey: "fold-crash"},
+		{ID: "same-alert", Severity: scanner.SeverityCritical, Category: scanner.CategoryCrashLoop, FoldKey: "fold-crash"},
+		{ID: "posture", Severity: scanner.SeverityCritical, Category: scanner.CategorySecurityClusterBinding, FoldKey: "fold-posture"},
+		{ID: "medium", Severity: scanner.SeverityMedium, Category: scanner.CategoryPodLogError, FoldKey: "fold-medium"},
+		{ID: "high", Severity: scanner.SeverityHigh, Category: scanner.CategoryServiceNoEndpoint, FoldKey: "fold-service"},
+	}
+
+	eligible := am.EligibleIssues(folded)
+	if len(eligible) != 2 || eligible[0] != folded[1] || eligible[1] != folded[5] {
+		t.Fatalf("EligibleIssues() = %#v, want the critical and the high finding, once each", eligible)
+	}
+
+	var unconfigured *AlertmanagerNotifier
+	if got := unconfigured.EligibleIssues(folded); got != nil {
+		t.Fatalf("EligibleIssues() without Alertmanager = %#v, want nil", got)
+	}
+	unconfigured.RecordDiagnosis(folded[1], testDiagnosis(folded[1]))
+	if _, cached := unconfigured.CachedDiagnosis(folded[1]); cached {
+		t.Fatal("a notifier without Alertmanager cached a diagnosis")
+	}
+}
+
+func TestAlertmanagerNotifierAnnotatesAlertWithRecordedDiagnosis(t *testing.T) {
+	const secret = "diagnosis-secret-0123456789"
+	sink, endpoint := newAlertSink(t)
+	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: endpoint, SecretValues: []string{secret}})
+	if err != nil {
+		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
+	}
+
+	diagnosed := &scanner.Issue{
+		ID: "prod/Pod/worker-0/CrashLoop", Namespace: "prod", Kind: "Pod", Name: "worker-0",
+		Severity: scanner.SeverityCritical, Category: scanner.CategoryCrashLoop,
+		Summary:           "Pod worker-0 is in CrashLoopBackOff",
+		Details:           "Container exited with code 137 token=" + secret,
+		LogsSnippet:       strings.Repeat("panic: out of memory\n", 400),
+		FoldKey:           "fold-diagnosed",
+		OccurrenceCount:   3,
+		AffectedResources: []string{"prod/worker-0", "prod/worker-1", "prod/worker-2"},
+	}
+	undiagnosed := *diagnosed
+	undiagnosed.FoldKey = "fold-undiagnosed"
+
+	am.RecordDiagnosis(diagnosed, &triage.Diagnosis{
+		IssueID:         diagnosed.ID,
+		Summary:         "Worker runs out of memory",
+		RootCause:       "The worker exceeds its memory limit while loading " + secret + ".",
+		RemediationPlan: "Raise the memory limit and stop logging " + secret + ".",
+		ActionType:      triage.ActionGitOpsPR,
+		ProposedCommand: "kubectl describe pod worker-0 -n prod",
+		// A provider's view of severity must never reach the alert's labels.
+		Severity:        scanner.SeverityLow,
+		ConfidenceScore: 0.9,
+		ProviderName:    "test-provider",
+	})
+	if err := am.SyncFoldedIssues(context.Background(), []*scanner.Issue{diagnosed, &undiagnosed}, true); err != nil {
+		t.Fatalf("SyncFoldedIssues() error = %v", err)
+	}
+	alerts := sink.lastByFoldKey(t)
+	annotated, plain := alerts["fold-diagnosed"], alerts["fold-undiagnosed"]
+
+	analysis := annotated.Annotations["analysis"]
+	if !strings.HasPrefix(analysis, "The worker exceeds its memory limit while loading ") ||
+		!strings.HasSuffix(analysis, " Scope: 3 occurrences across prod/worker-0, prod/worker-1, prod/worker-2.") {
+		t.Fatalf("analysis = %q, want the root cause followed by the finding's scope", analysis)
+	}
+	action := annotated.Annotations["recommended_action"]
+	if !strings.HasPrefix(action, "GitOpsPR: Raise the memory limit") || !strings.HasSuffix(action, " Proposed command: kubectl describe pod worker-0 -n prod") {
+		t.Fatalf("recommended_action = %q, want action type, plan, and proposed command", action)
+	}
+	if annotated.Annotations["triage_provider"] != "test-provider" {
+		t.Fatalf("triage_provider = %q, want test-provider", annotated.Annotations["triage_provider"])
+	}
+
+	// The analysis leads the description so that long evidence cannot push it
+	// past the size bound, and the scanner's own details are still there.
+	description := annotated.Annotations["description"]
+	if len(description) > maxAlertmanagerDescBytes {
+		t.Fatalf("description is %d bytes, over the %d byte bound", len(description), maxAlertmanagerDescBytes)
+	}
+	for _, want := range []string{"Analysis: " + analysis + "\n", "Recommended action: " + action + "\n", "\nContainer exited with code 137", "\nRecent failure logs:\n"} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("description lacks %q:\n%s", want, description)
+		}
+	}
+	if !strings.HasPrefix(description, "Analysis: ") {
+		t.Fatalf("description does not lead with the analysis:\n%s", description)
+	}
+
+	// Without a diagnosis the alert is sent exactly as the scanner found it.
+	for _, annotation := range []string{"analysis", "recommended_action", "triage_provider"} {
+		if value, present := plain.Annotations[annotation]; present {
+			t.Fatalf("undiagnosed alert has %s = %q", annotation, value)
+		}
+	}
+	if !strings.HasPrefix(plain.Annotations["description"], "Container exited with code 137") {
+		t.Fatalf("undiagnosed description = %q, want the scanner details first", plain.Annotations["description"])
+	}
+
+	// A diagnosis adds annotations only: every label but the alert key agrees.
+	for label, value := range plain.Labels {
+		if label != "fold_key" && annotated.Labels[label] != value {
+			t.Fatalf("diagnosis changed label %s from %q to %q", label, value, annotated.Labels[label])
+		}
+	}
+	if len(annotated.Labels) != len(plain.Labels) || annotated.Labels["severity"] != "critical" {
+		t.Fatalf("diagnosis changed the alert labels: %#v", annotated.Labels)
+	}
+	for _, alert := range alerts {
+		for annotation, value := range alert.Annotations {
+			if strings.Contains(value, secret) {
+				t.Fatalf("annotation %s leaked a configured secret: %q", annotation, value)
+			}
+		}
+	}
+}
+
+func TestAlertmanagerNotifierDoesNotRepeatDetailsQuotedByAnalysis(t *testing.T) {
+	sink, endpoint := newAlertSink(t)
+	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: endpoint})
+	if err != nil {
+		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
+	}
+	const details = "Service selector map[app:keycloak] matches 0 running, ready pods. Ingress impact: no Ingress in namespace keycloak targets keycloak. " +
+		"Active sibling Service(s) with ready endpoints: keycloak-keycloak (1 ready) (" + scanner.ServiceLikelyOrphanedMarker + "; verify internal callers before cleanup)."
+	issue := &scanner.Issue{
+		ID: "keycloak/Service/keycloak/NoEndpoints", Namespace: "keycloak", Kind: "Service", Name: "keycloak",
+		Severity: scanner.SeverityHigh, Category: scanner.CategoryServiceNoEndpoint,
+		Summary: "Service keycloak has no ready endpoints", Details: details,
+		FoldKey: "fold-keycloak", OccurrenceCount: 1, AffectedResources: []string{"keycloak/keycloak"},
+	}
+	// The rule engine quotes the scanner's details as its evidence.
+	diagnosis, err := triage.NewRuleBasedProvider().Diagnose(context.Background(), issue)
+	if err != nil {
+		t.Fatalf("Diagnose() error = %v", err)
+	}
+	am.RecordDiagnosis(issue, diagnosis)
+	if err := am.SyncFoldedIssues(context.Background(), []*scanner.Issue{issue}, true); err != nil {
+		t.Fatalf("SyncFoldedIssues() error = %v", err)
+	}
+	annotations := sink.lastByFoldKey(t)["fold-keycloak"].Annotations
+
+	if !strings.Contains(annotations["analysis"], "leftover Service rather than an outage") || !strings.HasSuffix(annotations["analysis"], details) {
+		t.Fatalf("analysis = %q, want the orphaned-Service root cause with the scanner evidence", annotations["analysis"])
+	}
+	if got := strings.Count(annotations["description"], details); got != 1 {
+		t.Fatalf("description quotes the scanner details %d times, want once:\n%s", got, annotations["description"])
+	}
+	want := "Manual: Confirm that no in-cluster client still calls this Service, then remove it or correct its selector through the deployment source. Proposed command: kubectl describe service keycloak -n keycloak"
+	if annotations["recommended_action"] != want {
+		t.Fatalf("recommended_action = %q, want %q", annotations["recommended_action"], want)
+	}
+	if annotations["triage_provider"] != "Rule-Based SRE Engine" {
+		t.Fatalf("triage_provider = %q", annotations["triage_provider"])
+	}
+}
+
+func TestAlertmanagerNotifierReusesDiagnosisWhileEvidenceIsUnchanged(t *testing.T) {
+	const secret = "cached-secret-0123456789"
+	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: "http://alertmanager.invalid:9093", SecretValues: []string{secret}})
+	if err != nil {
+		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
+	}
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	am.now = func() time.Time { return now }
+
+	issue := &scanner.Issue{
+		ID: "prod/Pod/worker-0/CrashLoop", Namespace: "prod", Kind: "Pod", Name: "worker-0",
+		TargetResourceVersion: "100", Severity: scanner.SeverityHigh, Category: scanner.CategoryCrashLoop,
+		Summary: "Pod worker-0 is in CrashLoopBackOff", Details: "Container exited with code 1",
+		Events: []string{"Back-off restarting failed container"}, FoldKey: "fold-worker",
+		FirstObserved: now, LastObserved: now,
+	}
+	if _, cached := am.CachedDiagnosis(issue); cached {
+		t.Fatal("CachedDiagnosis() hit before any diagnosis was recorded")
+	}
+	diagnosis := testDiagnosis(issue)
+	diagnosis.RootCause = "root cause token=" + secret
+	am.RecordDiagnosis(issue, diagnosis)
+
+	// A later scan stamps new observation times and sees a newer
+	// resourceVersion, but the evidence to diagnose is the same.
+	rescanned := *issue
+	rescanned.FirstObserved, rescanned.LastObserved = now.Add(2*time.Minute), now.Add(2*time.Minute)
+	rescanned.TargetResourceVersion = "101"
+	cached, ok := am.CachedDiagnosis(&rescanned)
+	if !ok {
+		t.Fatal("CachedDiagnosis() missed a finding whose evidence is unchanged")
+	}
+	if strings.Contains(cached.RootCause, secret) {
+		t.Fatalf("cached diagnosis kept a configured secret: %q", cached.RootCause)
+	}
+	cached.RootCause = "changed by the caller"
+	if again, _ := am.CachedDiagnosis(&rescanned); again == nil || again.RootCause == cached.RootCause {
+		t.Fatalf("a caller could change the cached diagnosis: %#v", again)
+	}
+
+	for name, change := range map[string]func(*scanner.Issue){
+		"details":  func(i *scanner.Issue) { i.Details = "Container exited with code 137" },
+		"logs":     func(i *scanner.Issue) { i.LogsSnippet = "panic: out of memory" },
+		"events":   func(i *scanner.Issue) { i.Events = append([]string{"OOMKilled"}, i.Events...) },
+		"severity": func(i *scanner.Issue) { i.Severity = scanner.SeverityCritical },
+		"identity": func(i *scanner.Issue) { i.ID = "prod/Pod/worker-1/CrashLoop" },
+	} {
+		changed := rescanned
+		change(&changed)
+		if _, ok := am.CachedDiagnosis(&changed); ok {
+			t.Errorf("CachedDiagnosis() hit although the finding's %s changed", name)
+		}
+	}
+
+	now = now.Add(alertDiagnosisTTL)
+	if _, ok := am.CachedDiagnosis(&rescanned); ok {
+		t.Fatal("CachedDiagnosis() hit after the diagnosis expired")
+	}
+}
+
+func TestAlertmanagerNotifierKeepsDiagnosesOnlyForLiveAlerts(t *testing.T) {
+	_, endpoint := newAlertSink(t)
+	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: endpoint})
+	if err != nil {
+		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
+	}
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	am.now = func() time.Time { return now }
+	issueNumber := func(number int) *scanner.Issue {
+		return &scanner.Issue{
+			ID: "issue-" + strconv.Itoa(number), Namespace: "prod", Kind: "Pod", Name: "worker",
+			Severity: scanner.SeverityHigh, Category: scanner.CategoryCrashLoop, FoldKey: "fold-" + strconv.Itoa(number),
+		}
+	}
+
+	// A finding that does not alert has no use for a cached diagnosis.
+	quiet := issueNumber(0)
+	quiet.Severity = scanner.SeverityMedium
+	am.RecordDiagnosis(quiet, testDiagnosis(quiet))
+	if len(am.diagnoses) != 0 {
+		t.Fatalf("recorded a diagnosis for a finding that does not alert: %#v", am.diagnoses)
+	}
+
+	// The cache is bounded: the oldest diagnosis makes room for a new one.
+	for number := 1; number <= maxAlertDiagnoses+1; number++ {
+		now = now.Add(time.Second)
+		am.RecordDiagnosis(issueNumber(number), testDiagnosis(issueNumber(number)))
+	}
+	if len(am.diagnoses) != maxAlertDiagnoses {
+		t.Fatalf("cache holds %d diagnoses, want the bound of %d", len(am.diagnoses), maxAlertDiagnoses)
+	}
+	if _, ok := am.CachedDiagnosis(issueNumber(1)); ok {
+		t.Fatal("the oldest diagnosis survived a full cache")
+	}
+	newest := issueNumber(maxAlertDiagnoses + 1)
+	if _, ok := am.CachedDiagnosis(newest); !ok {
+		t.Fatal("the newest diagnosis was evicted")
+	}
+
+	// A resolved alert takes its diagnosis with it.
+	if err := am.SyncFoldedIssues(context.Background(), []*scanner.Issue{newest}, true); err != nil {
+		t.Fatalf("SyncFoldedIssues(firing) error = %v", err)
+	}
+	if err := am.SyncFoldedIssues(context.Background(), nil, true); err != nil {
+		t.Fatalf("SyncFoldedIssues(resolved) error = %v", err)
+	}
+	if _, ok := am.CachedDiagnosis(newest); ok {
+		t.Fatal("the diagnosis of a resolved alert is still cached")
+	}
+}
+
+func TestTruncateUTF8KeepsWholeRunes(t *testing.T) {
+	for _, test := range []struct {
+		value string
+		max   int
+		want  string
+	}{
+		{"short", 16, "short"},
+		{"exactly8", 8, "exactly8"},
+		{"ééé", 3, "é"},
+		{"a€b", 3, "a"},
+		{"a€b", 4, "a€"},
+	} {
+		if got := truncateUTF8(test.value, test.max); got != test.want {
+			t.Errorf("truncateUTF8(%q, %d) = %q, want %q", test.value, test.max, got, test.want)
 		}
 	}
 }

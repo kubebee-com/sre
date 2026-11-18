@@ -9,6 +9,10 @@ import (
 	"github.com/kubebee-com/sre/pkg/scanner"
 )
 
+// maxRuleEvidenceEvents bounds the events quoted as evidence for a finding
+// that has no details of its own.
+const maxRuleEvidenceEvents = 3
+
 type RuleBasedProvider struct {
 	redactor *sanitizer.Redactor
 }
@@ -65,12 +69,18 @@ func ruleSpecFor(category scanner.IssueCategory) ruleSpec {
 		return manual("ReplicaSet is not progressing", "The ReplicaSet cannot create or keep the desired number of pods ready.", "Inspect pod events, admission errors, and the owning workload template.", "replicaset")
 	case scanner.CategoryJobFailed:
 		return manual("Job exceeded its failure budget", "The job exhausted its retry budget or active deadline without completing.", "Inspect bounded job logs and events, fix the input or code, and rerun through the workload source.", "job")
+	case scanner.CategoryJobBackoffExceeded:
+		return manual("Job exceeded its backoff limit", "The job's pods failed more often than spec.backoffLimit allows, so the Job controller stopped retrying.", "Inspect the failed pods' logs and events, fix the input or code, and rerun the job through the workload source.", "job")
+	case scanner.CategoryJobDeadlineExceeded:
+		return manual("Job exceeded its active deadline", "The job ran longer than spec.activeDeadlineSeconds without completing, so its pods were terminated.", "Find what stalled the job, then fix it or raise the deadline in the workload manifest and rerun.", "job")
 	case scanner.CategoryCronJobFailed:
 		return manual("CronJob execution failed", "A scheduled job failed or could not complete successfully.", "Inspect the failed job, its logs, and schedule policy before the next run.", "cronjob")
 	case scanner.CategoryCronJobInvalid:
 		return manual("CronJob schedule is invalid", "The CronJob schedule cannot be parsed or does not express the intended cadence.", "Correct the schedule in the workload manifest and verify the next scheduled run.", "cronjob")
 	case scanner.CategoryCronJobSuspended:
 		return manual("CronJob is suspended", "The CronJob suspension flag prevents new jobs from being created.", "Confirm the pause is intentional and update the source manifest if scheduling should resume.", "cronjob")
+	case scanner.CategoryCronJobMissed:
+		return manual("CronJob missed a scheduled run", "A scheduled run was not started when it was due: the controller was unavailable, the previous run was still active under the concurrency policy, or the starting deadline passed.", "Check for a previous job that is still running, the concurrencyPolicy and startingDeadlineSeconds settings, and controller-manager health.", "cronjob")
 	case scanner.CategoryWorkloadDrift:
 		return ruleSpec{"Workload selector or template drift detected", "The workload selector and pod template no longer describe the same set of pods.", "Reconcile the selector and template through GitOps before attempting a rollout.", ActionGitOpsPR, "deployment", "describe"}
 	case scanner.CategoryServiceNoEndpoint:
@@ -79,6 +89,8 @@ func ruleSpecFor(category scanner.IssueCategory) ruleSpec {
 		return manual("Service endpoints are invalid", "The service endpoint objects contain addresses or conditions that do not represent a usable backend.", "Inspect endpoint and EndpointSlice conditions alongside the selected pods.", "service")
 	case scanner.CategoryServicePortMismatch:
 		return manual("Service port does not match its backend", "The service target port cannot be resolved on the selected pods or endpoint slices.", "Align service ports and container ports through the workload source.", "service")
+	case scanner.CategoryServiceExternalInvalid:
+		return manual("ExternalName Service target is invalid", "The Service's spec.externalName is not a valid DNS name, so cluster DNS cannot return a usable CNAME for it.", "Set spec.externalName to the intended DNS hostname in the Service manifest.", "service")
 	case scanner.CategoryServiceHealthCheck:
 		return manual("Service external health check is unreachable or pending", "The service uses local external traffic routing with a healthCheckNodePort disabled by the cluster CNI configuration, or its LoadBalancer ingress has not provisioned.", "Enable CNI healthCheckNodePort support (for example Cilium nodePort.enableHealthCheck=true with kube-proxy replacement) or verify load balancer provisioning.", "service")
 	case scanner.CategoryIngressBackendNotFound:
@@ -87,6 +99,10 @@ func ruleSpecFor(category scanner.IssueCategory) ruleSpec {
 		return manual("Ingress has no claimable class", "No ingress class or legacy class annotation identifies the controller that should reconcile this ingress.", "Set the intended ingress class in the source manifest.", "ingress")
 	case scanner.CategoryIngressPortInvalid:
 		return manual("Ingress backend port is invalid", "The ingress backend selects a service port that is not exposed by the referenced service.", "Correct the backend service port in the source manifest.", "ingress")
+	case scanner.CategoryIngressPathInvalid:
+		return manual("Ingress path is invalid", "An Ingress rule has a path that does not begin with / or has no pathType, so the controller rejects or ignores the rule.", "Correct the path and pathType in the Ingress manifest.", "ingress")
+	case scanner.CategoryIngressStatusPending:
+		return manual("Ingress has no load balancer address", "The Ingress controller has not published an address or hostname in the Ingress status, so the route is not reachable yet.", "Inspect the controller's events and logs, the IngressClass that should claim this Ingress, and the exposure of the controller Service.", "ingress")
 	case scanner.CategoryIngressTLSSecretMissing:
 		return manual("Ingress TLS secret is missing", "The ingress references a TLS secret that is absent or not yet provisioned.", "Inspect certificate issuance and create the secret through the configured certificate workflow.", "ingress")
 	case scanner.CategoryNetworkPolicyOrphaned:
@@ -141,6 +157,8 @@ func ruleSpecFor(category scanner.IssueCategory) ruleSpec {
 		return manual("ConfigMap is unused", "No current workload reference was found for the ConfigMap.", "Confirm ownership and remove stale configuration only through the source repository.", "configmap")
 	case scanner.CategoryConfigMapTooLarge:
 		return manual("ConfigMap exceeds the safe size", "The ConfigMap is larger than the supported Kubernetes object size budget.", "Split or externalize the configuration through the deployment workflow.", "configmap")
+	case scanner.CategoryConfigMapReferenceMissing:
+		return manual("Referenced ConfigMap does not exist", "A workload references this ConfigMap through a volume, env, or envFrom source, but no such ConfigMap exists in the workload's namespace, so the pods that need it cannot start.", "Create the ConfigMap through its owning source, or mark the reference optional in the workload manifest if the workload can run without it.", "configmap")
 	case scanner.CategoryWebhookServiceMissing:
 		return manual("Admission webhook service is missing", "The webhook configuration points to a service that cannot be resolved.", "Restore the service or correct the webhook reference through its owning deployment.", "mutatingwebhookconfiguration")
 	case scanner.CategoryWebhookNoActivePods:
@@ -228,7 +246,7 @@ func (p *RuleBasedProvider) Diagnose(ctx context.Context, issue *scanner.Issue) 
 		Severity:        issue.Severity,
 		ConfidenceScore: 0.90,
 	}
-	spec := ruleSpecFor(issue.Category)
+	spec := ruleSpecForIssue(issue)
 	kind := safeRuleToken(issue.Kind, "resource")
 	name := safeRuleToken(issue.Name, "resource")
 	namespace := safeRuleToken(issue.Namespace, "default")
@@ -236,6 +254,8 @@ func (p *RuleBasedProvider) Diagnose(ctx context.Context, issue *scanner.Issue) 
 	diag.RootCause = spec.rootCause
 	if strings.TrimSpace(issue.Details) != "" {
 		diag.RootCause += " Evidence: " + issue.Details
+	} else if len(issue.Events) > 0 {
+		diag.RootCause += " Events: " + strings.Join(issue.Events[:min(len(issue.Events), maxRuleEvidenceEvents)], "; ")
 	}
 	diag.RemediationPlan = spec.remediation
 	diag.ActionType = spec.action
@@ -247,6 +267,29 @@ func (p *RuleBasedProvider) Diagnose(ctx context.Context, issue *scanner.Issue) 
 	}
 
 	return diag, nil
+}
+
+// ruleSpecForIssue is the category rule, made specific where the scanner's
+// details settle a question the category leaves open. A ServiceNoEndpoints
+// finding is an outage when an Ingress routes to the Service and leftover
+// configuration when nothing does and a sibling Service is serving; the
+// scanner marks which, and says neither when it could not tell.
+func ruleSpecForIssue(issue *scanner.Issue) ruleSpec {
+	spec := ruleSpecFor(issue.Category)
+	if issue.Category != scanner.CategoryServiceNoEndpoint {
+		return spec
+	}
+	switch {
+	case strings.Contains(issue.Details, scanner.ServiceRoutedByIngressMarker):
+		spec.summary = "Ingress-routed Service has no ready endpoints"
+		spec.rootCause = "An Ingress routes traffic to this Service, but its selector resolves to no ready pods, so requests through that Ingress are failing now."
+		spec.remediation = "Restore the backend first: inspect the selected pods, their readiness probes, and the Service selector labels."
+	case strings.Contains(issue.Details, scanner.ServiceLikelyOrphanedMarker):
+		spec.summary = "Service has no ready endpoints and looks orphaned"
+		spec.rootCause = "No Ingress routes to this Service and a sibling Service is serving with ready endpoints, so this is most likely a leftover Service rather than an outage."
+		spec.remediation = "Confirm that no in-cluster client still calls this Service, then remove it or correct its selector through the deployment source."
+	}
+	return spec
 }
 
 func safeRuleToken(value, fallback string) string {

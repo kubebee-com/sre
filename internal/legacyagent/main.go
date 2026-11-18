@@ -1090,6 +1090,13 @@ func runSingleScanWithPlan(
 	srv.UpdateScanResults(issues)
 	log.Printf("Scan complete: %d anomalies detected in cluster (%d folded).", len(issues), len(foldedIssues))
 
+	// Diagnose the findings that are about to alert, so that the alerts carry
+	// an analysis. See alert_triage.go.
+	alertmanager := srv.Alertmanager()
+	preAlert := startAlertTriage(scanCtx, cfg, alertmanager, tp, foldedIssues)
+	defer preAlert.wait()
+	preAlert.settle(scanCtx)
+
 	if amErr := srv.SyncAlertmanager(scanCtx, foldedIssues, isFullBaseScanPlan(cfg, plan)); amErr != nil {
 		log.Printf("Alertmanager notification sync failed: %s", sanitizeLog(cfg, amErr.Error()))
 	}
@@ -1110,7 +1117,7 @@ func runSingleScanWithPlan(
 	}
 
 	for _, issue := range foldedIssues {
-		sanitizedIssue := scanner.SanitizeIssue(issue, providerSecretValues(cfg)...).AsIssue()
+		sanitizedIssue := providerIssue(cfg, issue)
 		var resolver playbookResolver
 		if service := srv.PlaybookService(); service != nil {
 			resolver = service
@@ -1124,9 +1131,17 @@ func runSingleScanWithPlan(
 				continue
 			}
 		} else {
-			diag, err := tp.Diagnose(scanCtx, sanitizedIssue)
-			if err != nil {
-				log.Printf("Triage failed for issue %s: %s", sanitizeLog(cfg, issue.ID), sanitizeLog(cfg, err.Error()))
+			// Pre-alert triage has already diagnosed, or is diagnosing, the
+			// findings it took on. Only the rest are diagnosed here.
+			diag, analyzed, err := preAlert.result(scanCtx, issue)
+			if !analyzed {
+				if diag, err = tp.Diagnose(scanCtx, sanitizedIssue); err != nil {
+					log.Printf("Triage failed for issue %s: %s", sanitizeLog(cfg, issue.ID), sanitizeLog(cfg, err.Error()))
+				} else {
+					alertmanager.RecordDiagnosis(issue, diag)
+				}
+			}
+			if err != nil || diag == nil {
 				continue
 			}
 			// Only generate pending remediation proposals for actionable remediations

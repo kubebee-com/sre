@@ -14,6 +14,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -707,11 +708,13 @@ func (s *ClusterScanner) scanPVCs(ctx context.Context, namespace string) ([]*Iss
 }
 
 func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]*Issue, error) {
-	svcs, err := s.client.CoreV1().Services(namespace).List(ctx, listOptionsForScan(ctx))
+	scanOptions := listOptionsForScan(ctx)
+	svcs, err := s.client.CoreV1().Services(namespace).List(ctx, scanOptions)
 	if err != nil {
 		return nil, err
 	}
 	ciliumCfg := s.readCiliumHealthCheckConfig(ctx)
+	svcCtx := newServiceScanContext(ctx, s, scanOptions, svcs)
 
 	var issues []*Issue
 	var observationErrors []error
@@ -762,7 +765,8 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 			})
 		}
 
-		totalEndpoints, endpointObjectFound, endpointComplete, endpointErr := s.serviceReadyEndpoints(ctx, svc)
+		endpoints, endpointErr := svcCtx.readyEndpoints(svc)
+		totalEndpoints, endpointObjectFound, endpointComplete := endpoints.ready, endpoints.found, endpoints.complete
 		if endpointErr != nil {
 			observationErrors = append(observationErrors, fmt.Errorf("read Service %s/%s endpoints: %w", svc.Namespace, svc.Name, endpointErr))
 			issues = append(issues, &Issue{
@@ -799,7 +803,7 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 			continue
 		}
 
-		if !endpointObjectFound || totalEndpoints == 0 {
+		if (!endpointObjectFound || totalEndpoints == 0) && !svcCtx.isSingleInstanceCNPGReplicaService(svc) {
 			issues = append(issues, &Issue{
 				ID:            makeID(svc.Namespace, "Service", svc.Name, "NoEndpoints"),
 				Namespace:     svc.Namespace,
@@ -808,7 +812,7 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 				Severity:      SeverityHigh,
 				Category:      CategoryServiceNoEndpoint,
 				Summary:       fmt.Sprintf("Service %s has 0 ready endpoints", svc.Name),
-				Details:       fmt.Sprintf("Service selector %v matches 0 running, ready pods. Client traffic will fail with 502/connection refused.", svc.Spec.Selector),
+				Details:       svcCtx.noEndpointsDetails(svc),
 				FirstObserved: svc.CreationTimestamp.Time,
 				LastObserved:  now,
 			})
@@ -832,6 +836,299 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 		}
 	}
 	return issues, errors.Join(observationErrors...)
+}
+
+// CloudNativePG labels the Pods of a cluster and selects them from the
+// Services it generates. The read-only (-ro) Service selects replicas only: by
+// the "role" label on older operator versions, by cnpg.io/instanceRole on
+// current ones.
+const (
+	cnpgClusterLabel      = "cnpg.io/cluster"
+	cnpgInstanceRoleLabel = "cnpg.io/instanceRole"
+	cnpgLegacyRoleLabel   = "role"
+	cnpgJobRoleLabel      = "cnpg.io/jobRole"
+	cnpgReplicaRole       = "replica"
+)
+
+const (
+	appInstanceLabel = "app.kubernetes.io/instance"
+
+	// maxNoEndpointSiblings bounds the sibling Services named in one finding.
+	maxNoEndpointSiblings = 10
+)
+
+// Phrases in the Details of a ServiceNoEndpoints finding that a consumer may
+// match to tell failing traffic from an orphaned Service. noEndpointsDetails
+// builds the Details from these constants, so a match cannot drift from the
+// wording.
+const (
+	// ServiceRoutedByIngressMarker is present when an Ingress routes to the
+	// Service, so client traffic is failing.
+	ServiceRoutedByIngressMarker = "targeted by Ingress(es)"
+	// ServiceLikelyOrphanedMarker is present when no Ingress routes to the
+	// Service while a sibling Service has ready endpoints.
+	ServiceLikelyOrphanedMarker = "likely orphaned/unreferenced Service"
+)
+
+type cachedLookup[T any] struct {
+	value T
+	err   error
+}
+
+// memoize runs fetch once per key. A failure is cached like a result, so a
+// denied or timed-out lookup is not repeated for every Service in the scan.
+func memoize[T any](cache map[string]cachedLookup[T], key string, fetch func() (T, error)) (T, error) {
+	if entry, ok := cache[key]; ok {
+		return entry.value, entry.err
+	}
+	value, err := fetch()
+	cache[key] = cachedLookup[T]{value: value, err: err}
+	return value, err
+}
+
+type serviceEndpointState struct {
+	ready    int
+	found    bool
+	complete bool
+}
+
+// serviceScanContext memoizes the cross-resource lookups of one scanServices
+// run. A namespace's Services and Ingresses are listed once and each Service's
+// endpoints are read once, however many findings refer to them.
+type serviceScanContext struct {
+	ctx              context.Context
+	scanner          *ClusterScanner
+	servicesByNS     map[string]cachedLookup[[]*corev1.Service]
+	ingressesByNS    map[string]cachedLookup[[]networkingv1.Ingress]
+	cnpgInstancePods map[string]cachedLookup[int]
+	endpointsBySvc   map[string]cachedLookup[serviceEndpointState]
+}
+
+func newServiceScanContext(ctx context.Context, s *ClusterScanner, scanOptions metav1.ListOptions, svcs *corev1.ServiceList) *serviceScanContext {
+	sc := &serviceScanContext{
+		ctx:              ctx,
+		scanner:          s,
+		servicesByNS:     make(map[string]cachedLookup[[]*corev1.Service]),
+		ingressesByNS:    make(map[string]cachedLookup[[]networkingv1.Ingress]),
+		cnpgInstancePods: make(map[string]cachedLookup[int]),
+		endpointsBySvc:   make(map[string]cachedLookup[serviceEndpointState]),
+	}
+	// A complete list taken without plan selectors already holds every Service
+	// of the namespaces it covers, so sibling lookups there need no second list.
+	if scanOptions.LabelSelector == "" && scanOptions.FieldSelector == "" && svcs.Continue == "" {
+		for index := range svcs.Items {
+			svc := &svcs.Items[index]
+			entry := sc.servicesByNS[svc.Namespace]
+			entry.value = append(entry.value, svc)
+			sc.servicesByNS[svc.Namespace] = entry
+		}
+	}
+	return sc
+}
+
+func (sc *serviceScanContext) readyEndpoints(svc *corev1.Service) (serviceEndpointState, error) {
+	return memoize(sc.endpointsBySvc, namespaceKey(svc.Namespace, svc.Name), func() (serviceEndpointState, error) {
+		ready, found, complete, err := sc.scanner.serviceReadyEndpoints(sc.ctx, svc)
+		return serviceEndpointState{ready: ready, found: found, complete: complete}, err
+	})
+}
+
+func (sc *serviceScanContext) servicesInNamespace(namespace string) ([]*corev1.Service, error) {
+	return memoize(sc.servicesByNS, namespace, func() ([]*corev1.Service, error) {
+		list, err := sc.scanner.client.CoreV1().Services(namespace).List(sc.ctx, unscopedDependencyListOptions(sc.ctx))
+		if err != nil {
+			return nil, err
+		}
+		services := make([]*corev1.Service, len(list.Items))
+		for index := range list.Items {
+			services[index] = &list.Items[index]
+		}
+		return services, nil
+	})
+}
+
+func (sc *serviceScanContext) ingressesInNamespace(namespace string) ([]networkingv1.Ingress, error) {
+	return memoize(sc.ingressesByNS, namespace, func() ([]networkingv1.Ingress, error) {
+		list, err := sc.scanner.client.NetworkingV1().Ingresses(namespace).List(sc.ctx, unscopedDependencyListOptions(sc.ctx))
+		if err != nil {
+			return nil, err
+		}
+		return list.Items, nil
+	})
+}
+
+// cnpgReplicaServiceCluster returns the CloudNativePG cluster whose replicas
+// the Service selects, as the operator's read-only (-ro) Service does.
+func cnpgReplicaServiceCluster(svc *corev1.Service) (string, bool) {
+	selector := svc.Spec.Selector
+	cluster := selector[cnpgClusterLabel]
+	if cluster == "" {
+		return "", false
+	}
+	if selector[cnpgLegacyRoleLabel] != cnpgReplicaRole && selector[cnpgInstanceRoleLabel] != cnpgReplicaRole {
+		return "", false
+	}
+	return cluster, true
+}
+
+// cnpgInstancePodCount counts the instance Pods of a CloudNativePG cluster.
+// The operator's initdb, join, and similar Job Pods carry the cluster label
+// too, but they are not database instances.
+func (sc *serviceScanContext) cnpgInstancePodCount(namespace, cluster string) (int, error) {
+	return memoize(sc.cnpgInstancePods, namespaceKey(namespace, cluster), func() (int, error) {
+		options := unscopedDependencyListOptions(sc.ctx)
+		options.LabelSelector = labels.Set{cnpgClusterLabel: cluster}.AsSelector().String()
+		pods, err := sc.scanner.client.CoreV1().Pods(namespace).List(sc.ctx, options)
+		if err != nil {
+			return 0, err
+		}
+		count := 0
+		for index := range pods.Items {
+			pod := &pods.Items[index]
+			if pod.Status.Phase != corev1.PodSucceeded && pod.Labels[cnpgJobRoleLabel] == "" {
+				count++
+			}
+		}
+		return count, nil
+	})
+}
+
+// isSingleInstanceCNPGReplicaService reports whether svc is the read-only
+// Service of a CloudNativePG cluster that runs at most one instance. Such a
+// cluster has a primary and no replicas, so its replica Service has no
+// endpoints by design. A cluster with two or more instance Pods is expected to
+// serve replicas and still alerts, as does one whose Pods cannot be listed.
+func (sc *serviceScanContext) isSingleInstanceCNPGReplicaService(svc *corev1.Service) bool {
+	cluster, ok := cnpgReplicaServiceCluster(svc)
+	if !ok {
+		return false
+	}
+	instances, err := sc.cnpgInstancePodCount(svc.Namespace, cluster)
+	return err == nil && instances <= 1
+}
+
+func ingressTargetsService(ingress *networkingv1.Ingress, serviceName string) bool {
+	if backend := ingress.Spec.DefaultBackend; backend != nil && backend.Service != nil && backend.Service.Name == serviceName {
+		return true
+	}
+	for _, rule := range ingress.Spec.Rules {
+		if rule.HTTP == nil {
+			continue
+		}
+		for _, path := range rule.HTTP.Paths {
+			if path.Backend.Service != nil && path.Backend.Service.Name == serviceName {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ingressesTargetingService returns the sorted names of the Ingresses in the
+// Service's namespace that route to it.
+func (sc *serviceScanContext) ingressesTargetingService(svc *corev1.Service) ([]string, error) {
+	ingresses, err := sc.ingressesInNamespace(svc.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for index := range ingresses {
+		if ingressTargetsService(&ingresses[index], svc.Name) {
+			names = append(names, ingresses[index].Name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+type readySiblingService struct {
+	name  string
+	ready int
+}
+
+// servicesAreSiblings reports whether two Services of one namespace belong to
+// the same application: they share an app.kubernetes.io/instance label, or one
+// name extends the other at a hyphen (keycloak and keycloak-keycloak).
+func servicesAreSiblings(svc, candidate *corev1.Service) bool {
+	if svc.Name == candidate.Name {
+		return false
+	}
+	if instance := svc.Labels[appInstanceLabel]; instance != "" && instance == candidate.Labels[appInstanceLabel] {
+		return true
+	}
+	return strings.HasPrefix(candidate.Name, svc.Name+"-") || strings.HasPrefix(svc.Name, candidate.Name+"-")
+}
+
+// readySiblingServices returns, sorted by name, the siblings of svc that have
+// ready endpoints. A sibling whose endpoints cannot be read is not known to be
+// serving, so it is left out.
+func (sc *serviceScanContext) readySiblingServices(svc *corev1.Service) ([]readySiblingService, error) {
+	services, err := sc.servicesInNamespace(svc.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	var siblings []readySiblingService
+	for _, candidate := range services {
+		if !servicesAreSiblings(svc, candidate) {
+			continue
+		}
+		if endpoints, endpointErr := sc.readyEndpoints(candidate); endpointErr == nil && endpoints.ready > 0 {
+			siblings = append(siblings, readySiblingService{name: candidate.Name, ready: endpoints.ready})
+		}
+	}
+	sort.Slice(siblings, func(i, j int) bool { return siblings[i].name < siblings[j].name })
+	return siblings, nil
+}
+
+func formatReadySiblings(siblings []readySiblingService) string {
+	shown := siblings
+	if len(shown) > maxNoEndpointSiblings {
+		shown = shown[:maxNoEndpointSiblings]
+	}
+	formatted := make([]string, 0, len(shown)+1)
+	for _, sibling := range shown {
+		formatted = append(formatted, fmt.Sprintf("%s (%d ready)", sibling.name, sibling.ready))
+	}
+	if hidden := len(siblings) - len(shown); hidden > 0 {
+		formatted = append(formatted, fmt.Sprintf("+%d more", hidden))
+	}
+	return strings.Join(formatted, ", ")
+}
+
+// noEndpointsDetails explains a ServiceNoEndpoints finding with deterministic
+// cross-resource context: whether an Ingress routes to the Service, and which
+// sibling Services do have ready endpoints. A notification can then tell
+// failing traffic from an orphaned Service that nothing references. A lookup
+// that fails is reported as unavailable, never as an absence.
+func (sc *serviceScanContext) noEndpointsDetails(svc *corev1.Service) string {
+	parts := []string{fmt.Sprintf("Service selector %v matches 0 running, ready pods.", svc.Spec.Selector)}
+
+	ingresses, ingressErr := sc.ingressesTargetingService(svc)
+	unrouted := ingressErr == nil && len(ingresses) == 0
+	switch {
+	case ingressErr != nil:
+		parts = append(parts, "Ingress impact: lookup unavailable; active client traffic will fail with 502/connection refused if referenced.")
+	case unrouted:
+		parts = append(parts, fmt.Sprintf("Ingress impact: no Ingress in namespace %s targets %s.", svc.Namespace, svc.Name))
+	default:
+		parts = append(parts, fmt.Sprintf("Ingress impact: %s %s; active traffic will fail with 502/connection refused.", ServiceRoutedByIngressMarker, strings.Join(ingresses, ", ")))
+	}
+
+	const siblingsPrefix = "Active sibling Service(s) with ready endpoints: "
+	siblings, siblingErr := sc.readySiblingServices(svc)
+	switch {
+	case siblingErr != nil:
+		parts = append(parts, siblingsPrefix+"lookup unavailable.")
+	case len(siblings) > 0 && unrouted:
+		parts = append(parts, fmt.Sprintf("%s%s (%s; verify internal callers before cleanup).", siblingsPrefix, formatReadySiblings(siblings), ServiceLikelyOrphanedMarker))
+	case len(siblings) > 0:
+		parts = append(parts, siblingsPrefix+formatReadySiblings(siblings)+".")
+	case unrouted:
+		parts = append(parts, siblingsPrefix+"none (internal callers will fail with connection refused if still referencing it).")
+	default:
+		parts = append(parts, siblingsPrefix+"none.")
+	}
+	return strings.Join(parts, " ")
 }
 
 type ciliumHealthCheckConfig struct {

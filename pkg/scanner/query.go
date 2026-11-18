@@ -21,6 +21,16 @@ func dependentListOptionsForScan(ctx context.Context) metav1.ListOptions {
 	return options
 }
 
+// unscopedDependencyListOptions drops both plan selectors. Plan labels and
+// names select the analyzed resources; the related objects they are checked
+// against carry their own labels and names, so cross-resource lookups must be
+// broad within the already scoped namespace.
+func unscopedDependencyListOptions(ctx context.Context) metav1.ListOptions {
+	options := dependentListOptionsForScan(ctx)
+	options.LabelSelector = ""
+	return options
+}
+
 // QueryResource reads one explicitly named, non-secret Kubernetes resource.
 // It is intentionally narrower than exposing the client-go interface so API
 // callers cannot turn the query endpoint into an arbitrary object browser.

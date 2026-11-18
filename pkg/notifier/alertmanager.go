@@ -13,9 +13,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kubebee-com/sre/pkg/sanitizer"
 	"github.com/kubebee-com/sre/pkg/scanner"
+	"github.com/kubebee-com/sre/pkg/triage"
 )
 
 const (
@@ -60,6 +62,7 @@ type AlertmanagerNotifier struct {
 	redactor       *sanitizer.Redactor
 	client         *http.Client
 	active         map[string]alertmanagerAlert
+	diagnoses      map[string]alertDiagnosis
 	now            func() time.Time
 }
 
@@ -93,8 +96,9 @@ func NewAlertmanagerNotifier(options AlertmanagerOptions) (*AlertmanagerNotifier
 			Timeout:   defaultAlertmanagerTimeout,
 			Transport: cloneDirectTransport(),
 		},
-		active: make(map[string]alertmanagerAlert),
-		now:    func() time.Time { return time.Now().UTC() },
+		active:    make(map[string]alertmanagerAlert),
+		diagnoses: make(map[string]alertDiagnosis),
+		now:       func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 
@@ -187,8 +191,52 @@ func isPassivePostureCategory(category scanner.IssueCategory) bool {
 	}
 }
 
+// EligibleIssues returns the folded findings that qualify for Alertmanager
+// escalation, in input order and with one finding per alert key. These are
+// the findings worth diagnosing before an alert is dispatched.
+func (n *AlertmanagerNotifier) EligibleIssues(folded []*scanner.Issue) []*scanner.Issue {
+	if !n.Enabled() {
+		return nil
+	}
+	eligible := make([]*scanner.Issue, 0, len(folded))
+	seen := make(map[string]struct{}, len(folded))
+	for _, item := range folded {
+		if !n.IsAlertableIssue(item) {
+			continue
+		}
+		key := n.alertKey(item)
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		eligible = append(eligible, item)
+	}
+	return eligible
+}
+
+// alertKey is the stable identity of a finding's alert: its fold_key label.
+func (n *AlertmanagerNotifier) alertKey(issue *scanner.Issue) string {
+	key := strings.TrimSpace(issue.FoldKey)
+	if key == "" {
+		key = issue.ID
+	}
+	if key == "" {
+		key = fmt.Sprintf("%s-%s-%s-%s", issue.Namespace, issue.Kind, issue.Name, issue.Category)
+	}
+	return boundLabelValue(n.redactorOrDefault().SanitizeText(key))
+}
+
+func (n *AlertmanagerNotifier) redactorOrDefault() *sanitizer.Redactor {
+	if n != nil && n.redactor != nil {
+		return n.redactor
+	}
+	return sanitizer.DefaultRedactor()
+}
+
 // SyncFoldedIssues sends firing alerts for serious folded findings and, when
 // fullScope is true, emits explicit resolved transitions for cleared alerts.
+// A finding with a recorded diagnosis (see RecordDiagnosis) is annotated with
+// its analysis; a finding without one is sent as it is.
 func (n *AlertmanagerNotifier) SyncFoldedIssues(ctx context.Context, folded []*scanner.Issue, fullScope bool) error {
 	if !n.Enabled() {
 		return nil
@@ -198,18 +246,14 @@ func (n *AlertmanagerNotifier) SyncFoldedIssues(ctx context.Context, folded []*s
 	}
 
 	now := n.now().UTC()
-	desired := make(map[string]alertmanagerAlert)
-	desiredOrder := make([]string, 0, len(folded))
+	eligible := n.EligibleIssues(folded)
+	desired := make(map[string]alertmanagerAlert, len(eligible))
+	desiredOrder := make([]string, 0, len(eligible))
 
-	for _, item := range folded {
-		if !n.IsAlertableIssue(item) {
-			continue
-		}
-		alert := n.buildAlert(item, now)
+	for _, item := range eligible {
+		diagnosis, _ := n.CachedDiagnosis(item)
+		alert := n.buildAlert(item, diagnosis, now)
 		key := alert.Labels["fold_key"]
-		if _, seen := desired[key]; seen {
-			continue
-		}
 		desired[key] = alert
 		desiredOrder = append(desiredOrder, key)
 	}
@@ -243,6 +287,7 @@ func (n *AlertmanagerNotifier) SyncFoldedIssues(ctx context.Context, folded []*s
 				batch = append(batch, resolved)
 			}
 			delete(n.active, key)
+			delete(n.diagnoses, key)
 		}
 	}
 	n.mu.Unlock()
@@ -253,18 +298,8 @@ func (n *AlertmanagerNotifier) SyncFoldedIssues(ctx context.Context, folded []*s
 	return n.postAlerts(ctx, batch)
 }
 
-func (n *AlertmanagerNotifier) buildAlert(issue *scanner.Issue, now time.Time) alertmanagerAlert {
-	redactor := sanitizer.DefaultRedactor()
-	if n != nil && n.redactor != nil {
-		redactor = n.redactor
-	}
-	foldKey := strings.TrimSpace(issue.FoldKey)
-	if foldKey == "" {
-		foldKey = issue.ID
-	}
-	if foldKey == "" {
-		foldKey = fmt.Sprintf("%s-%s-%s-%s", issue.Namespace, issue.Kind, issue.Name, issue.Category)
-	}
+func (n *AlertmanagerNotifier) buildAlert(issue *scanner.Issue, diagnosis *triage.Diagnosis, now time.Time) alertmanagerAlert {
+	redactor := n.redactorOrDefault()
 	ns := strings.TrimSpace(issue.Namespace)
 	if ns == "" {
 		ns = "cluster"
@@ -295,24 +330,10 @@ func (n *AlertmanagerNotifier) buildAlert(issue *scanner.Issue, now time.Time) a
 	if occurrences > 1 && !strings.Contains(summary, strconv.Itoa(occurrences)) {
 		summary = fmt.Sprintf("%s (%d occurrences)", summary, occurrences)
 	}
-	if len(summary) > maxAlertmanagerSummaryBytes {
-		summary = summary[:maxAlertmanagerSummaryBytes]
-	}
+	summary = truncateUTF8(summary, maxAlertmanagerSummaryBytes)
 
-	var desc strings.Builder
-	desc.WriteString(redactor.SanitizeText(issue.Details))
-	if len(issue.AffectedResources) > 0 {
-		desc.WriteString("\nAffected resources: ")
-		desc.WriteString(redactor.SanitizeText(strings.Join(issue.AffectedResources, ", ")))
-	}
-	if strings.TrimSpace(issue.LogsSnippet) != "" {
-		desc.WriteString("\nRecent failure logs:\n")
-		desc.WriteString(redactor.SanitizeText(issue.LogsSnippet))
-	}
-	description := desc.String()
-	if len(description) > maxAlertmanagerDescBytes {
-		description = description[:maxAlertmanagerDescBytes]
-	}
+	analysis := alertAnalysis(redactor, issue, diagnosis)
+	recommendedAction := alertRecommendedAction(redactor, diagnosis)
 
 	labels := map[string]string{
 		"alertname":     boundLabelValue("KubebeeSRE" + sanitizeAlertNameToken(string(issue.Category))),
@@ -323,14 +344,27 @@ func (n *AlertmanagerNotifier) buildAlert(issue *scanner.Issue, now time.Time) a
 		"namespace":     boundLabelValue(redactor.SanitizeText(ns)),
 		"resource_kind": boundLabelValue(redactor.SanitizeText(resourceKind)),
 		"resource_name": boundLabelValue(redactor.SanitizeText(resourceName)),
-		"fold_key":      boundLabelValue(redactor.SanitizeText(foldKey)),
+		"fold_key":      n.alertKey(issue),
 		"cluster":       n.clusterName,
 	}
 
+	// Analysis only ever adds annotations. Labels, and so the identity,
+	// severity, and routing of the alert, come from the scanner alone.
 	annotations := map[string]string{
 		"summary":          summary,
-		"description":      description,
+		"description":      alertDescription(redactor, issue, analysis, recommendedAction),
 		"occurrence_count": strconv.Itoa(occurrences),
+	}
+	if analysis != "" {
+		annotations["analysis"] = analysis
+	}
+	if recommendedAction != "" {
+		annotations["recommended_action"] = recommendedAction
+	}
+	if diagnosis != nil {
+		if provider := boundLabelValue(redactor.SanitizeText(diagnosis.ProviderName)); provider != "" {
+			annotations["triage_provider"] = provider
+		}
 	}
 	if n.publicURL != "" {
 		annotations["dashboard_url"] = n.publicURL
@@ -350,10 +384,7 @@ func (n *AlertmanagerNotifier) postAlerts(ctx context.Context, alerts []alertman
 	if err != nil {
 		return fmt.Errorf("encode alertmanager alerts: %w", err)
 	}
-	redactor := sanitizer.DefaultRedactor()
-	if n != nil && n.redactor != nil {
-		redactor = n.redactor
-	}
+	redactor := n.redactorOrDefault()
 	var lastErr error
 	for attempt := 0; attempt < maxWebhookAttempts; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.endpoint, bytes.NewReader(body))
@@ -403,11 +434,19 @@ func sanitizeAlertNameToken(raw string) string {
 
 func boundLabelValue(value string) string {
 	value = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(value, "\n", " "), "\r", " "))
-	if len(value) <= maxAlertmanagerLabelBytes {
+	return truncateUTF8(value, maxAlertmanagerLabelBytes)
+}
+
+// truncateUTF8 bounds value to maxBytes without splitting a multi-byte rune.
+func truncateUTF8(value string, maxBytes int) string {
+	if len(value) <= maxBytes {
 		return value
 	}
-	value = value[:maxAlertmanagerLabelBytes]
-	for len(value) > 0 && value[len(value)-1]&0xc0 == 0x80 {
+	value = value[:maxBytes]
+	for len(value) > 0 {
+		if r, size := utf8.DecodeLastRuneInString(value); r != utf8.RuneError || size != 1 {
+			break
+		}
 		value = value[:len(value)-1]
 	}
 	return value

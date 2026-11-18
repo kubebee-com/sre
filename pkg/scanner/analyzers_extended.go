@@ -118,8 +118,8 @@ func (s *ClusterScanner) scanPodLogs(ctx context.Context, namespace string) ([]*
 					phase = "previous"
 				}
 				evidence := strings.Join(lines, "\n")
-				severity := classifyPodLogSeverity(lines)
 				now := time.Now().UTC()
+				severity := classifyPodLogTaskSeverity(lines, task.previous, task.target.status, now)
 				issue := &Issue{
 					ID:        makeID(task.pod.Namespace, "Pod", task.pod.Name, "LogError-"+task.target.kind+"-"+task.target.name+"-"+phase),
 					Namespace: task.pod.Namespace, Kind: "Pod", Name: task.pod.Name,
@@ -147,6 +147,7 @@ type podLogTarget struct {
 	name               string
 	restartCount       int32
 	canReadCurrentLogs bool
+	status             corev1.ContainerStatus
 }
 
 func containerCanReadCurrentLogs(status corev1.ContainerStatus) bool {
@@ -165,13 +166,13 @@ func podLogTargets(pod *corev1.Pod) []podLogTarget {
 	}
 	result := make([]podLogTarget, 0, len(pod.Spec.InitContainers)+len(pod.Spec.Containers)+len(pod.Spec.EphemeralContainers))
 	for _, status := range pod.Status.InitContainerStatuses {
-		result = append(result, podLogTarget{kind: "init", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status)})
+		result = append(result, podLogTarget{kind: "init", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status), status: status})
 	}
 	for _, status := range pod.Status.ContainerStatuses {
-		result = append(result, podLogTarget{kind: "regular", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status)})
+		result = append(result, podLogTarget{kind: "regular", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status), status: status})
 	}
 	for _, status := range pod.Status.EphemeralContainerStatuses {
-		result = append(result, podLogTarget{kind: "ephemeral", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status)})
+		result = append(result, podLogTarget{kind: "ephemeral", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status), status: status})
 	}
 	return result
 }
@@ -344,6 +345,17 @@ func classifyPodLogSeverity(lines []string) Severity {
 		}
 	}
 	return SeverityMedium
+}
+
+// classifyPodLogTaskSeverity downgrades stale (>24h) previous-container log errors
+// on currently ready containers to MEDIUM while keeping active, recent, or unready
+// serious errors at HIGH.
+func classifyPodLogTaskSeverity(lines []string, previous bool, status corev1.ContainerStatus, now time.Time) Severity {
+	severity := classifyPodLogSeverity(lines)
+	if previous && severity == SeverityHigh {
+		return classifyHighRestartSeverity(status, now)
+	}
+	return severity
 }
 
 func (s *ClusterScanner) scanWorkloadDrift(ctx context.Context, namespace string) ([]*Issue, error) {
@@ -1082,12 +1094,14 @@ func (s *ClusterScanner) configMapReferenceRequirements(ctx context.Context, nam
 		}
 		for _, volume := range spec.Volumes {
 			if volume.ConfigMap != nil {
-				addReference(ns, volume.ConfigMap.Name, false)
+				optional := volume.ConfigMap.Optional != nil && *volume.ConfigMap.Optional
+				addReference(ns, volume.ConfigMap.Name, optional)
 			}
 			if volume.Projected != nil {
 				for _, source := range volume.Projected.Sources {
 					if source.ConfigMap != nil {
-						addReference(ns, source.ConfigMap.Name, false)
+						optional := source.ConfigMap.Optional != nil && *source.ConfigMap.Optional
+						addReference(ns, source.ConfigMap.Name, optional)
 					}
 				}
 			}
