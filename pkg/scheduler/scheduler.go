@@ -32,11 +32,12 @@ type Options struct {
 }
 
 type Runner struct {
-	interval time.Duration
-	jitter   time.Duration
-	job      Job
-	running  atomic.Bool
-	random   *rand.Rand
+	interval        time.Duration
+	jitter          time.Duration
+	job             Job
+	running         atomic.Bool
+	periodicPending atomic.Bool
+	random          *rand.Rand
 }
 
 func New(options Options) (*Runner, error) {
@@ -92,7 +93,29 @@ func (r *Runner) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-timer.C:
 		}
-		_, _ = r.RunOnce(ctx)
+		// Never silently skip a due periodic scan when an event-triggered scan
+		// holds the overlap guard; wait and claim priority for the next slot.
+		r.periodicPending.Store(true)
+		for {
+			ran, err := r.RunOnce(ctx)
+			if ran || !errors.Is(err, ErrAlreadyRunning) {
+				r.periodicPending.Store(false)
+				break
+			}
+			retryTimer := time.NewTimer(triggerRetryInterval)
+			select {
+			case <-ctx.Done():
+				r.periodicPending.Store(false)
+				if !retryTimer.Stop() {
+					select {
+					case <-retryTimer.C:
+					default:
+					}
+				}
+				return ctx.Err()
+			case <-retryTimer.C:
+			}
+		}
 	}
 }
 

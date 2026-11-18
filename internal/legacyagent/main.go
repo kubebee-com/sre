@@ -975,15 +975,16 @@ func runScheduledScansWithTriggers(
 
 	var recentTriggerMu sync.Mutex
 	recentTriggerScans := make(map[string]time.Time)
-	const minEventPlanCooldown = 30 * time.Second
+	const minEventPlanCooldown = 60 * time.Second
 
 	triggerJob := func(scanCtx context.Context, trigger scheduler.Trigger) error {
 		plan, ok := scheduler.PlanForTrigger(cfg.ScanPlan(), trigger)
 		if !ok {
 			return nil
 		}
+		planKey := ""
 		if cfg.EventDebounce > 0 {
-			planKey := triggerPlanCooldownKey(plan)
+			planKey = triggerPlanCooldownKey(plan)
 			now := time.Now()
 			recentTriggerMu.Lock()
 			for k, seenAt := range recentTriggerScans {
@@ -997,6 +998,12 @@ func runScheduledScansWithTriggers(
 			}
 			recentTriggerScans[planKey] = now
 			recentTriggerMu.Unlock()
+			// Measure cooldown from scan completion so slow namespace scans don't immediately re-fire.
+			defer func() {
+				recentTriggerMu.Lock()
+				recentTriggerScans[planKey] = time.Now()
+				recentTriggerMu.Unlock()
+			}()
 		}
 		err := runSingleScanWithPlan(scanCtx, cfg, sc, tp, eng, notif, srv, plan)
 		readiness.MarkScanResult(err)
@@ -1149,7 +1156,10 @@ func runSingleScanWithPlan(
 }
 
 func triggerPlanCooldownKey(plan scanplan.Plan) string {
-	return strings.Join(plan.IncludeNamespaces, ",") + "|" + strings.Join(plan.Kinds, ",") + "|" + strings.Join(plan.Analyzers, ",")
+	if len(plan.IncludeNamespaces) > 0 {
+		return "ns:" + strings.Join(plan.IncludeNamespaces, ",")
+	}
+	return strings.Join(plan.Kinds, ",") + "|" + strings.Join(plan.Analyzers, ",")
 }
 
 func isFullBaseScanPlan(cfg *config.Config, plan scanplan.Plan) bool {

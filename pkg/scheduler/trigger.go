@@ -217,11 +217,13 @@ func (r *Runner) RunWithTriggers(ctx context.Context, queue *TriggerQueue, trigg
 	go func() {
 		triggerDone <- queue.Run(runCtx, func(triggerCtx context.Context, trigger Trigger) error {
 			for {
-				ran, err := r.runOnceJob(triggerCtx, func(jobCtx context.Context) error {
-					return triggerJob(jobCtx, trigger)
-				})
-				if ran || !errors.Is(err, ErrAlreadyRunning) {
-					return err
+				if !r.periodicPending.Load() {
+					ran, err := r.runOnceJob(triggerCtx, func(jobCtx context.Context) error {
+						return triggerJob(jobCtx, trigger)
+					})
+					if ran || !errors.Is(err, ErrAlreadyRunning) {
+						return err
+					}
 				}
 				timer := time.NewTimer(triggerRetryInterval)
 				select {

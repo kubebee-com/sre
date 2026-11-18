@@ -328,7 +328,7 @@ func (s *ClusterScanner) analyzePod(pod *corev1.Pod) (issue *Issue) {
 				Namespace:     pod.Namespace,
 				Kind:          "Pod",
 				Name:          pod.Name,
-				Severity:      SeverityHigh,
+				Severity:      classifyHighRestartSeverity(cs, now),
 				Category:      CategoryHighRestarts,
 				Summary:       fmt.Sprintf("Container '%s' has restarted %d times", cs.Name, cs.RestartCount),
 				Details:       "High container restart frequency indicates workload instability, memory pressure, or liveness probe failures.",
@@ -516,7 +516,7 @@ func (s *ClusterScanner) analyzePodFindings(pod *corev1.Pod) []*Issue {
 				Namespace:     pod.Namespace,
 				Kind:          "Pod",
 				Name:          pod.Name,
-				Severity:      SeverityHigh,
+				Severity:      classifyHighRestartSeverity(status, now),
 				Category:      CategoryHighRestarts,
 				Summary:       fmt.Sprintf("Container '%s' has restarted %d times", containerID, status.RestartCount),
 				Details:       "High container restart frequency indicates workload instability, memory pressure, or liveness probe failures.",
@@ -1147,4 +1147,17 @@ func makeID(namespace, kind, name, reason string) string {
 	raw := fmt.Sprintf("%s:%s:%s:%s", namespace, kind, name, reason)
 	hash := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("%s-%s-%x", strings.ToLower(kind), strings.ToLower(name), hash[:4])
+}
+
+// classifyHighRestartSeverity downgrades stale (>24h) historical restarts on currently
+// ready containers to MEDIUM so old restart counters remain visible without
+// generating continuous HIGH Alertmanager pages.
+func classifyHighRestartSeverity(cs corev1.ContainerStatus, now time.Time) Severity {
+	if cs.Ready && cs.LastTerminationState.Terminated != nil {
+		finished := cs.LastTerminationState.Terminated.FinishedAt.Time
+		if !finished.IsZero() && now.Sub(finished) > 24*time.Hour {
+			return SeverityMedium
+		}
+	}
+	return SeverityHigh
 }

@@ -318,3 +318,66 @@ func TestRunnerRunWithTriggersSharesOverlapProtection(t *testing.T) {
 		t.Fatalf("max concurrent jobs = %d, want 1", maxActive)
 	}
 }
+
+func TestRunnerRunWithTriggersDoesNotStarvePeriodicJob(t *testing.T) {
+	var periodicCount atomic.Int32
+	periodicRanSecond := make(chan struct{})
+	firstPeriodicStarted := make(chan struct{})
+	releaseTrigger := make(chan struct{})
+	triggerStarted := make(chan struct{})
+
+	runner, err := New(Options{
+		Interval: 25 * time.Millisecond,
+		Job: func(context.Context) error {
+			n := periodicCount.Add(1)
+			if n == 1 {
+				close(firstPeriodicStarted)
+			}
+			if n == 2 {
+				close(periodicRanSecond)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	queue, err := NewTriggerQueue(TriggerQueueOptions{Capacity: 4, Debounce: time.Millisecond})
+	if err != nil {
+		t.Fatalf("NewTriggerQueue() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- runner.RunWithTriggers(ctx, queue, func(_ context.Context, _ Trigger) error {
+			select {
+			case <-triggerStarted:
+			default:
+				close(triggerStarted)
+			}
+			<-releaseTrigger
+			return nil
+		})
+	}()
+
+	<-firstPeriodicStarted
+	if !queue.Enqueue(Trigger{Resource: "Pod", Namespace: "ops", Name: "worker"}) {
+		t.Fatal("Enqueue() = false")
+	}
+	<-triggerStarted
+	// Wait past the periodic interval while the trigger job is still holding the lock.
+	time.Sleep(45 * time.Millisecond)
+	close(releaseTrigger)
+
+	select {
+	case <-periodicRanSecond:
+	case <-time.After(time.Second):
+		t.Fatal("periodic job was starved while trigger job held running guard")
+	}
+	cancel()
+	if err := <-runErr; !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunWithTriggers() error = %v, want context.Canceled", err)
+	}
+}

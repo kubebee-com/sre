@@ -324,3 +324,57 @@ func TestFoldIssuesAndSummarizeCategoriesReduceNoiseDeterministically(t *testing
 		t.Fatalf("SummarizeCategories() returned %d categories, want 5: %#v", len(summaries), summaries)
 	}
 }
+
+func TestHighRestartCountDowngradesStaleReadyContainers(t *testing.T) {
+	now := time.Now()
+	stalePod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-exporter-a", Namespace: "monitoring"},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "node-exporter",
+				Ready:        true,
+				RestartCount: 24,
+				LastTerminationState: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{
+						FinishedAt: metav1.NewTime(now.Add(-14 * 24 * time.Hour)),
+					},
+				},
+			}},
+		},
+	}
+	recentPod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api-b", Namespace: "prod"},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "api",
+				Ready:        true,
+				RestartCount: 8,
+				LastTerminationState: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{
+						FinishedAt: metav1.NewTime(now.Add(-30 * time.Minute)),
+					},
+				},
+			}},
+		},
+	}
+	client := fake.NewSimpleClientset(&stalePod, &recentPod)
+	s := NewClusterScanner(client)
+	issues, err := s.scanPods(context.Background(), "")
+	if err != nil {
+		t.Fatalf("scanPods() error = %v", err)
+	}
+	sevByPod := map[string]Severity{}
+	for _, iss := range issues {
+		if iss.Category == CategoryHighRestarts {
+			sevByPod[iss.Name] = iss.Severity
+		}
+	}
+	if sevByPod["node-exporter-a"] != SeverityMedium {
+		t.Fatalf("stale ready HighRestartCount severity = %q, want MEDIUM", sevByPod["node-exporter-a"])
+	}
+	if sevByPod["api-b"] != SeverityHigh {
+		t.Fatalf("recent HighRestartCount severity = %q, want HIGH", sevByPod["api-b"])
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kubebee-com/sre/pkg/sanitizer"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -51,11 +52,7 @@ func (a *FalcoSecurityAnalyzer) Analyze(ctx context.Context, namespace string) (
 
 	for index := range events.Items {
 		event := &events.Items[index]
-		isFalco := strings.EqualFold(event.Source.Component, "falco") ||
-			strings.Contains(strings.ToLower(event.Reason), "falco") ||
-			strings.Contains(strings.ToLower(event.Message), "falco")
-
-		if !isFalco {
+		if !isFalcoSecurityEvent(event) {
 			continue
 		}
 
@@ -106,4 +103,28 @@ func (a *FalcoSecurityAnalyzer) Analyze(ctx context.Context, namespace string) (
 	}
 
 	return issues, nil
+}
+
+// isFalcoSecurityEvent filters for actual Falco/Falcosidekick security telemetry and
+// ignores routine Kubernetes/Flux lifecycle events (e.g., HelmRelease falco UpgradeSucceeded).
+func isFalcoSecurityEvent(event *corev1.Event) bool {
+	if event == nil {
+		return false
+	}
+	sourceLower := strings.ToLower(strings.TrimSpace(event.Source.Component))
+	if sourceLower == "falco" || sourceLower == "falcosidekick" || strings.HasPrefix(sourceLower, "falco-") {
+		return true
+	}
+	reasonLower := strings.ToLower(strings.TrimSpace(event.Reason))
+	if strings.Contains(reasonLower, "falco") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(event.Type), corev1.EventTypeNormal) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(event.InvolvedObject.Kind)) {
+	case "helmrelease", "helmchart", "helmrepository", "kustomization", "gitrepository", "ocirepository":
+		return false
+	}
+	return strings.Contains(strings.ToLower(event.Message), "falco")
 }

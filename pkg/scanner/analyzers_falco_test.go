@@ -113,3 +113,65 @@ func TestFalcoSecurityAnalyzer(t *testing.T) {
 		t.Errorf("expected SeverityCritical, got %v", critIssue.Severity)
 	}
 }
+
+func TestFalcoSecurityAnalyzerIgnoresLifecycleEvents(t *testing.T) {
+	now := metav1.NewTime(time.Now())
+	client := fake.NewSimpleClientset(
+		&corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "helm-upgrade-falco",
+				Namespace: "flux-system",
+			},
+			InvolvedObject: corev1.ObjectReference{
+				Kind:      "HelmRelease",
+				Name:      "falco",
+				Namespace: "flux-system",
+			},
+			Type:          corev1.EventTypeNormal,
+			Reason:        "UpgradeSucceeded",
+			Message:       "Helm upgrade succeeded for release falco/falco",
+			Source:        corev1.EventSource{Component: "helm-controller"},
+			LastTimestamp: now,
+		},
+		&corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "helm-warning-falco",
+				Namespace: "flux-system",
+			},
+			InvolvedObject: corev1.ObjectReference{
+				Kind:      "HelmRelease",
+				Name:      "falco",
+				Namespace: "flux-system",
+			},
+			Type:          corev1.EventTypeWarning,
+			Reason:        "UpgradeFailed",
+			Message:       "Helm upgrade failed for falco",
+			Source:        corev1.EventSource{Component: "helm-controller"},
+			LastTimestamp: now,
+		},
+		&corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kubelet-pulled-falco",
+				Namespace: "falco",
+			},
+			InvolvedObject: corev1.ObjectReference{
+				Kind:      "Pod",
+				Name:      "falco-abcde",
+				Namespace: "falco",
+			},
+			Type:          corev1.EventTypeNormal,
+			Reason:        "Pulled",
+			Message:       "Successfully pulled image \"falcosecurity/falco:0.39.0\"",
+			Source:        corev1.EventSource{Component: "kubelet"},
+			LastTimestamp: now,
+		},
+	)
+
+	issues, err := NewFalcoSecurityAnalyzer(client).Analyze(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("expected 0 FalcoSecurityAlert issues for lifecycle events, got %#v", issues)
+	}
+}
