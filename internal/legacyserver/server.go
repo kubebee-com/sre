@@ -910,18 +910,9 @@ func (s *Server) SetActiveIssues(issues []*scanner.Issue) {
 }
 
 // Alertmanager returns the Alertmanager notifier, which is nil when the
-// integration is not configured. The scan loop records diagnoses on it ahead
-// of SyncAlertmanager.
+// integration is not configured. The scan loop syncs folded serious findings
+// to it, together with the diagnoses it has for them.
 func (s *Server) Alertmanager() *notifier.AlertmanagerNotifier { return s.alertmanager }
-
-// SyncAlertmanager pushes folded serious findings to the configured
-// Alertmanager endpoint when enabled.
-func (s *Server) SyncAlertmanager(ctx context.Context, folded []*scanner.Issue, fullScope bool) error {
-	if s == nil || s.alertmanager == nil || !s.alertmanager.Enabled() {
-		return nil
-	}
-	return s.alertmanager.SyncFoldedIssues(ctx, folded, fullScope)
-}
 
 func (s *Server) observeIssueMetrics() {
 	if s == nil || s.metrics == nil {

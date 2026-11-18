@@ -93,6 +93,7 @@ type UserSettings struct {
 	LLMProvider               string   `json:"llm_provider,omitempty" yaml:"llm_provider,omitempty"`
 	LLMMode                   string   `json:"llm_mode,omitempty" yaml:"llm_mode,omitempty"`
 	LLMWireAPI                string   `json:"llm_wire_api,omitempty" yaml:"llm_wire_api,omitempty"`
+	LLMReasoningEffort        string   `json:"llm_reasoning_effort,omitempty" yaml:"llm_reasoning_effort,omitempty"`
 	LLMModel                  string   `json:"llm_model,omitempty" yaml:"llm_model,omitempty"`
 	LLMBaseURL                string   `json:"llm_base_url,omitempty" yaml:"llm_base_url,omitempty"`
 	LLMOrganization           string   `json:"llm_organization,omitempty" yaml:"llm_organization,omitempty"`
@@ -666,6 +667,8 @@ func ResolveConfig(options ResolveOptions) (*Config, UserConfig, error) {
 	stringValue(&cfg.LLMProvider, "llm-provider", settings.LLMProvider, flags, environment, "LLM_PROVIDER")
 	stringValue(&cfg.LLMMode, "llm-mode", settings.LLMMode, flags, environment, "LLM_MODE")
 	stringValue(&cfg.LLMWireAPI, "llm-wire-api", settings.LLMWireAPI, flags, environment, "LLM_WIRE_API")
+	stringValue(&cfg.LLMReasoningEffort, "llm-reasoning-effort", settings.LLMReasoningEffort, flags, environment, "LLM_REASONING_EFFORT")
+	cfg.LLMReasoningEffort = normalizeReasoningEffort(cfg.LLMReasoningEffort)
 	stringValue(&cfg.LLMModel, "llm-model", settings.LLMModel, flags, environment, "LLM_MODEL")
 	stringValue(&cfg.LLMBaseURL, "llm-base-url", settings.LLMBaseURL, flags, environment, "LLM_BASE_URL")
 	cfg.LLMEndpointAllowlist = listValue(settings.LLMEndpointAllowlist, flags, environment, "llm-endpoint-allowlist", "LLM_ENDPOINT_ALLOWLIST")
@@ -1134,6 +1137,7 @@ func normalizeSettings(settings UserSettings) UserSettings {
 	settings.LLMProvider = strings.ToLower(strings.TrimSpace(settings.LLMProvider))
 	settings.LLMMode = strings.ToLower(strings.TrimSpace(settings.LLMMode))
 	settings.LLMWireAPI = strings.ToLower(strings.TrimSpace(settings.LLMWireAPI))
+	settings.LLMReasoningEffort = normalizeReasoningEffort(settings.LLMReasoningEffort)
 	settings.LLMModel = strings.TrimSpace(settings.LLMModel)
 	settings.LLMBaseURL = strings.TrimSpace(settings.LLMBaseURL)
 	settings.LLMEndpointAllowlist = normalizeList(settings.LLMEndpointAllowlist)

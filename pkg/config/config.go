@@ -60,6 +60,7 @@ type Config struct {
 	LLMProvider                string
 	LLMMode                    string
 	LLMWireAPI                 string
+	LLMReasoningEffort         string
 	LLMAPIKey                  string
 	LLMModel                   string
 	LLMBaseURL                 string
@@ -208,6 +209,7 @@ func LoadConfigArgs(args []string) *Config {
 	flags.StringVar(&cfg.LLMProvider, "llm-provider", getEnv("LLM_PROVIDER", "claude"), "Triage provider: claude, codex, deepseek, harness, rule-based")
 	flags.StringVar(&cfg.LLMMode, "llm-mode", getEnv("LLM_MODE", ""), "Triage provider mode, such as remote, local, rule, noop, or aws")
 	flags.StringVar(&cfg.LLMWireAPI, "llm-wire-api", getEnv("LLM_WIRE_API", ""), "Triage provider wire API: chat or responses")
+	flags.StringVar(&cfg.LLMReasoningEffort, "llm-reasoning-effort", getEnv("LLM_REASONING_EFFORT", ""), "Reasoning effort for the responses wire API: none, minimal, low, medium, high, xhigh, or max")
 	flags.StringVar(&cfg.LLMAPIKey, "llm-api-key", getEnv("LLM_API_KEY", ""), "API Key for LLM provider")
 	flags.StringVar(&cfg.LLMModel, "llm-model", getEnv("LLM_MODEL", ""), "Model override (e.g. claude-3-7-sonnet, gpt-4o, deepseek-chat)")
 	flags.StringVar(&cfg.LLMBaseURL, "llm-base-url", getEnv("LLM_BASE_URL", ""), "Base URL override for LLM provider API")
@@ -334,6 +336,7 @@ func LoadConfigArgs(args []string) *Config {
 	cfg.ResourceNames = splitCSV(resourceNames)
 	cfg.Analyzers = splitCSV(analyzers)
 	cfg.LLMEndpointAllowlist = splitCSV(llmEndpointAllowlist)
+	cfg.LLMReasoningEffort = normalizeReasoningEffort(cfg.LLMReasoningEffort)
 	cfg.LLMHeaders = append([]string(nil), llmHeaders...)
 	cfg.PlaybookLearningMode = normalizePlaybookLearningMode(cfg.PlaybookLearningMode)
 	cfg.PlaybookAllowedActions = splitCSV(playbookAllowedActions)
@@ -498,6 +501,12 @@ func getEnvFloat(key string, fallback float64) float64 {
 		}
 	}
 	return fallback
+}
+
+// normalizeReasoningEffort gives a reasoning effort its canonical spelling.
+// The triage provider profile decides which efforts are valid.
+func normalizeReasoningEffort(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func splitCSV(value string) []string {

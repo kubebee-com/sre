@@ -1,13 +1,8 @@
 package notifier
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/kubebee-com/sre/pkg/sanitizer"
 	"github.com/kubebee-com/sre/pkg/scanner"
@@ -15,104 +10,10 @@ import (
 )
 
 const (
-	// alertDiagnosisTTL is how long a diagnosis is reused for a finding whose
-	// evidence has not changed, before a fresh one is worth asking for.
-	alertDiagnosisTTL      = 6 * time.Hour
-	maxAlertDiagnoses      = 512
 	maxAlertAnalysisBytes  = 1536
 	maxAlertActionBytes    = 1024
 	maxAlertScopeResources = 5
 )
-
-// alertDiagnosis is the diagnosis recorded for one alert. It stands for as
-// long as the finding's evidence still matches fingerprint.
-type alertDiagnosis struct {
-	fingerprint string
-	diagnosis   *triage.Diagnosis
-	recordedAt  time.Time
-}
-
-// RecordDiagnosis keeps a sanitized copy of the diagnosis of an alertable
-// finding. SyncFoldedIssues annotates the finding's alert with it, and
-// CachedDiagnosis returns it on later scans, until the finding's evidence
-// changes, its alert resolves, or alertDiagnosisTTL passes.
-func (n *AlertmanagerNotifier) RecordDiagnosis(issue *scanner.Issue, diagnosis *triage.Diagnosis) {
-	if !n.Enabled() || diagnosis == nil || !n.IsAlertableIssue(issue) {
-		return
-	}
-	key := n.alertKey(issue)
-	entry := alertDiagnosis{
-		fingerprint: evidenceFingerprint(issue),
-		diagnosis:   n.sanitizedDiagnosis(diagnosis),
-		recordedAt:  n.now(),
-	}
-
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if _, known := n.diagnoses[key]; !known && len(n.diagnoses) >= maxAlertDiagnoses {
-		n.evictDiagnosisLocked(entry.recordedAt)
-	}
-	n.diagnoses[key] = entry
-}
-
-// CachedDiagnosis returns the diagnosis recorded for a finding, provided the
-// finding's evidence is unchanged since it was recorded.
-func (n *AlertmanagerNotifier) CachedDiagnosis(issue *scanner.Issue) (*triage.Diagnosis, bool) {
-	if !n.Enabled() || issue == nil {
-		return nil, false
-	}
-	key := n.alertKey(issue)
-	n.mu.Lock()
-	entry, found := n.diagnoses[key]
-	n.mu.Unlock()
-	if !found || entry.fingerprint != evidenceFingerprint(issue) || n.now().Sub(entry.recordedAt) >= alertDiagnosisTTL {
-		return nil, false
-	}
-	return n.sanitizedDiagnosis(entry.diagnosis), true
-}
-
-// evictDiagnosisLocked makes room for one more diagnosis: it drops every
-// expired entry and, when none has expired, the oldest one.
-func (n *AlertmanagerNotifier) evictDiagnosisLocked(now time.Time) {
-	oldestKey := ""
-	var oldest time.Time
-	for key, entry := range n.diagnoses {
-		if now.Sub(entry.recordedAt) >= alertDiagnosisTTL {
-			delete(n.diagnoses, key)
-			continue
-		}
-		if oldestKey == "" || entry.recordedAt.Before(oldest) || (entry.recordedAt.Equal(oldest) && key < oldestKey) {
-			oldestKey, oldest = key, entry.recordedAt
-		}
-	}
-	if len(n.diagnoses) >= maxAlertDiagnoses {
-		delete(n.diagnoses, oldestKey)
-	}
-}
-
-// sanitizedDiagnosis returns a redacted copy, so that neither the cache nor a
-// caller shares memory with a provider's result.
-func (n *AlertmanagerNotifier) sanitizedDiagnosis(diagnosis *triage.Diagnosis) *triage.Diagnosis {
-	return diagnosis.SanitizedWithRedactor(n.redactorOrDefault()).AsDiagnosis()
-}
-
-// evidenceFingerprint identifies the evidence a provider is shown for a
-// finding. Observation times and the target's resourceVersion are left out on
-// purpose: analyzers stamp them on every scan and status heartbeats bump them
-// without changing what there is to diagnose, so keying on them would diagnose
-// an unchanged finding again on every scan.
-func evidenceFingerprint(issue *scanner.Issue) string {
-	hash := sha256.New()
-	write := func(values ...string) {
-		for _, value := range values {
-			_, _ = io.WriteString(hash, strconv.Itoa(len(value))+":"+value)
-		}
-	}
-	write(issue.ID, issue.Namespace, issue.Kind, issue.Name, string(issue.Severity), string(issue.Category),
-		issue.Summary, issue.Details, issue.LogsSnippet, issue.SpecSnippet)
-	write(issue.Events...)
-	return hex.EncodeToString(hash.Sum(nil))
-}
 
 // alertAnalysis is the root cause a diagnosis gives for a finding, followed by
 // the finding's scope unless the root cause already quotes the scanner's

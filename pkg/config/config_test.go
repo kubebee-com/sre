@@ -616,3 +616,17 @@ func TestExpandEnvDefaults(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadConfigReadsLLMReasoningEffortWithFlagPrecedence(t *testing.T) {
+	if cfg := LoadConfigArgs(nil); cfg.LLMReasoningEffort != "" {
+		t.Fatalf("default LLMReasoningEffort = %q, want none set", cfg.LLMReasoningEffort)
+	}
+
+	t.Setenv("LLM_REASONING_EFFORT", " MAX ")
+	if cfg := LoadConfigArgs(nil); cfg.LLMReasoningEffort != "max" {
+		t.Fatalf("environment LLMReasoningEffort = %q, want max", cfg.LLMReasoningEffort)
+	}
+	if cfg := LoadConfigArgs([]string{"--llm-reasoning-effort=High"}); cfg.LLMReasoningEffort != "high" {
+		t.Fatalf("flag LLMReasoningEffort = %q, want high", cfg.LLMReasoningEffort)
+	}
+}

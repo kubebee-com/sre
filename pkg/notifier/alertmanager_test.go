@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -105,7 +104,7 @@ func TestAlertmanagerNotifierSyncsFoldedSeriousAlertsFiltersPostureAndResolves(t
 		},
 	}
 
-	if err := am.SyncFoldedIssues(context.Background(), issues, true); err != nil {
+	if err := am.SyncFoldedIssues(context.Background(), issues, nil, true); err != nil {
 		t.Fatalf("SyncFoldedIssues(initial) error = %v", err)
 	}
 
@@ -118,13 +117,13 @@ func TestAlertmanagerNotifierSyncsFoldedSeriousAlertsFiltersPostureAndResolves(t
 		LogsSnippet: "unable to construct NLB client", FoldKey: "fold-ctrl-log", OccurrenceCount: 2,
 		Parent: &scanner.ResourceRef{Namespace: "cluster-config-controller", Kind: "Deployment", Name: "cluster-sync-controller"},
 	}}
-	if err := am.SyncFoldedIssues(context.Background(), otherHigh, false); err != nil {
+	if err := am.SyncFoldedIssues(context.Background(), otherHigh, nil, false); err != nil {
 		t.Fatalf("SyncFoldedIssues(partial) error = %v", err)
 	}
 
 	// Full cluster scan returning empty clears BOTH active alerts with EndsAt == now.
 	now = now.Add(time.Minute)
-	if err := am.SyncFoldedIssues(context.Background(), nil, true); err != nil {
+	if err := am.SyncFoldedIssues(context.Background(), nil, nil, true); err != nil {
 		t.Fatalf("SyncFoldedIssues(resolved) error = %v", err)
 	}
 
@@ -193,21 +192,7 @@ func (s *alertSink) lastByFoldKey(t *testing.T) map[string]alertmanagerAlert {
 	return alerts
 }
 
-func testDiagnosis(issue *scanner.Issue) *triage.Diagnosis {
-	return &triage.Diagnosis{
-		IssueID:         issue.ID,
-		Summary:         "summary",
-		RootCause:       "root cause",
-		Severity:        issue.Severity,
-		RemediationPlan: "plan",
-		ActionType:      triage.ActionManual,
-		ProposedCommand: "kubectl describe pod worker-0 -n prod",
-		ConfidenceScore: 0.9,
-		ProviderName:    "test-provider",
-	}
-}
-
-func TestAlertmanagerNotifierEligibleIssuesAreTheFindingsThatAlert(t *testing.T) {
+func TestAlertmanagerNotifierAlertsOncePerEligibleFinding(t *testing.T) {
 	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: "http://alertmanager.invalid:9093", MinSeverity: "HIGH"})
 	if err != nil {
 		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
@@ -221,22 +206,23 @@ func TestAlertmanagerNotifierEligibleIssuesAreTheFindingsThatAlert(t *testing.T)
 		{ID: "high", Severity: scanner.SeverityHigh, Category: scanner.CategoryServiceNoEndpoint, FoldKey: "fold-service"},
 	}
 
-	eligible := am.EligibleIssues(folded)
+	eligible := am.eligibleIssues(folded)
 	if len(eligible) != 2 || eligible[0] != folded[1] || eligible[1] != folded[5] {
-		t.Fatalf("EligibleIssues() = %#v, want the critical and the high finding, once each", eligible)
+		t.Fatalf("eligibleIssues() = %#v, want the critical and the high finding, once each", eligible)
 	}
 
+	// The alert policy holds without an Alertmanager too: it decides which
+	// findings are serious enough to be diagnosed by a model.
 	var unconfigured *AlertmanagerNotifier
-	if got := unconfigured.EligibleIssues(folded); got != nil {
-		t.Fatalf("EligibleIssues() without Alertmanager = %#v, want nil", got)
+	if !unconfigured.IsAlertableIssue(folded[1]) || unconfigured.IsAlertableIssue(folded[3]) || unconfigured.IsAlertableIssue(folded[4]) {
+		t.Fatal("the default alert policy must pass HIGH and above and hold back posture findings")
 	}
-	unconfigured.RecordDiagnosis(folded[1], testDiagnosis(folded[1]))
-	if _, cached := unconfigured.CachedDiagnosis(folded[1]); cached {
-		t.Fatal("a notifier without Alertmanager cached a diagnosis")
+	if err := unconfigured.SyncFoldedIssues(context.Background(), folded, nil, true); err != nil {
+		t.Fatalf("SyncFoldedIssues() without Alertmanager error = %v", err)
 	}
 }
 
-func TestAlertmanagerNotifierAnnotatesAlertWithRecordedDiagnosis(t *testing.T) {
+func TestAlertmanagerNotifierAnnotatesAlertWithItsDiagnosis(t *testing.T) {
 	const secret = "diagnosis-secret-0123456789"
 	sink, endpoint := newAlertSink(t)
 	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: endpoint, SecretValues: []string{secret}})
@@ -257,7 +243,7 @@ func TestAlertmanagerNotifierAnnotatesAlertWithRecordedDiagnosis(t *testing.T) {
 	undiagnosed := *diagnosed
 	undiagnosed.FoldKey = "fold-undiagnosed"
 
-	am.RecordDiagnosis(diagnosed, &triage.Diagnosis{
+	diagnoses := map[*scanner.Issue]*triage.Diagnosis{diagnosed: {
 		IssueID:         diagnosed.ID,
 		Summary:         "Worker runs out of memory",
 		RootCause:       "The worker exceeds its memory limit while loading " + secret + ".",
@@ -268,8 +254,8 @@ func TestAlertmanagerNotifierAnnotatesAlertWithRecordedDiagnosis(t *testing.T) {
 		Severity:        scanner.SeverityLow,
 		ConfidenceScore: 0.9,
 		ProviderName:    "test-provider",
-	})
-	if err := am.SyncFoldedIssues(context.Background(), []*scanner.Issue{diagnosed, &undiagnosed}, true); err != nil {
+	}}
+	if err := am.SyncFoldedIssues(context.Background(), []*scanner.Issue{diagnosed, &undiagnosed}, diagnoses, true); err != nil {
 		t.Fatalf("SyncFoldedIssues() error = %v", err)
 	}
 	alerts := sink.lastByFoldKey(t)
@@ -350,8 +336,8 @@ func TestAlertmanagerNotifierDoesNotRepeatDetailsQuotedByAnalysis(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Diagnose() error = %v", err)
 	}
-	am.RecordDiagnosis(issue, diagnosis)
-	if err := am.SyncFoldedIssues(context.Background(), []*scanner.Issue{issue}, true); err != nil {
+	diagnoses := map[*scanner.Issue]*triage.Diagnosis{issue: diagnosis}
+	if err := am.SyncFoldedIssues(context.Background(), []*scanner.Issue{issue}, diagnoses, true); err != nil {
 		t.Fatalf("SyncFoldedIssues() error = %v", err)
 	}
 	annotations := sink.lastByFoldKey(t)["fold-keycloak"].Annotations
@@ -368,117 +354,6 @@ func TestAlertmanagerNotifierDoesNotRepeatDetailsQuotedByAnalysis(t *testing.T) 
 	}
 	if annotations["triage_provider"] != "Rule-Based SRE Engine" {
 		t.Fatalf("triage_provider = %q", annotations["triage_provider"])
-	}
-}
-
-func TestAlertmanagerNotifierReusesDiagnosisWhileEvidenceIsUnchanged(t *testing.T) {
-	const secret = "cached-secret-0123456789"
-	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: "http://alertmanager.invalid:9093", SecretValues: []string{secret}})
-	if err != nil {
-		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
-	}
-	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
-	am.now = func() time.Time { return now }
-
-	issue := &scanner.Issue{
-		ID: "prod/Pod/worker-0/CrashLoop", Namespace: "prod", Kind: "Pod", Name: "worker-0",
-		TargetResourceVersion: "100", Severity: scanner.SeverityHigh, Category: scanner.CategoryCrashLoop,
-		Summary: "Pod worker-0 is in CrashLoopBackOff", Details: "Container exited with code 1",
-		Events: []string{"Back-off restarting failed container"}, FoldKey: "fold-worker",
-		FirstObserved: now, LastObserved: now,
-	}
-	if _, cached := am.CachedDiagnosis(issue); cached {
-		t.Fatal("CachedDiagnosis() hit before any diagnosis was recorded")
-	}
-	diagnosis := testDiagnosis(issue)
-	diagnosis.RootCause = "root cause token=" + secret
-	am.RecordDiagnosis(issue, diagnosis)
-
-	// A later scan stamps new observation times and sees a newer
-	// resourceVersion, but the evidence to diagnose is the same.
-	rescanned := *issue
-	rescanned.FirstObserved, rescanned.LastObserved = now.Add(2*time.Minute), now.Add(2*time.Minute)
-	rescanned.TargetResourceVersion = "101"
-	cached, ok := am.CachedDiagnosis(&rescanned)
-	if !ok {
-		t.Fatal("CachedDiagnosis() missed a finding whose evidence is unchanged")
-	}
-	if strings.Contains(cached.RootCause, secret) {
-		t.Fatalf("cached diagnosis kept a configured secret: %q", cached.RootCause)
-	}
-	cached.RootCause = "changed by the caller"
-	if again, _ := am.CachedDiagnosis(&rescanned); again == nil || again.RootCause == cached.RootCause {
-		t.Fatalf("a caller could change the cached diagnosis: %#v", again)
-	}
-
-	for name, change := range map[string]func(*scanner.Issue){
-		"details":  func(i *scanner.Issue) { i.Details = "Container exited with code 137" },
-		"logs":     func(i *scanner.Issue) { i.LogsSnippet = "panic: out of memory" },
-		"events":   func(i *scanner.Issue) { i.Events = append([]string{"OOMKilled"}, i.Events...) },
-		"severity": func(i *scanner.Issue) { i.Severity = scanner.SeverityCritical },
-		"identity": func(i *scanner.Issue) { i.ID = "prod/Pod/worker-1/CrashLoop" },
-	} {
-		changed := rescanned
-		change(&changed)
-		if _, ok := am.CachedDiagnosis(&changed); ok {
-			t.Errorf("CachedDiagnosis() hit although the finding's %s changed", name)
-		}
-	}
-
-	now = now.Add(alertDiagnosisTTL)
-	if _, ok := am.CachedDiagnosis(&rescanned); ok {
-		t.Fatal("CachedDiagnosis() hit after the diagnosis expired")
-	}
-}
-
-func TestAlertmanagerNotifierKeepsDiagnosesOnlyForLiveAlerts(t *testing.T) {
-	_, endpoint := newAlertSink(t)
-	am, err := NewAlertmanagerNotifier(AlertmanagerOptions{Endpoint: endpoint})
-	if err != nil {
-		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
-	}
-	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
-	am.now = func() time.Time { return now }
-	issueNumber := func(number int) *scanner.Issue {
-		return &scanner.Issue{
-			ID: "issue-" + strconv.Itoa(number), Namespace: "prod", Kind: "Pod", Name: "worker",
-			Severity: scanner.SeverityHigh, Category: scanner.CategoryCrashLoop, FoldKey: "fold-" + strconv.Itoa(number),
-		}
-	}
-
-	// A finding that does not alert has no use for a cached diagnosis.
-	quiet := issueNumber(0)
-	quiet.Severity = scanner.SeverityMedium
-	am.RecordDiagnosis(quiet, testDiagnosis(quiet))
-	if len(am.diagnoses) != 0 {
-		t.Fatalf("recorded a diagnosis for a finding that does not alert: %#v", am.diagnoses)
-	}
-
-	// The cache is bounded: the oldest diagnosis makes room for a new one.
-	for number := 1; number <= maxAlertDiagnoses+1; number++ {
-		now = now.Add(time.Second)
-		am.RecordDiagnosis(issueNumber(number), testDiagnosis(issueNumber(number)))
-	}
-	if len(am.diagnoses) != maxAlertDiagnoses {
-		t.Fatalf("cache holds %d diagnoses, want the bound of %d", len(am.diagnoses), maxAlertDiagnoses)
-	}
-	if _, ok := am.CachedDiagnosis(issueNumber(1)); ok {
-		t.Fatal("the oldest diagnosis survived a full cache")
-	}
-	newest := issueNumber(maxAlertDiagnoses + 1)
-	if _, ok := am.CachedDiagnosis(newest); !ok {
-		t.Fatal("the newest diagnosis was evicted")
-	}
-
-	// A resolved alert takes its diagnosis with it.
-	if err := am.SyncFoldedIssues(context.Background(), []*scanner.Issue{newest}, true); err != nil {
-		t.Fatalf("SyncFoldedIssues(firing) error = %v", err)
-	}
-	if err := am.SyncFoldedIssues(context.Background(), nil, true); err != nil {
-		t.Fatalf("SyncFoldedIssues(resolved) error = %v", err)
-	}
-	if _, ok := am.CachedDiagnosis(newest); ok {
-		t.Fatal("the diagnosis of a resolved alert is still cached")
 	}
 }
 

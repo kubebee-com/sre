@@ -138,6 +138,7 @@ func (c runtimeGRPCConfig) GetConfig(ctx context.Context) (interface{}, error) {
 		"llm_provider":                  sanitizer.DefaultRedactor().SanitizeText(c.config.LLMProvider),
 		"llm_mode":                      sanitizer.DefaultRedactor().SanitizeText(c.config.LLMMode),
 		"llm_wire_api":                  sanitizer.DefaultRedactor().SanitizeText(effectiveWireAPI(c.config)),
+		"llm_reasoning_effort":          sanitizer.DefaultRedactor().SanitizeText(c.config.LLMReasoningEffort),
 		"llm_model":                     sanitizer.DefaultRedactor().SanitizeText(c.config.LLMModel),
 		"llm_headers_configured":        len(c.config.LLMHeaders) > 0,
 		"public_url":                    sanitizer.DefaultRedactor().SanitizeURL(c.config.PublicURL),
@@ -255,6 +256,11 @@ func LegacyMain() {
 		log.Fatalf("Failed to initialize triage provider: %s", sanitizeLog(cfg, err.Error()))
 	}
 	triageProvider = observeTriageProvider(triageProvider, providerMetricsObserver{registry: metricsRegistry})
+	if asksModel(triageProvider) {
+		// Every scan asks for the diagnosis of every serious finding. The
+		// memo spares a model the findings it has diagnosed recently.
+		triageProvider = triage.NewMemoizedProvider(triageProvider)
+	}
 	log.Printf("Selected Triage Provider: %s", sanitizeLog(cfg, triageProvider.Name()))
 
 	// 3. Initialize Scanner, Remediation Engine, and Notifier
@@ -616,7 +622,7 @@ func firstCLICommand(args []string) string {
 
 func cliFlagTakesValue(name string) bool {
 	switch name {
-	case "config", "api-token", "kubeconfig", "port", "grpc-port", "grpc-tls-cert-file", "grpc-tls-key-file", "grpc-tls-client-ca-file", "scan-interval", "scan-jitter", "leader-election-namespace", "leader-election-id", "leader-election-identity", "aws-region", "eks-cluster-name", "namespace", "llm-provider", "llm-mode", "llm-wire-api", "llm-api-key", "llm-model", "llm-base-url", "llm-organization", "llm-proxy-url", "llm-headers", "custom-headers", "harness-command", "webhook-url", "alertmanager-url", "alertmanager-min-severity", "public-url", "allowed-origins", "trusted-client-ip-header", "trusted-proxy-cidrs", "max-body-bytes", "requests-per-minute", "request-burst", "data-dir", "cache-dir", "cache-ttl", "cache-max-entries", "cache-max-value-bytes", "include-namespaces", "exclude-namespaces", "label-selector", "resource-kinds", "resource-names", "analyzers", "scan-concurrency", "scan-timeout", "scan-history-dir", "database-url", "playbook-learning-mode", "playbook-min-confidence", "playbook-allowed-actions", "playbook-allowed-namespaces", "playbook-allowed-kinds", "playbook-max-source-bytes", "playbook-max-step-count", "playbook-max-total-text-bytes", "playbook-max-sources", "playbook-max-steps", "filter", "include-namespace", "exclude-namespace", "kind", "name", "analyzer", "concurrency", "timeout", "output", "interactive", "include-resource", "event-queue-capacity", "event-debounce", "llm-endpoint-allowlist":
+	case "config", "api-token", "kubeconfig", "port", "grpc-port", "grpc-tls-cert-file", "grpc-tls-key-file", "grpc-tls-client-ca-file", "scan-interval", "scan-jitter", "leader-election-namespace", "leader-election-id", "leader-election-identity", "aws-region", "eks-cluster-name", "namespace", "llm-provider", "llm-mode", "llm-wire-api", "llm-reasoning-effort", "llm-api-key", "llm-model", "llm-base-url", "llm-organization", "llm-proxy-url", "llm-headers", "custom-headers", "harness-command", "webhook-url", "alertmanager-url", "alertmanager-min-severity", "public-url", "allowed-origins", "trusted-client-ip-header", "trusted-proxy-cidrs", "max-body-bytes", "requests-per-minute", "request-burst", "data-dir", "cache-dir", "cache-ttl", "cache-max-entries", "cache-max-value-bytes", "include-namespaces", "exclude-namespaces", "label-selector", "resource-kinds", "resource-names", "analyzers", "scan-concurrency", "scan-timeout", "scan-history-dir", "database-url", "playbook-learning-mode", "playbook-min-confidence", "playbook-allowed-actions", "playbook-allowed-namespaces", "playbook-allowed-kinds", "playbook-max-source-bytes", "playbook-max-step-count", "playbook-max-total-text-bytes", "playbook-max-sources", "playbook-max-steps", "filter", "include-namespace", "exclude-namespace", "kind", "name", "analyzer", "concurrency", "timeout", "output", "interactive", "include-resource", "event-queue-capacity", "event-debounce", "llm-endpoint-allowlist":
 		return true
 	default:
 		return false
@@ -648,7 +654,7 @@ func configFlagsFromArgs(args []string) map[string]string {
 		"api-token": "api-token", "kubeconfig": "kubeconfig", "port": "port", "grpc-port": "grpc-port", "grpc-tls-cert-file": "grpc-tls-cert-file", "grpc-tls-key-file": "grpc-tls-key-file", "grpc-tls-client-ca-file": "grpc-tls-client-ca-file", "grpc-reflection": "grpc-reflection", "scan-interval": "scan-interval", "scan-jitter": "scan-jitter", "event-driven-scanning": "event-driven-scanning", "event-queue-capacity": "event-queue-capacity", "event-debounce": "event-debounce",
 		"leader-election": "leader-election", "leader-election-namespace": "leader-election-namespace", "leader-election-id": "leader-election-id", "leader-election-identity": "leader-election-identity",
 		"enable-aws-eks": "enable-aws-eks", "aws-region": "aws-region", "eks-cluster-name": "eks-cluster-name",
-		"namespace": "namespace", "llm-provider": "llm-provider", "llm-mode": "llm-mode", "llm-wire-api": "llm-wire-api", "llm-api-key": "llm-api-key", "llm-model": "llm-model",
+		"namespace": "namespace", "llm-provider": "llm-provider", "llm-mode": "llm-mode", "llm-wire-api": "llm-wire-api", "llm-reasoning-effort": "llm-reasoning-effort", "llm-api-key": "llm-api-key", "llm-model": "llm-model",
 		"llm-base-url": "llm-base-url", "llm-endpoint-allowlist": "llm-endpoint-allowlist", "llm-organization": "llm-organization", "llm-proxy-url": "llm-proxy-url", "llm-headers": "llm-headers", "custom-headers": "llm-headers",
 		"alertmanager-url": "alertmanager-url", "alertmanager-min-severity": "alertmanager-min-severity", "alertmanager-include-posture": "alertmanager-include-posture",
 		"harness-command": "harness-command", "webhook-url": "webhook-url", "public-url": "public-url",
@@ -804,7 +810,7 @@ func cliRuntimeArgs(args []string) []string {
 		"kubeconfig": true, "port": true, "grpc-port": true, "grpc-tls-cert-file": true, "grpc-tls-key-file": true, "grpc-tls-client-ca-file": true, "grpc-reflection": true, "scan-interval": true, "scan-jitter": true, "event-driven-scanning": true, "event-queue-capacity": true, "event-debounce": true,
 		"leader-election": true, "leader-election-namespace": true, "leader-election-id": true, "leader-election-identity": true, "namespace": true,
 		"enable-aws-eks": true, "aws-region": true, "eks-cluster-name": true,
-		"llm-provider": true, "llm-mode": true, "llm-wire-api": true, "llm-api-key": true, "llm-model": true, "llm-base-url": true, "llm-endpoint-allowlist": true, "llm-organization": true, "llm-proxy-url": true, "llm-headers": true, "custom-headers": true,
+		"llm-provider": true, "llm-mode": true, "llm-wire-api": true, "llm-reasoning-effort": true, "llm-api-key": true, "llm-model": true, "llm-base-url": true, "llm-endpoint-allowlist": true, "llm-organization": true, "llm-proxy-url": true, "llm-headers": true, "custom-headers": true,
 		"harness-command": true, "webhook-url": true, "public-url": true, "require-api-token": true,
 		"allowed-origins": true, "trusted-client-ip-header": true, "trusted-proxy-cidrs": true,
 		"max-body-bytes": true, "requests-per-minute": true, "request-burst": true,
@@ -1090,14 +1096,15 @@ func runSingleScanWithPlan(
 	srv.UpdateScanResults(issues)
 	log.Printf("Scan complete: %d anomalies detected in cluster (%d folded).", len(issues), len(foldedIssues))
 
-	// Diagnose the findings that are about to alert, so that the alerts carry
-	// an analysis. See alert_triage.go.
+	// Diagnose the serious findings before their alerts go out, so that the
+	// alerts carry an analysis. See alert_triage.go.
 	alertmanager := srv.Alertmanager()
 	preAlert := startAlertTriage(scanCtx, cfg, alertmanager, tp, foldedIssues)
 	defer preAlert.wait()
 	preAlert.settle(scanCtx)
+	routine := routineProvider(cfg, tp)
 
-	if amErr := srv.SyncAlertmanager(scanCtx, foldedIssues, isFullBaseScanPlan(cfg, plan)); amErr != nil {
+	if amErr := alertmanager.SyncFoldedIssues(scanCtx, foldedIssues, preAlert.diagnoses(), isFullBaseScanPlan(cfg, plan)); amErr != nil {
 		log.Printf("Alertmanager notification sync failed: %s", sanitizeLog(cfg, amErr.Error()))
 	}
 
@@ -1131,14 +1138,12 @@ func runSingleScanWithPlan(
 				continue
 			}
 		} else {
-			// Pre-alert triage has already diagnosed, or is diagnosing, the
-			// findings it took on. Only the rest are diagnosed here.
+			// Pre-alert triage has diagnosed, or is diagnosing, the serious
+			// findings. The rest are routine.
 			diag, analyzed, err := preAlert.result(scanCtx, issue)
 			if !analyzed {
-				if diag, err = tp.Diagnose(scanCtx, sanitizedIssue); err != nil {
+				if diag, err = routine.Diagnose(scanCtx, sanitizedIssue); err != nil {
 					log.Printf("Triage failed for issue %s: %s", sanitizeLog(cfg, issue.ID), sanitizeLog(cfg, err.Error()))
-				} else {
-					alertmanager.RecordDiagnosis(issue, diag)
 				}
 			}
 			if err != nil || diag == nil {
@@ -1211,6 +1216,7 @@ func providerProfileFromConfig(cfg *config.Config) triage.ProviderProfile {
 		Provider:          cfg.LLMProvider,
 		Mode:              triage.ProviderMode(strings.TrimSpace(cfg.LLMMode)),
 		WireAPI:           triage.WireAPI(strings.TrimSpace(cfg.LLMWireAPI)),
+		ReasoningEffort:   cfg.LLMReasoningEffort,
 		Model:             cfg.LLMModel,
 		Endpoint:          cfg.LLMBaseURL,
 		Organization:      cfg.LLMOrganization,
@@ -1249,8 +1255,13 @@ func buildTriageProvider(cfg *config.Config, observers ...cache.OperationObserve
 	if err != nil {
 		return nil, err
 	}
-	if normalized, normalizeErr := profile.Normalize(); normalizeErr == nil && normalized.Mode == triage.ProviderModeRemote && strings.TrimSpace(normalized.APIKey) == "" {
-		log.Printf("Notice: provider '%s' has no API key; using its configured unauthenticated mode or returning provider errors.", sanitizeLog(cfg, normalized.Provider))
+	if normalized, normalizeErr := profile.Normalize(); normalizeErr == nil {
+		if normalized.Mode == triage.ProviderModeRemote && strings.TrimSpace(normalized.APIKey) == "" {
+			log.Printf("Notice: provider '%s' has no API key; using its configured unauthenticated mode or returning provider errors.", sanitizeLog(cfg, normalized.Provider))
+		}
+		if normalized.ReasoningEffort != "" && (normalized.Provider != "openai" || normalized.WireAPI != triage.WireAPIResponses) {
+			log.Printf("Notice: reasoning effort '%s' is not sent; it applies to the openai/codex provider on the responses wire API only.", sanitizeLog(cfg, normalized.ReasoningEffort))
+		}
 	}
 	return configureTriageCache(cfg, provider, observers...)
 }

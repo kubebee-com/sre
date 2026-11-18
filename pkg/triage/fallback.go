@@ -21,8 +21,12 @@ func NewRuleBasedProvider(secretValues ...string) *RuleBasedProvider {
 	return &RuleBasedProvider{redactor: sanitizer.NewRedactor(secretValues...)}
 }
 
+// RuleBasedProviderName is the name of the built-in rule engine, which
+// diagnoses offline, at once, and at no cost. See NoOpProviderName.
+const RuleBasedProviderName = "Rule-Based SRE Engine"
+
 func (p *RuleBasedProvider) Name() string {
-	return "Rule-Based SRE Engine"
+	return RuleBasedProviderName
 }
 
 type ruleSpec struct {

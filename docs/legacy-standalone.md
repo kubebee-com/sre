@@ -147,6 +147,24 @@ comma-separated list containing the endpoint origin or path. `LLM_BASE_URL`
 selects the endpoint, while the allowlist is the explicit outbound-request
 trust policy; local loopback endpoints remain available to local providers.
 
+`LLM_REASONING_EFFORT` (or `--llm-reasoning-effort`) sets `reasoning.effort`
+for the `openai`/`codex` provider on the `responses` wire API. It takes `none`,
+`minimal`, `low`, `medium`, `high`, `xhigh`, or `max`; left empty, no reasoning
+setting is sent. A reasoning request is given an output budget of at least
+8192 tokens, because reasoning tokens count against it. Other providers and
+the `chat` wire API do not send the setting.
+
+During scans a provider that asks a model is asked only about the findings
+that qualify for an alert: those at or above `SRE_ALERTMANAGER_MIN_SEVERITY`
+(default `HIGH`), without passive posture findings unless
+`SRE_ALERTMANAGER_INCLUDE_POSTURE` is set. The built-in rule engine diagnoses
+every other finding. A model's diagnosis of a finding is reused for six hours
+while the finding's evidence is unchanged, and for thirty minutes once it
+changes; this memory is not kept across restarts. A scan runs three diagnoses
+at a time, holds its alerts back for at most twenty seconds to wait for them,
+and starts none later than ninety seconds in; what is left over is diagnosed
+by the scans that follow, and an alert without a diagnosis is sent as it is.
+
 The named cloud adapters implement provider-specific bounded HTTP payloads.
 Set `LLM_MODE=aws` (or `--llm-mode aws`) with `LLM_PROVIDER=bedrock` or
 `LLM_PROVIDER=sagemaker` to use the maintained AWS SDK v2 runtime clients and

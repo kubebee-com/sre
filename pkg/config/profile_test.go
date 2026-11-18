@@ -731,3 +731,42 @@ func TestStoreProviderAndFilterCRUDAndDefaults(t *testing.T) {
 		t.Fatalf("deleted state = %#v", got)
 	}
 }
+
+func TestResolveConfigReasoningEffortFlagOverEnvironmentOverSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	store, err := NewStore(path)
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	userConfig := NewUserConfig()
+	userConfig.Settings.LLMReasoningEffort = " Low "
+	if err := store.Save(userConfig); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	for name, test := range map[string]struct {
+		environment map[string]string
+		flags       map[string]string
+		want        string
+	}{
+		"settings file": {environment: map[string]string{}, want: "low"},
+		"environment":   {environment: map[string]string{"LLM_REASONING_EFFORT": " MAX "}, want: "max"},
+		"flag": {
+			environment: map[string]string{"LLM_REASONING_EFFORT": "max"},
+			flags:       map[string]string{"llm-reasoning-effort": "XHigh"},
+			want:        "xhigh",
+		},
+	} {
+		resolved, _, err := ResolveConfig(ResolveOptions{Path: path, Environment: test.environment, Flags: test.flags})
+		if err != nil {
+			t.Fatalf("ResolveConfig(%s) error = %v", name, err)
+		}
+		if resolved.LLMReasoningEffort != test.want {
+			t.Errorf("%s LLMReasoningEffort = %q, want %q", name, resolved.LLMReasoningEffort, test.want)
+		}
+	}
+
+	if resolved, _, err := ResolveConfig(ResolveOptions{Path: filepath.Join(t.TempDir(), "absent.yaml"), Environment: map[string]string{}}); err != nil || resolved.LLMReasoningEffort != "" {
+		t.Fatalf("unset LLMReasoningEffort = %q (error %v), want none set", resolved.LLMReasoningEffort, err)
+	}
+}

@@ -132,6 +132,10 @@ type ProviderProfile struct {
 	Mode     ProviderMode `json:"mode,omitempty"`
 	WireAPI  WireAPI      `json:"wire_api,omitempty"`
 
+	// ReasoningEffort is sent as reasoning.effort on the Responses wire API.
+	// Empty, the default, sends no reasoning setting at all.
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+
 	Model     string `json:"model,omitempty"`
 	Endpoint  string `json:"endpoint,omitempty"`
 	BaseURL   string `json:"base_url,omitempty"`
@@ -317,6 +321,12 @@ func (p ProviderProfile) Normalize() (ProviderProfile, error) {
 	}
 	switch p.WireAPI {
 	case WireAPIChat, WireAPIResponses:
+	default:
+		return ProviderProfile{}, providerError(ProviderErrorValidation, provider, "configuration", ErrProviderValidation)
+	}
+	p.ReasoningEffort = strings.ToLower(strings.TrimSpace(p.ReasoningEffort))
+	switch p.ReasoningEffort {
+	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max":
 	default:
 		return ProviderProfile{}, providerError(ProviderErrorValidation, provider, "configuration", ErrProviderValidation)
 	}
@@ -786,13 +796,18 @@ func classifyContextProviderError(err error, provider, operation string, ctx con
 	return providerError(ProviderErrorTransport, provider, operation, ErrProviderUnavailable)
 }
 
+// NoOpProviderName is the name of the explicitly disabled provider. A
+// wrapper keeps the name of the provider it wraps, so the name tells a
+// disabled provider apart where its type is hidden.
+const NoOpProviderName = "NoOp (explicitly disabled)"
+
 // NoOpProvider is an explicit disabled mode. It never echoes prompts or
 // issue context.
 type NoOpProvider struct{}
 
 func NewNoOpProvider() *NoOpProvider { return &NoOpProvider{} }
 
-func (p *NoOpProvider) Name() string { return "NoOp (explicitly disabled)" }
+func (p *NoOpProvider) Name() string { return NoOpProviderName }
 
 func (p *NoOpProvider) Diagnose(ctx context.Context, _ *scanner.Issue) (*Diagnosis, error) {
 	if err := checkProviderContext(ctx); err != nil {

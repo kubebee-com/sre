@@ -62,7 +62,6 @@ type AlertmanagerNotifier struct {
 	redactor       *sanitizer.Redactor
 	client         *http.Client
 	active         map[string]alertmanagerAlert
-	diagnoses      map[string]alertDiagnosis
 	now            func() time.Time
 }
 
@@ -96,9 +95,8 @@ func NewAlertmanagerNotifier(options AlertmanagerOptions) (*AlertmanagerNotifier
 			Timeout:   defaultAlertmanagerTimeout,
 			Transport: cloneDirectTransport(),
 		},
-		active:    make(map[string]alertmanagerAlert),
-		diagnoses: make(map[string]alertDiagnosis),
-		now:       func() time.Time { return time.Now().UTC() },
+		active: make(map[string]alertmanagerAlert),
+		now:    func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 
@@ -191,13 +189,9 @@ func isPassivePostureCategory(category scanner.IssueCategory) bool {
 	}
 }
 
-// EligibleIssues returns the folded findings that qualify for Alertmanager
-// escalation, in input order and with one finding per alert key. These are
-// the findings worth diagnosing before an alert is dispatched.
-func (n *AlertmanagerNotifier) EligibleIssues(folded []*scanner.Issue) []*scanner.Issue {
-	if !n.Enabled() {
-		return nil
-	}
+// eligibleIssues returns the folded findings that qualify for Alertmanager
+// escalation, in input order and with one finding per alert key.
+func (n *AlertmanagerNotifier) eligibleIssues(folded []*scanner.Issue) []*scanner.Issue {
 	eligible := make([]*scanner.Issue, 0, len(folded))
 	seen := make(map[string]struct{}, len(folded))
 	for _, item := range folded {
@@ -235,9 +229,10 @@ func (n *AlertmanagerNotifier) redactorOrDefault() *sanitizer.Redactor {
 
 // SyncFoldedIssues sends firing alerts for serious folded findings and, when
 // fullScope is true, emits explicit resolved transitions for cleared alerts.
-// A finding with a recorded diagnosis (see RecordDiagnosis) is annotated with
-// its analysis; a finding without one is sent as it is.
-func (n *AlertmanagerNotifier) SyncFoldedIssues(ctx context.Context, folded []*scanner.Issue, fullScope bool) error {
+// diagnoses holds, by folded finding, the diagnoses that are available: a
+// finding in it is annotated with its analysis, and any other finding is sent
+// as the scanner found it. It may be nil.
+func (n *AlertmanagerNotifier) SyncFoldedIssues(ctx context.Context, folded []*scanner.Issue, diagnoses map[*scanner.Issue]*triage.Diagnosis, fullScope bool) error {
 	if !n.Enabled() {
 		return nil
 	}
@@ -246,13 +241,12 @@ func (n *AlertmanagerNotifier) SyncFoldedIssues(ctx context.Context, folded []*s
 	}
 
 	now := n.now().UTC()
-	eligible := n.EligibleIssues(folded)
+	eligible := n.eligibleIssues(folded)
 	desired := make(map[string]alertmanagerAlert, len(eligible))
 	desiredOrder := make([]string, 0, len(eligible))
 
 	for _, item := range eligible {
-		diagnosis, _ := n.CachedDiagnosis(item)
-		alert := n.buildAlert(item, diagnosis, now)
+		alert := n.buildAlert(item, diagnoses[item], now)
 		key := alert.Labels["fold_key"]
 		desired[key] = alert
 		desiredOrder = append(desiredOrder, key)
@@ -287,7 +281,6 @@ func (n *AlertmanagerNotifier) SyncFoldedIssues(ctx context.Context, folded []*s
 				batch = append(batch, resolved)
 			}
 			delete(n.active, key)
-			delete(n.diagnoses, key)
 		}
 	}
 	n.mu.Unlock()

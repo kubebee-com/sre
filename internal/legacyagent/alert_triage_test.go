@@ -144,7 +144,8 @@ func crashLoopIssue(name string) *scanner.Issue {
 	}
 }
 
-// alertScan wires a scan to an Alertmanager stub the way the agent does.
+// alertScan wires a scan to an Alertmanager stub the way the agent does: a
+// provider that asks a model is memoized.
 type alertScan struct {
 	cfg      *config.Config
 	service  *singleScanService
@@ -169,6 +170,9 @@ func newAlertScan(t *testing.T, cfg *config.Config, provider triage.TriageProvid
 		Scope:         scanplan.Default().EffectiveScope(),
 		Issues:        issues,
 	}}
+	if asksModel(provider) {
+		provider = triage.NewMemoizedProvider(provider)
+	}
 	engine := remediation.NewEngine(nil)
 	server := serverpkg.NewServer(0, service, provider, engine, nil, serverpkg.ServerOptions{
 		Alertmanager:     alertmanager,
@@ -220,23 +224,29 @@ func blockingProvider(release <-chan struct{}, cancelled *atomic.Bool) *scripted
 	}}
 }
 
-func TestPreAlertTriageAnnotatesAlertsAndDiagnosesEachFindingOnce(t *testing.T) {
+func TestPreAlertTriageAnnotatesAlertsAndAsksTheModelOnlyAboutThem(t *testing.T) {
 	crashing := crashLoopIssue("api-0")
 	unrouted := &scanner.Issue{
 		ID: "keycloak/Service/keycloak/NoEndpoints", Namespace: "keycloak", Kind: "Service", Name: "keycloak",
 		Severity: scanner.SeverityHigh, Category: scanner.CategoryServiceNoEndpoint,
 		Summary: "Service keycloak has no ready endpoints", Details: "Service selector matches 0 running, ready pods.",
 	}
+	// These do not alert: posture, and severities under the alert threshold.
 	posture := &scanner.Issue{
 		ID: "ClusterRoleBinding/admin/Posture", Kind: "ClusterRoleBinding", Name: "admin",
 		Severity: scanner.SeverityCritical, Category: scanner.CategorySecurityClusterBinding, Summary: "cluster-admin binding",
 	}
-	minor := &scanner.Issue{
-		ID: "default/Pod/web-0/LogError", Namespace: "default", Kind: "Pod", Name: "web-0",
-		Severity: scanner.SeverityMedium, Category: scanner.CategoryPodLogError, Summary: "old log error",
+	unused := &scanner.Issue{
+		ID: "default/ConfigMap/old/Unused", Namespace: "default", Kind: "ConfigMap", Name: "old",
+		Severity: scanner.SeverityLow, Category: scanner.CategoryConfigMapUnused, Summary: "ConfigMap old is unused",
+	}
+	evicted := &scanner.Issue{
+		ID: "default/Pod/batch-0/Evicted", Namespace: "default", Kind: "Pod", Name: "batch-0",
+		TargetUID: "uid-batch-0", TargetResourceVersion: "1",
+		Severity: scanner.SeverityMedium, Category: scanner.CategoryPodEvicted, Summary: "Pod batch-0 was evicted",
 	}
 	provider := &scriptedProvider{}
-	scan := newAlertScan(t, &config.Config{}, provider, crashing, unrouted, posture, minor)
+	scan := newAlertScan(t, &config.Config{}, provider, crashing, unrouted, posture, unused, evicted)
 
 	alerts := scan.run(t)
 	if len(alerts) != 2 {
@@ -254,22 +264,26 @@ func TestPreAlertTriageAnnotatesAlertsAndDiagnosesEachFindingOnce(t *testing.T) 
 		if alert.Labels["severity"] != strings.ToLower(string(issue.Severity)) {
 			t.Fatalf("alert for %s has severity %q", issue.Name, alert.Labels["severity"])
 		}
-	}
-
-	// The proposal loop reuses what pre-alert triage diagnosed and diagnoses
-	// the findings that do not alert itself: one diagnosis per finding.
-	for _, issue := range []*scanner.Issue{crashing, unrouted, posture, minor} {
+		// The proposal loop reuses the pre-alert diagnosis.
 		if calls := provider.callsFor(issue); calls != 1 {
 			t.Fatalf("%s was diagnosed %d times, want once", issue.ID, calls)
 		}
 	}
-	proposal := scan.proposalFor(crashing)
-	if proposal == nil || proposal.Diagnosis == nil || proposal.Diagnosis.RootCause != "Root cause of api-0" {
+	if proposal := scan.proposalFor(crashing); proposal == nil || proposal.Diagnosis == nil || proposal.Diagnosis.RootCause != "Root cause of api-0" {
 		t.Fatalf("no proposal was created from the pre-alert diagnosis: %#v", proposal)
+	}
+
+	// A model is not asked about the findings that do not alert. The rule
+	// engine diagnoses them, and still proposes what its rules propose.
+	if calls := provider.totalCalls(); calls != 2 {
+		t.Fatalf("the model was asked %d times, want once per alerting finding", calls)
+	}
+	if proposal := scan.proposalFor(evicted); proposal == nil || proposal.Diagnosis == nil || proposal.Diagnosis.ProviderName != triage.RuleBasedProviderName {
+		t.Fatalf("the rule engine did not propose for a finding that does not alert: %#v", proposal)
 	}
 }
 
-func TestPreAlertTriageDiagnosesAgainOnlyWhenEvidenceChanges(t *testing.T) {
+func TestPreAlertTriageAsksTheModelOncePerFindingAcrossScans(t *testing.T) {
 	issue := crashLoopIssue("worker-0")
 	issue.FirstObserved = time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
 	issue.LastObserved = issue.FirstObserved
@@ -281,24 +295,47 @@ func TestPreAlertTriageDiagnosesAgainOnlyWhenEvidenceChanges(t *testing.T) {
 	}
 
 	// The next scan observes the same failure later, on a newer
-	// resourceVersion. There is nothing new to diagnose.
+	// resourceVersion; the one after sees fresh log lines. Neither is worth
+	// another call: the alert keeps its analysis.
 	later := *issue
 	later.LastObserved = issue.LastObserved.Add(2 * time.Minute)
 	later.TargetResourceVersion = "2"
-	scan.service.report.Issues = []*scanner.Issue{&later}
-	if alerts := scan.run(t); alerts["worker-0"].Annotations["analysis"] != "Root cause of worker-0" {
-		t.Fatalf("second scan lost the analysis: %#v", alerts)
+	relogged := later
+	relogged.LogsSnippet = "panic: again"
+	for _, rescanned := range []*scanner.Issue{&later, &relogged} {
+		scan.service.report.Issues = []*scanner.Issue{rescanned}
+		if alerts := scan.run(t); alerts["worker-0"].Annotations["analysis"] != "Root cause of worker-0" {
+			t.Fatalf("a later scan lost the analysis: %#v", alerts)
+		}
 	}
 	if calls := provider.totalCalls(); calls != 1 {
-		t.Fatalf("an unchanged finding was diagnosed %d times, want once", calls)
+		t.Fatalf("the finding was diagnosed %d times over three scans, want once", calls)
 	}
+}
 
-	changed := later
-	changed.Details = "Container of worker-0 was OOMKilled"
-	scan.service.report.Issues = []*scanner.Issue{&changed}
-	scan.run(t)
-	if calls := provider.totalCalls(); calls != 2 {
-		t.Fatalf("a finding with new evidence was diagnosed %d times in total, want 2", calls)
+func TestScanWithoutAlertmanagerAsksTheModelOnlyAboutSeriousFindings(t *testing.T) {
+	crashing := crashLoopIssue("api-0")
+	unused := &scanner.Issue{
+		ID: "default/ConfigMap/old/Unused", Namespace: "default", Kind: "ConfigMap", Name: "old",
+		Severity: scanner.SeverityLow, Category: scanner.CategoryConfigMapUnused, Summary: "ConfigMap old is unused",
+	}
+	service := &singleScanService{report: &scanner.ScanReport{
+		SchemaVersion: scanplan.SchemaVersion,
+		Scope:         scanplan.Default().EffectiveScope(),
+		Issues:        []*scanner.Issue{crashing, unused},
+	}}
+	model := &scriptedProvider{}
+	provider := triage.NewMemoizedProvider(model)
+	engine := remediation.NewEngine(nil)
+	server := serverpkg.NewServer(0, service, provider, engine, nil)
+
+	for scan := 1; scan <= 2; scan++ {
+		if err := runSingleScan(context.Background(), &config.Config{}, service, provider, engine, nil, server); err != nil {
+			t.Fatalf("scan %d: runSingleScan() error = %v", scan, err)
+		}
+	}
+	if model.callsFor(crashing) != 1 || model.totalCalls() != 1 {
+		t.Fatalf("the model was asked %d times over two scans (%d for the crash loop), want once, for the crash loop", model.totalCalls(), model.callsFor(crashing))
 	}
 }
 
@@ -340,7 +377,7 @@ func TestPreAlertTriageDoesNotHoldAlertsForSlowProvider(t *testing.T) {
 		"scan keeps the late diagnosis without a proposal loop": {cfg: &config.Config{PlaybookEnabled: true}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			setPreAlertLimits(t, preAlertOptions{wait: 200 * time.Millisecond, concurrency: 2})
+			setPreAlertLimits(t, preAlertOptions{wait: 200 * time.Millisecond, budget: time.Minute, concurrency: 2})
 			release := make(chan struct{})
 			var cancelled atomic.Bool
 			provider := blockingProvider(release, &cancelled)
@@ -387,7 +424,7 @@ func TestPreAlertTriageDoesNotHoldAlertsForSlowProvider(t *testing.T) {
 }
 
 func TestPreAlertTriageBoundsConcurrentDiagnoses(t *testing.T) {
-	setPreAlertLimits(t, preAlertOptions{wait: 20 * time.Millisecond, concurrency: 2})
+	setPreAlertLimits(t, preAlertOptions{wait: 20 * time.Millisecond, budget: time.Minute, concurrency: 2})
 	release := make(chan struct{})
 	var cancelled atomic.Bool
 	provider := blockingProvider(release, &cancelled)
@@ -431,8 +468,71 @@ func TestPreAlertTriageBoundsConcurrentDiagnoses(t *testing.T) {
 	}
 }
 
-func TestAlertTriageStartsNoDiagnosisAfterTheWait(t *testing.T) {
-	setPreAlertLimits(t, preAlertOptions{wait: 20 * time.Millisecond, concurrency: 2})
+func TestPreAlertTriageLeavesWhatDoesNotFitTheScanToTheNext(t *testing.T) {
+	setPreAlertLimits(t, preAlertOptions{wait: 20 * time.Millisecond, budget: 60 * time.Millisecond, concurrency: 2})
+	release := make(chan struct{})
+	var cancelled atomic.Bool
+	provider := blockingProvider(release, &cancelled)
+	issues := []*scanner.Issue{crashLoopIssue("p-1"), crashLoopIssue("p-2"), crashLoopIssue("p-3"), crashLoopIssue("p-4"), crashLoopIssue("p-5")}
+	scan := newAlertScan(t, &config.Config{}, provider, issues...)
+
+	finished := make(chan error, 1)
+	go func() { finished <- scan.scan() }()
+	if alerts := scan.alerts.next(t); len(alerts) != len(issues) {
+		t.Fatalf("scan posted %d alerts, want all %d", len(alerts), len(issues))
+	}
+
+	// The provider answers only once the scan's budget for starting
+	// diagnoses has run out. The scan finishes the diagnoses in flight and
+	// starts no others, so a slow provider cannot hold it.
+	time.Sleep(100 * time.Millisecond)
+	close(release)
+	if err := <-finished; err != nil {
+		t.Fatalf("runSingleScan() error = %v", err)
+	}
+	if started := provider.totalCalls(); started > 2 || cancelled.Load() {
+		t.Fatalf("%d diagnoses were started (cancelled: %t), want only those in flight when the budget ran out", started, cancelled.Load())
+	}
+
+	// The next scan diagnoses what was left over and asks again about nothing.
+	setPreAlertLimits(t, preAlertOptions{wait: 5 * time.Second, budget: time.Minute, concurrency: 2})
+	for name, alert := range scan.run(t) {
+		if alert.Annotations["analysis"] != "Root cause of "+name {
+			t.Fatalf("next scan sent %s without its analysis: %#v", name, alert.Annotations)
+		}
+	}
+	for _, issue := range issues {
+		if calls := provider.callsFor(issue); calls != 1 {
+			t.Fatalf("%s was diagnosed %d times over both scans, want once", issue.ID, calls)
+		}
+	}
+}
+
+func TestPreAlertTriageSpendsNoBudgetOnWhatTheProviderRemembers(t *testing.T) {
+	known := crashLoopIssue("known-0")
+	provider := &scriptedProvider{}
+	scan := newAlertScan(t, &config.Config{}, provider, known)
+	scan.run(t)
+
+	// With no budget left to ask the provider, the next scan still annotates
+	// the finding it remembers, and sends the new one as it is.
+	setPreAlertLimits(t, preAlertOptions{wait: 5 * time.Second, budget: -time.Second, concurrency: 2})
+	fresh := crashLoopIssue("fresh-0")
+	scan.service.report.Issues = []*scanner.Issue{known, fresh}
+	alerts := scan.run(t)
+	if alerts["known-0"].Annotations["analysis"] != "Root cause of known-0" {
+		t.Fatalf("a remembered diagnosis was held back by the scan budget: %#v", alerts["known-0"].Annotations)
+	}
+	if _, annotated := alerts["fresh-0"].Annotations["analysis"]; annotated || len(alerts) != 2 {
+		t.Fatalf("alerts = %#v, want the new finding sent without analysis", alerts)
+	}
+	if provider.callsFor(known) != 1 || provider.callsFor(fresh) != 0 {
+		t.Fatalf("provider calls: known %d, fresh %d; want 1 and 0", provider.callsFor(known), provider.callsFor(fresh))
+	}
+}
+
+func TestAlertTriageFinishesLateDiagnosesAfterDispatch(t *testing.T) {
+	setPreAlertLimits(t, preAlertOptions{wait: 20 * time.Millisecond, budget: time.Minute, concurrency: 2})
 	alertmanager, err := notifier.NewAlertmanagerNotifier(notifier.AlertmanagerOptions{Endpoint: "http://alertmanager.invalid:9093"})
 	if err != nil {
 		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
@@ -444,27 +544,51 @@ func TestAlertTriageStartsNoDiagnosisAfterTheWait(t *testing.T) {
 
 	run := startAlertTriage(context.Background(), &config.Config{}, alertmanager, provider, issues)
 	run.settle(context.Background())
-	// The provider answers at once from here on. Workers that could still
-	// take from the queue would now drain it.
+	if ready := run.diagnoses(); len(ready) != 0 {
+		t.Fatalf("%d diagnoses were ready although the provider had not answered", len(ready))
+	}
+
 	close(release)
 	run.wait()
-
-	taken := 0
+	if ready := run.diagnoses(); len(ready) != len(issues) || cancelled.Load() {
+		t.Fatalf("%d of %d diagnoses finished after dispatch, cancelled = %t", len(ready), len(issues), cancelled.Load())
+	}
 	for _, issue := range issues {
-		diagnosis, analyzed, err := run.result(context.Background(), issue)
-		if !analyzed {
-			continue
-		}
-		taken++
-		if err != nil || diagnosis == nil {
-			t.Fatalf("diagnosis of %s = %#v, %v", issue.ID, diagnosis, err)
-		}
-		if _, cached := alertmanager.CachedDiagnosis(issue); !cached {
-			t.Fatalf("diagnosis of %s was not kept for the next scan", issue.ID)
+		if diagnosis, analyzed, err := run.result(context.Background(), issue); !analyzed || err != nil || diagnosis == nil || provider.callsFor(issue) != 1 {
+			t.Fatalf("diagnosis of %s = %#v, analyzed %t, error %v, after %d calls", issue.ID, diagnosis, analyzed, err, provider.callsFor(issue))
 		}
 	}
-	if taken > 2 || provider.totalCalls() != taken {
-		t.Fatalf("%d diagnoses were taken on and %d asked of the provider, want at most the 2 started within the wait", taken, provider.totalCalls())
+	if _, analyzed, _ := run.result(context.Background(), crashLoopIssue("not-in-this-scan")); analyzed {
+		t.Fatal("pre-alert triage claims a finding it never saw")
+	}
+}
+
+func TestAlertTriageAsksNothingMoreOnceTheScanIsOver(t *testing.T) {
+	setPreAlertLimits(t, preAlertOptions{wait: 20 * time.Millisecond, budget: time.Minute, concurrency: 2})
+	alertmanager, err := notifier.NewAlertmanagerNotifier(notifier.AlertmanagerOptions{Endpoint: "http://alertmanager.invalid:9093"})
+	if err != nil {
+		t.Fatalf("NewAlertmanagerNotifier() error = %v", err)
+	}
+	var cancelled atomic.Bool
+	provider := blockingProvider(make(chan struct{}), &cancelled)
+	issues := []*scanner.Issue{crashLoopIssue("p-1"), crashLoopIssue("p-2"), crashLoopIssue("p-3"), crashLoopIssue("p-4"), crashLoopIssue("p-5")}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	run := startAlertTriage(ctx, &config.Config{}, alertmanager, provider, issues)
+	run.settle(ctx)
+	cancel()
+	run.wait()
+
+	if asked := provider.totalCalls(); asked > 2 {
+		t.Fatalf("the provider was asked %d times, want no more than were in flight when the scan ended", asked)
+	}
+	for _, issue := range issues {
+		if diagnosis, analyzed, err := run.result(context.Background(), issue); !analyzed || err == nil || diagnosis != nil {
+			t.Fatalf("diagnosis of %s after the scan ended = %#v, analyzed %t, error %v", issue.ID, diagnosis, analyzed, err)
+		}
+	}
+	if ready := run.diagnoses(); len(ready) != 0 {
+		t.Fatalf("%d diagnoses reported ready after the scan was cancelled", len(ready))
 	}
 }
 
@@ -533,7 +657,43 @@ func TestPreAlertTriageLeavesDisabledProviderAlone(t *testing.T) {
 	run := startAlertTriage(context.Background(), &config.Config{}, alertmanager, triage.NewNoOpProvider(), []*scanner.Issue{issue})
 	run.settle(context.Background())
 	run.wait()
-	if _, analyzed, _ := run.result(context.Background(), issue); analyzed || len(run.queue) != 0 {
-		t.Fatalf("pre-alert triage asked a disabled provider for %d diagnoses", len(run.queue))
+	if _, analyzed, _ := run.result(context.Background(), issue); analyzed || len(run.candidates) != 0 {
+		t.Fatalf("pre-alert triage asked a disabled provider for %d diagnoses", len(run.candidates))
+	}
+}
+
+func TestRoutineProviderIsTheRuleEngineUnlessTriageIsDisabled(t *testing.T) {
+	cfg := &config.Config{}
+	ruleEngine, disabled, model := triage.NewRuleBasedProvider(), triage.NewNoOpProvider(), &scriptedProvider{}
+	if asksModel(ruleEngine) || asksModel(disabled) || !asksModel(model) || !asksModel(triage.NewMemoizedProvider(model)) {
+		t.Fatal("asksModel() must hold for every provider but the rule engine and the disabled one")
+	}
+	if got := routineProvider(cfg, ruleEngine); got != triage.TriageProvider(ruleEngine) {
+		t.Fatalf("routineProvider(rule engine) = %T, want the provider itself", got)
+	}
+	// Disabled triage stays disabled for every finding.
+	if got := routineProvider(cfg, disabled); got != triage.TriageProvider(disabled) {
+		t.Fatalf("routineProvider(disabled) = %T, want the provider itself", got)
+	}
+	if got := routineProvider(cfg, model); got.Name() != triage.RuleBasedProviderName {
+		t.Fatalf("routineProvider(model) = %q, want the rule engine", got.Name())
+	}
+}
+
+func TestReasoningEffortReachesTheProviderProfile(t *testing.T) {
+	flags := configFlagsFromArgs([]string{"serve", "--llm-reasoning-effort", "max"})
+	if flags["llm-reasoning-effort"] != "max" {
+		t.Fatalf("reasoning effort flag = %#v", flags)
+	}
+	profile := providerProfileFromConfig(&config.Config{LLMProvider: "codex", LLMModel: "gpt-6-luna", LLMReasoningEffort: "max"})
+	if profile.ReasoningEffort != "max" {
+		t.Fatalf("provider profile reasoning effort = %q, want max", profile.ReasoningEffort)
+	}
+	settings, err := (runtimeGRPCConfig{config: &config.Config{LLMReasoningEffort: "max"}}).GetConfig(context.Background())
+	if err != nil {
+		t.Fatalf("GetConfig() error = %v", err)
+	}
+	if got := settings.(map[string]interface{})["llm_reasoning_effort"]; got != "max" {
+		t.Fatalf("runtime config llm_reasoning_effort = %#v, want max", got)
 	}
 }

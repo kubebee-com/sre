@@ -79,15 +79,25 @@ func (usage compatibleUsage) providerTokenUsage() ProviderTokenUsage {
 }
 
 type compatibleResponsesRequest struct {
-	Model           string               `json:"model"`
-	Instructions    string               `json:"instructions,omitempty"`
-	Input           string               `json:"input"`
-	MaxOutputTokens int                  `json:"max_output_tokens"`
-	Temperature     *float64             `json:"temperature,omitempty"`
-	TopP            *float64             `json:"top_p,omitempty"`
-	Stop            []string             `json:"stop,omitempty"`
-	Text            *responsesTextConfig `json:"text,omitempty"`
+	Model           string                    `json:"model"`
+	Instructions    string                    `json:"instructions,omitempty"`
+	Input           string                    `json:"input"`
+	MaxOutputTokens int                       `json:"max_output_tokens"`
+	Temperature     *float64                  `json:"temperature,omitempty"`
+	TopP            *float64                  `json:"top_p,omitempty"`
+	Stop            []string                  `json:"stop,omitempty"`
+	Reasoning       *responsesReasoningConfig `json:"reasoning,omitempty"`
+	Text            *responsesTextConfig      `json:"text,omitempty"`
 }
+
+type responsesReasoningConfig struct {
+	Effort string `json:"effort"`
+}
+
+// minReasoningOutputTokens is the least output budget a reasoning request is
+// given. Reasoning tokens count against max_output_tokens, and a reply that
+// runs out of budget while reasoning comes back incomplete, with no answer.
+const minReasoningOutputTokens = 8192
 
 type responsesTextConfig struct {
 	Format *responseFormat `json:"format,omitempty"`
@@ -282,6 +292,12 @@ func (p *OpenAICompatibleProvider) newResponsesRequest(system, user string, stru
 	if p.profile.TopPSet || p.profile.TopP != 0 {
 		value := p.profile.TopP
 		request.TopP = &value
+	}
+	if effort := p.profile.ReasoningEffort; effort != "" {
+		request.Reasoning = &responsesReasoningConfig{Effort: effort}
+		if effort != "none" {
+			request.MaxOutputTokens = max(request.MaxOutputTokens, minReasoningOutputTokens)
+		}
 	}
 	if structured {
 		request.Text = &responsesTextConfig{Format: &responseFormat{Type: "json_object"}}
