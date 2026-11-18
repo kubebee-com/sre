@@ -407,6 +407,7 @@ func TestTwoClustersOwnerApprovalAndIndependentRecovery(t *testing.T) {
 				operator.callback("owner", "reject "+action.Plan.ID, false, true)
 				operator.state(action.Plan.ID, "CANCELLED", 3)
 			} else {
+				operator.dispatch()
 				operator.audit(dsn, action.Plan.ID, []string{"PROPOSED", "APPROVED", "SUBMITTED", "FAILED"})
 			}
 			assertUnchanged()
