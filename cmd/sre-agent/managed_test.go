@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,9 +20,13 @@ func TestManagedMarkerIsOnlyAnEntrypointMarker(t *testing.T) {
 }
 
 func TestRunWithOrchestratorDoesNotFallBackToLegacyRuntime(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "sre-agent")
+	if buildOut, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build sre-agent: %v\n%s", err, buildOut)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "run", ".", "run", "--orchestrator", "https://127.0.0.1:1")
+	cmd := exec.CommandContext(ctx, bin, "run", "--orchestrator", "https://127.0.0.1:1")
 	cmd.Env = append(os.Environ(), "LLM_PROVIDER=definitely-unsupported")
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() != nil {

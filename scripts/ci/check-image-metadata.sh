@@ -14,7 +14,7 @@ require_text() {
 	fi
 }
 
-require_text "$DOCKERFILE" 'golang:1.26.6-alpine@sha256:'
+require_text "$DOCKERFILE" 'golang:1.26.11-alpine@sha256:'
 require_text "$DOCKERFILE" 'cgr.dev/chainguard/static@sha256:'
 require_text "$DOCKERFILE" 'CGO_ENABLED=0'
 require_text "$DOCKERFILE" 'org.opencontainers.image.source='
