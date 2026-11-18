@@ -397,12 +397,33 @@ func TestTwoClustersOwnerApprovalAndIndependentRecovery(t *testing.T) {
 	}
 
 	applied := false
+	prevState := ""
 	for attempt := 0; attempt < 5; attempt++ {
 		if attempt > 0 {
-			// An unclaimed stale plan is cancelled. Every new exact snapshot receives a
-			// separate owner approval; SUBMITTED or ambiguous effects are never retried.
-			operator.callback("owner", "reject "+action.Plan.ID, false, true)
-			operator.state(action.Plan.ID, "CANCELLED", 3)
+			// An unclaimed stale plan is cancelled; a PRECONDITION_FAILED plan is
+			// already terminal with zero cluster mutation. Every new exact snapshot
+			// receives a separate owner approval; AMBIGUOUS effects are never retried.
+			if prevState == "APPROVED" {
+				operator.callback("owner", "reject "+action.Plan.ID, false, true)
+				operator.state(action.Plan.ID, "CANCELLED", 3)
+			} else {
+				operator.audit(dsn, action.Plan.ID, []string{"PROPOSED", "APPROVED", "SUBMITTED", "FAILED"})
+			}
+			assertUnchanged()
+			waitFor(t, ctx, "crash loop snapshot ready", func() bool {
+				pods, err := a.CoreV1().Pods(applicationNamespace).List(ctx, meta.ListOptions{})
+				if err != nil {
+					return false
+				}
+				for _, p := range pods.Items {
+					for _, s := range p.Status.ContainerStatuses {
+						if s.State.Waiting != nil && s.State.Waiting.Reason == "CrashLoopBackOff" {
+							return true
+						}
+					}
+				}
+				return false
+			})
 			if err := fixtures[0].runtime.Scan(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -421,17 +442,18 @@ func TestTwoClustersOwnerApprovalAndIndependentRecovery(t *testing.T) {
 		if err := exec.Poll(ctx); err != nil {
 			t.Fatal("approved executor", err)
 		}
-		var state string
-		if err := db.Transact(ctx, scopeA, func(tx *postgres.Tx) error { got, _, err := tx.Action(action.Plan.ID); state = got.State; return err }); err != nil {
+		var got incident.Action
+		if err := db.Transact(ctx, scopeA, func(tx *postgres.Tx) error { var err error; got, _, err = tx.Action(action.Plan.ID); return err }); err != nil {
 			t.Fatal(err)
 		}
-		if state == "APPLIED" {
+		if got.State == "APPLIED" {
 			applied = true
 			break
 		}
-		if state != "APPROVED" {
-			t.Fatal("terminal action not retried", state)
+		if got.State != "APPROVED" && (got.State != "FAILED" || got.OutcomeCode != "PRECONDITION_FAILED") {
+			t.Fatal("terminal action not retried", got.State, got.OutcomeCode)
 		}
+		prevState = got.State
 	}
 	if !applied {
 		t.Fatal("no stable exact target obtained for owner-approved fixture action")
