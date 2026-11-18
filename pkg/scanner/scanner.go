@@ -711,6 +711,7 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 	if err != nil {
 		return nil, err
 	}
+	ciliumCfg := s.readCiliumHealthCheckConfig(ctx)
 
 	var issues []*Issue
 	var observationErrors []error
@@ -730,6 +731,35 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 				})
 			}
 			continue
+		}
+
+		if ciliumCfg.healthCheckNodePortDisabled &&
+			(svc.Spec.Type == corev1.ServiceTypeLoadBalancer || svc.Spec.Type == corev1.ServiceTypeNodePort) &&
+			svc.Spec.ExternalTrafficPolicy == corev1.ServiceExternalTrafficPolicyLocal {
+			summary := fmt.Sprintf("Service %s local externalTrafficPolicy healthCheckNodePort is disabled by Cilium config", svc.Name)
+			if svc.Spec.HealthCheckNodePort > 0 {
+				summary = fmt.Sprintf("Service %s healthCheckNodePort %d is disabled by Cilium CNI config", svc.Name, svc.Spec.HealthCheckNodePort)
+			}
+			issues = append(issues, &Issue{
+				ID: makeID(svc.Namespace, "Service", svc.Name, string(CategoryServiceHealthCheck)+"-CiliumDisabled"), Namespace: svc.Namespace,
+				Kind: "Service", Name: svc.Name, TargetUID: string(svc.UID), TargetResourceVersion: svc.ResourceVersion,
+				Severity: SeverityCritical, Category: CategoryServiceHealthCheck,
+				Summary: summary,
+				Details: fmt.Sprintf("Service %s/%s configures type=%s externalTrafficPolicy=Local (healthCheckNodePort=%d), but kube-system/cilium-config sets kube-proxy-replacement=%q and enable-health-check-nodeport=%q. External load balancer health checks cannot succeed on node ports.",
+					svc.Namespace, svc.Name, svc.Spec.Type, svc.Spec.HealthCheckNodePort, ciliumCfg.kubeProxyReplacementRaw, ciliumCfg.enableHealthCheckRaw),
+				FirstObserved: workloadObservedTime(svc.CreationTimestamp), LastObserved: now,
+			})
+		}
+
+		if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(svc.Status.LoadBalancer.Ingress) == 0 && !svc.CreationTimestamp.IsZero() && now.Sub(svc.CreationTimestamp.Time) > 5*time.Minute {
+			issues = append(issues, &Issue{
+				ID: makeID(svc.Namespace, "Service", svc.Name, string(CategoryServiceHealthCheck)+"-LBPending"), Namespace: svc.Namespace,
+				Kind: "Service", Name: svc.Name, TargetUID: string(svc.UID), TargetResourceVersion: svc.ResourceVersion,
+				Severity: SeverityHigh, Category: CategoryServiceHealthCheck,
+				Summary:       fmt.Sprintf("LoadBalancer Service %s has no external ingress address", svc.Name),
+				Details:       fmt.Sprintf("Service %s/%s has type LoadBalancer and has been waiting for an external ingress IP or hostname for more than 5 minutes.", svc.Namespace, svc.Name),
+				FirstObserved: workloadObservedTime(svc.CreationTimestamp), LastObserved: now,
+			})
 		}
 
 		totalEndpoints, endpointObjectFound, endpointComplete, endpointErr := s.serviceReadyEndpoints(ctx, svc)
@@ -802,6 +832,32 @@ func (s *ClusterScanner) scanServices(ctx context.Context, namespace string) ([]
 		}
 	}
 	return issues, errors.Join(observationErrors...)
+}
+
+type ciliumHealthCheckConfig struct {
+	present                     bool
+	healthCheckNodePortDisabled bool
+	kubeProxyReplacementRaw     string
+	enableHealthCheckRaw        string
+}
+
+func (s *ClusterScanner) readCiliumHealthCheckConfig(ctx context.Context) ciliumHealthCheckConfig {
+	if s == nil || s.client == nil {
+		return ciliumHealthCheckConfig{}
+	}
+	cm, err := s.client.CoreV1().ConfigMaps("kube-system").Get(ctx, "cilium-config", metav1.GetOptions{})
+	if err != nil || cm == nil {
+		return ciliumHealthCheckConfig{}
+	}
+	kpr := strings.TrimSpace(cm.Data["kube-proxy-replacement"])
+	ehc := strings.TrimSpace(cm.Data["enable-health-check-nodeport"])
+	disabled := (strings.EqualFold(kpr, "true") || strings.EqualFold(kpr, "strict")) && strings.EqualFold(ehc, "false")
+	return ciliumHealthCheckConfig{
+		present:                     true,
+		healthCheckNodePortDisabled: disabled,
+		kubeProxyReplacementRaw:     kpr,
+		enableHealthCheckRaw:        ehc,
+	}
 }
 
 func (s *ClusterScanner) serviceReadyEndpoints(ctx context.Context, service *corev1.Service) (int, bool, bool, error) {

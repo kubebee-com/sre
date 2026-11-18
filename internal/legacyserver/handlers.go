@@ -92,6 +92,8 @@ type StatusResponse struct {
 	LLMProvider             string            `json:"llm_provider"`
 	LastScan                time.Time         `json:"last_scan"`
 	ActiveIssuesCount       int               `json:"active_issues_count"`
+	RawActiveIssuesCount    int               `json:"raw_active_issues_count,omitempty"`
+	FoldedCategoriesCount   int               `json:"folded_categories_count,omitempty"`
 	PendingProposalsCount   int               `json:"pending_proposals_count"`
 	CompletedProposalsCount int               `json:"completed_proposals_count"`
 	Version                 string            `json:"version"`
@@ -109,7 +111,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	lastScan := s.lastScan
 	s.mu.RUnlock()
-	issuesCount := len(s.issueSnapshot())
+	rawIssues := s.issueSnapshot()
+	foldedIssues := scanner.FoldIssues(rawIssues)
+	categorySummaries := scanner.SummarizeCategories(rawIssues)
+	issuesCount := len(foldedIssues)
 
 	var proposals []*remediation.Proposal
 	if s.engine != nil {
@@ -139,6 +144,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		LLMProvider:             providerName,
 		LastScan:                lastScan,
 		ActiveIssuesCount:       issuesCount,
+		RawActiveIssuesCount:    len(rawIssues),
+		FoldedCategoriesCount:   len(categorySummaries),
 		PendingProposalsCount:   pendingCount,
 		CompletedProposalsCount: completedCount,
 		Version:                 buildinfo.String(),
@@ -220,25 +227,26 @@ func (s *Server) statusSettings() StatusSettings {
 	}
 	slices.Sort(origins)
 	settings := StatusSettings{
-		APITokenRequired:    s.authenticator != nil && s.authenticator.enabled,
-		AllowedOrigins:      origins,
-		MaxRequestBytes:     s.maxBodyBytes,
-		MaxResponseBytes:    s.maxResponseBytes,
-		RequestsPerMinute:   s.requestsPerMinute,
-		RequestBurst:        s.requestBurst,
-		ReadinessManaged:    s.readiness != nil,
-		LLMProvider:         s.runtime.LLMProvider,
-		LLMMode:             s.runtime.LLMMode,
-		LLMWireAPI:          s.runtime.LLMWireAPI,
-		LLMModel:            s.runtime.LLMModel,
-		LLMBaseURLDisplay:   s.runtime.LLMBaseURLDisplay,
-		ScanInterval:        s.runtime.ScanInterval,
-		ScanJitter:          s.runtime.ScanJitter,
-		EventDrivenScanning: s.runtime.EventDrivenScanning,
-		EventQueueCapacity:  s.runtime.EventQueueCapacity,
-		EventDebounce:       s.runtime.EventDebounce,
-		CacheEnabled:        s.runtime.CacheEnabled,
-		CacheConfigured:     s.runtime.CacheConfigured,
+		APITokenRequired:       s.authenticator != nil && s.authenticator.enabled,
+		AllowedOrigins:         origins,
+		MaxRequestBytes:        s.maxBodyBytes,
+		MaxResponseBytes:       s.maxResponseBytes,
+		RequestsPerMinute:      s.requestsPerMinute,
+		RequestBurst:           s.requestBurst,
+		ReadinessManaged:       s.readiness != nil,
+		LLMProvider:            s.runtime.LLMProvider,
+		LLMMode:                s.runtime.LLMMode,
+		LLMWireAPI:             s.runtime.LLMWireAPI,
+		LLMModel:               s.runtime.LLMModel,
+		LLMBaseURLDisplay:      s.runtime.LLMBaseURLDisplay,
+		ScanInterval:           s.runtime.ScanInterval,
+		ScanJitter:             s.runtime.ScanJitter,
+		EventDrivenScanning:    s.runtime.EventDrivenScanning,
+		EventQueueCapacity:     s.runtime.EventQueueCapacity,
+		EventDebounce:          s.runtime.EventDebounce,
+		CacheEnabled:           s.runtime.CacheEnabled,
+		CacheConfigured:        s.runtime.CacheConfigured,
+		AlertmanagerConfigured: s.runtime.AlertmanagerConfigured,
 	}
 	if s.notifier != nil {
 		settings.WebhookConfigured = s.notifier.HasWebhookURL()
@@ -256,9 +264,13 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	severity := r.URL.Query().Get("severity")
 	category := r.URL.Query().Get("category")
 	group := r.URL.Query().Get("group")
+	rawView := strings.EqualFold(r.URL.Query().Get("folded"), "false") || strings.EqualFold(r.URL.Query().Get("raw"), "true")
 
-	var filtered []*scanner.SanitizedIssue
+	matched := make([]*scanner.Issue, 0)
 	for _, issue := range s.issueSnapshot() {
+		if issue == nil {
+			continue
+		}
 		if ns != "" && issue.Namespace != ns {
 			continue
 		}
@@ -268,13 +280,64 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 		if category != "" && string(issue.Category) != category {
 			continue
 		}
-		if group != "" && !strings.EqualFold(string(issue.Group), group) {
+		issueGroup := issue.Group
+		if issueGroup == "" {
+			issueGroup = scanner.ResolveFindingGroup(issue.Category)
+		}
+		if group != "" && !strings.EqualFold(string(issueGroup), group) {
 			continue
 		}
+		matched = append(matched, issue)
+	}
+	if !rawView {
+		matched = scanner.FoldIssues(matched)
+	}
+
+	filtered := make([]*scanner.SanitizedIssue, 0, len(matched))
+	for _, issue := range matched {
 		filtered = append(filtered, scanner.SanitizeIssueWithRedactor(issue, s.redactor))
 	}
 
 	s.writeJSON(w, http.StatusOK, filtered)
+}
+
+func (s *Server) handleListIssueCategories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ns := r.URL.Query().Get("namespace")
+	severity := r.URL.Query().Get("severity")
+	group := r.URL.Query().Get("group")
+
+	matched := make([]*scanner.Issue, 0)
+	for _, issue := range s.issueSnapshot() {
+		if issue == nil {
+			continue
+		}
+		if ns != "" && issue.Namespace != ns {
+			continue
+		}
+		if severity != "" && string(issue.Severity) != severity {
+			continue
+		}
+		issueGroup := issue.Group
+		if issueGroup == "" {
+			issueGroup = scanner.ResolveFindingGroup(issue.Category)
+		}
+		if group != "" && !strings.EqualFold(string(issueGroup), group) {
+			continue
+		}
+		matched = append(matched, issue)
+	}
+	summaries := scanner.SummarizeCategories(matched)
+	for index := range summaries {
+		for nsIdx, itemNS := range summaries[index].Namespaces {
+			summaries[index].Namespaces[nsIdx] = s.redactor.SanitizeText(itemNS)
+		}
+	}
+	s.writeJSON(w, http.StatusOK, summaries)
 }
 
 func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
@@ -895,16 +958,17 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			providerName = s.redactor.SanitizeText(s.triage.Name())
 		}
 		s.writeJSON(w, http.StatusOK, map[string]interface{}{
-			"llm_provider":         providerName,
-			"settings":             settings,
-			"llm_mode":             settings.LLMMode,
-			"llm_wire_api":         settings.LLMWireAPI,
-			"llm_model":            settings.LLMModel,
-			"llm_base_url_display": settings.LLMBaseURLDisplay,
-			"scan_interval":        settings.ScanInterval,
-			"scan_jitter":          settings.ScanJitter,
-			"cache_enabled":        settings.CacheEnabled,
-			"webhook_configured":   settings.WebhookConfigured,
+			"llm_provider":            providerName,
+			"settings":                settings,
+			"llm_mode":                settings.LLMMode,
+			"llm_wire_api":            settings.LLMWireAPI,
+			"llm_model":               settings.LLMModel,
+			"llm_base_url_display":    settings.LLMBaseURLDisplay,
+			"scan_interval":           settings.ScanInterval,
+			"scan_jitter":             settings.ScanJitter,
+			"cache_enabled":           settings.CacheEnabled,
+			"webhook_configured":      settings.WebhookConfigured,
+			"alertmanager_configured": settings.AlertmanagerConfigured,
 		})
 
 	case http.MethodPost:

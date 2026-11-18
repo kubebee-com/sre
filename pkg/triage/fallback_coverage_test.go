@@ -39,7 +39,7 @@ func allSupportedRuleCategories() []scanner.IssueCategory {
 		scanner.CategoryStatefulSetMismatch, scanner.CategoryDaemonSetMismatch, scanner.CategoryReplicaSetStuck,
 		scanner.CategoryJobFailed, scanner.CategoryCronJobFailed, scanner.CategoryCronJobInvalid, scanner.CategoryCronJobSuspended,
 		scanner.CategoryWorkloadDrift, scanner.CategoryServiceNoEndpoint, scanner.CategoryServiceEndpointError,
-		scanner.CategoryServicePortMismatch, scanner.CategoryIngressBackendNotFound, scanner.CategoryIngressClassMissing,
+		scanner.CategoryServicePortMismatch, scanner.CategoryServiceHealthCheck, scanner.CategoryIngressBackendNotFound, scanner.CategoryIngressClassMissing,
 		scanner.CategoryIngressPortInvalid, scanner.CategoryIngressTLSSecretMissing, scanner.CategoryNetworkPolicyOrphaned,
 		scanner.CategoryNetworkPolicyWide, scanner.CategoryNodePressure, scanner.CategoryNodeNotReady,
 		scanner.CategoryNodeNetworkUnavailable, scanner.CategoryNodeUnschedulable, scanner.CategoryNodeTaint,

@@ -322,6 +322,20 @@ func LegacyMain() {
 	}
 	log.Printf("Startup: Initializing webhook notifier...")
 	webhookNotifier := notifier.NewWebhookNotifier(cfg.WebhookURL, cfg.PublicURL, redactionSecrets...)
+	alertmanagerNotifier, amErr := notifier.NewAlertmanagerNotifier(notifier.AlertmanagerOptions{
+		Endpoint:       cfg.AlertmanagerURL,
+		MinSeverity:    cfg.AlertmanagerMinSeverity,
+		IncludePosture: cfg.AlertmanagerIncludePosture,
+		PublicURL:      cfg.PublicURL,
+		ClusterName:    cfg.EKSClusterName,
+		SecretValues:   redactionSecrets,
+	})
+	if amErr != nil {
+		log.Printf("Warning: Alertmanager integration disabled: %s", sanitizeLog(cfg, amErr.Error()))
+		alertmanagerNotifier = nil
+	} else if alertmanagerNotifier != nil && alertmanagerNotifier.Enabled() {
+		log.Printf("Startup: Alertmanager integration enabled (min severity: %s, include posture: %t)", cfg.AlertmanagerMinSeverity, cfg.AlertmanagerIncludePosture)
+	}
 	readiness := &startupReadiness{}
 
 	// 4. Initialize Web Server & Dashboard
@@ -344,20 +358,22 @@ func LegacyMain() {
 		RedactionSecrets:      redactionSecrets,
 		Readiness:             readiness.Ready,
 		Metrics:               metricsRegistry,
+		Alertmanager:          alertmanagerNotifier,
 		Playbooks:             playbookService,
 		Runtime: server.RuntimeSettings{
-			LLMProvider:         cfg.LLMProvider,
-			LLMMode:             cfg.LLMMode,
-			LLMWireAPI:          effectiveWireAPI(cfg),
-			LLMModel:            cfg.LLMModel,
-			LLMBaseURLDisplay:   runtimeEndpointDisplay(cfg.LLMBaseURL),
-			ScanInterval:        cfg.ScanInterval.String(),
-			ScanJitter:          cfg.ScanJitter.String(),
-			EventDrivenScanning: cfg.EventDrivenScanning,
-			EventQueueCapacity:  cfg.EventQueueCapacity,
-			EventDebounce:       cfg.EventDebounce.String(),
-			CacheEnabled:        strings.TrimSpace(cfg.CacheDir) != "" && strings.TrimSpace(cfg.CacheEncryptionKey) != "",
-			CacheConfigured:     strings.TrimSpace(cfg.CacheDir) != "",
+			LLMProvider:            cfg.LLMProvider,
+			LLMMode:                cfg.LLMMode,
+			LLMWireAPI:             effectiveWireAPI(cfg),
+			LLMModel:               cfg.LLMModel,
+			LLMBaseURLDisplay:      runtimeEndpointDisplay(cfg.LLMBaseURL),
+			ScanInterval:           cfg.ScanInterval.String(),
+			ScanJitter:             cfg.ScanJitter.String(),
+			EventDrivenScanning:    cfg.EventDrivenScanning,
+			EventQueueCapacity:     cfg.EventQueueCapacity,
+			EventDebounce:          cfg.EventDebounce.String(),
+			CacheEnabled:           strings.TrimSpace(cfg.CacheDir) != "" && strings.TrimSpace(cfg.CacheEncryptionKey) != "",
+			CacheConfigured:        strings.TrimSpace(cfg.CacheDir) != "",
+			AlertmanagerConfigured: alertmanagerNotifier != nil && alertmanagerNotifier.Enabled(),
 		},
 	})
 
@@ -600,7 +616,7 @@ func firstCLICommand(args []string) string {
 
 func cliFlagTakesValue(name string) bool {
 	switch name {
-	case "config", "api-token", "kubeconfig", "port", "grpc-port", "grpc-tls-cert-file", "grpc-tls-key-file", "grpc-tls-client-ca-file", "scan-interval", "scan-jitter", "leader-election-namespace", "leader-election-id", "leader-election-identity", "aws-region", "eks-cluster-name", "namespace", "llm-provider", "llm-mode", "llm-wire-api", "llm-api-key", "llm-model", "llm-base-url", "llm-organization", "llm-proxy-url", "llm-headers", "custom-headers", "harness-command", "webhook-url", "public-url", "allowed-origins", "trusted-client-ip-header", "trusted-proxy-cidrs", "max-body-bytes", "requests-per-minute", "request-burst", "data-dir", "cache-dir", "cache-ttl", "cache-max-entries", "cache-max-value-bytes", "include-namespaces", "exclude-namespaces", "label-selector", "resource-kinds", "resource-names", "analyzers", "scan-concurrency", "scan-timeout", "scan-history-dir", "database-url", "playbook-learning-mode", "playbook-min-confidence", "playbook-allowed-actions", "playbook-allowed-namespaces", "playbook-allowed-kinds", "playbook-max-source-bytes", "playbook-max-step-count", "playbook-max-total-text-bytes", "playbook-max-sources", "playbook-max-steps", "filter", "include-namespace", "exclude-namespace", "kind", "name", "analyzer", "concurrency", "timeout", "output", "interactive", "include-resource", "event-queue-capacity", "event-debounce", "llm-endpoint-allowlist":
+	case "config", "api-token", "kubeconfig", "port", "grpc-port", "grpc-tls-cert-file", "grpc-tls-key-file", "grpc-tls-client-ca-file", "scan-interval", "scan-jitter", "leader-election-namespace", "leader-election-id", "leader-election-identity", "aws-region", "eks-cluster-name", "namespace", "llm-provider", "llm-mode", "llm-wire-api", "llm-api-key", "llm-model", "llm-base-url", "llm-organization", "llm-proxy-url", "llm-headers", "custom-headers", "harness-command", "webhook-url", "alertmanager-url", "alertmanager-min-severity", "public-url", "allowed-origins", "trusted-client-ip-header", "trusted-proxy-cidrs", "max-body-bytes", "requests-per-minute", "request-burst", "data-dir", "cache-dir", "cache-ttl", "cache-max-entries", "cache-max-value-bytes", "include-namespaces", "exclude-namespaces", "label-selector", "resource-kinds", "resource-names", "analyzers", "scan-concurrency", "scan-timeout", "scan-history-dir", "database-url", "playbook-learning-mode", "playbook-min-confidence", "playbook-allowed-actions", "playbook-allowed-namespaces", "playbook-allowed-kinds", "playbook-max-source-bytes", "playbook-max-step-count", "playbook-max-total-text-bytes", "playbook-max-sources", "playbook-max-steps", "filter", "include-namespace", "exclude-namespace", "kind", "name", "analyzer", "concurrency", "timeout", "output", "interactive", "include-resource", "event-queue-capacity", "event-debounce", "llm-endpoint-allowlist":
 		return true
 	default:
 		return false
@@ -634,6 +650,7 @@ func configFlagsFromArgs(args []string) map[string]string {
 		"enable-aws-eks": "enable-aws-eks", "aws-region": "aws-region", "eks-cluster-name": "eks-cluster-name",
 		"namespace": "namespace", "llm-provider": "llm-provider", "llm-mode": "llm-mode", "llm-wire-api": "llm-wire-api", "llm-api-key": "llm-api-key", "llm-model": "llm-model",
 		"llm-base-url": "llm-base-url", "llm-endpoint-allowlist": "llm-endpoint-allowlist", "llm-organization": "llm-organization", "llm-proxy-url": "llm-proxy-url", "llm-headers": "llm-headers", "custom-headers": "llm-headers",
+		"alertmanager-url": "alertmanager-url", "alertmanager-min-severity": "alertmanager-min-severity", "alertmanager-include-posture": "alertmanager-include-posture",
 		"harness-command": "harness-command", "webhook-url": "webhook-url", "public-url": "public-url",
 		"require-api-token": "require-api-token", "allowed-origins": "allowed-origins", "trusted-client-ip-header": "trusted-client-ip-header",
 		"trusted-proxy-cidrs": "trusted-proxy-cidrs", "max-body-bytes": "max-body-bytes", "requests-per-minute": "requests-per-minute",
@@ -956,10 +973,30 @@ func runScheduledScansWithTriggers(
 	sourceDone := make(chan error, 1)
 	go func() { sourceDone <- source.Run(runCtx) }()
 
+	var recentTriggerMu sync.Mutex
+	recentTriggerScans := make(map[string]time.Time)
+	const minEventPlanCooldown = 30 * time.Second
+
 	triggerJob := func(scanCtx context.Context, trigger scheduler.Trigger) error {
 		plan, ok := scheduler.PlanForTrigger(cfg.ScanPlan(), trigger)
 		if !ok {
 			return nil
+		}
+		if cfg.EventDebounce > 0 {
+			planKey := triggerPlanCooldownKey(plan)
+			now := time.Now()
+			recentTriggerMu.Lock()
+			for k, seenAt := range recentTriggerScans {
+				if now.Sub(seenAt) > 10*time.Minute {
+					delete(recentTriggerScans, k)
+				}
+			}
+			if last, seen := recentTriggerScans[planKey]; seen && now.Sub(last) < minEventPlanCooldown {
+				recentTriggerMu.Unlock()
+				return nil
+			}
+			recentTriggerScans[planKey] = now
+			recentTriggerMu.Unlock()
 		}
 		err := runSingleScanWithPlan(scanCtx, cfg, sc, tp, eng, notif, srv, plan)
 		readiness.MarkScanResult(err)
@@ -1041,9 +1078,14 @@ func runSingleScanWithPlan(
 		return fmt.Errorf("scanner returned an empty report")
 	}
 	issues := report.Issues
+	foldedIssues := scanner.FoldIssues(issues)
 
 	srv.UpdateScanResults(issues)
-	log.Printf("Scan complete: %d anomalies detected in cluster.", len(issues))
+	log.Printf("Scan complete: %d anomalies detected in cluster (%d folded).", len(issues), len(foldedIssues))
+
+	if amErr := srv.SyncAlertmanager(scanCtx, foldedIssues, isFullBaseScanPlan(cfg, plan)); amErr != nil {
+		log.Printf("Alertmanager notification sync failed: %s", sanitizeLog(cfg, amErr.Error()))
+	}
 
 	previous, err := eng.ListProposalsWithError()
 	if err != nil {
@@ -1060,7 +1102,7 @@ func runSingleScanWithPlan(
 		}
 	}
 
-	for _, issue := range issues {
+	for _, issue := range foldedIssues {
 		sanitizedIssue := scanner.SanitizeIssue(issue, providerSecretValues(cfg)...).AsIssue()
 		var resolver playbookResolver
 		if service := srv.PlaybookService(); service != nil {
@@ -1104,6 +1146,35 @@ func runSingleScanWithPlan(
 		}
 	}
 	return nil
+}
+
+func triggerPlanCooldownKey(plan scanplan.Plan) string {
+	return strings.Join(plan.IncludeNamespaces, ",") + "|" + strings.Join(plan.Kinds, ",") + "|" + strings.Join(plan.Analyzers, ",")
+}
+
+func isFullBaseScanPlan(cfg *config.Config, plan scanplan.Plan) bool {
+	if cfg == nil {
+		return false
+	}
+	base := cfg.ScanPlan()
+	return stringsEqualSlice(plan.IncludeNamespaces, base.IncludeNamespaces) &&
+		stringsEqualSlice(plan.ExcludeNamespaces, base.ExcludeNamespaces) &&
+		stringsEqualSlice(plan.Kinds, base.Kinds) &&
+		stringsEqualSlice(plan.Names, base.Names) &&
+		stringsEqualSlice(plan.Analyzers, base.Analyzers) &&
+		strings.TrimSpace(plan.LabelSelector) == strings.TrimSpace(base.LabelSelector)
+}
+
+func stringsEqualSlice(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func providerProfileFromConfig(cfg *config.Config) triage.ProviderProfile {

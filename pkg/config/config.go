@@ -36,77 +36,80 @@ const (
 )
 
 type Config struct {
-	EventDrivenScanning       bool
-	EventQueueCapacity        int
-	EventDebounce             time.Duration
-	LLMEndpointAllowlist      []string
-	Kubeconfig                string
-	Port                      int
-	GRPCPort                  int
-	GRPCTLSCertFile           string
-	GRPCTLSKeyFile            string
-	GRPCTLSClientCAFile       string
-	GRPCReflection            bool
-	ScanInterval              time.Duration
-	ScanJitter                time.Duration
-	LeaderElection            bool
-	LeaderElectionNamespace   string
-	LeaderElectionID          string
-	LeaderElectionIdentity    string
-	EnableAWSEKS              bool
-	AWSRegion                 string
-	EKSClusterName            string
-	Namespace                 string
-	LLMProvider               string
-	LLMMode                   string
-	LLMWireAPI                string
-	LLMAPIKey                 string
-	LLMModel                  string
-	LLMBaseURL                string
-	LLMOrganization           string
-	LLMProxyURL               string
-	LLMHeaders                []string
-	HarnessCommand            string
-	WebhookURL                string
-	PublicURL                 string
-	APIToken                  string
-	RequireAPIToken           bool
-	OIDCIssuer                string
-	OIDCClientID              string
-	OIDCClientSecret          string `json:"-" yaml:"-"`
-	OIDCScopes                []string
-	OIDCAllowedGroups         []string
-	AllowedOrigins            []string
-	TrustedClientIPHeader     string
-	TrustedProxyCIDRs         []string
-	MaxBodyBytes              int64
-	RequestsPerMinute         int
-	RequestBurst              int
-	DataDir                   string
-	IncludeNamespaces         []string
-	ExcludeNamespaces         []string
-	LabelSelector             string
-	ResourceKinds             []string
-	ResourceNames             []string
-	Analyzers                 []string
-	ScanConcurrency           int
-	ScanTimeout               time.Duration
-	HistoryDir                string
-	CacheDir                  string
-	CacheEncryptionKey        string
-	CacheTTL                  time.Duration
-	CacheMaxEntries           int
-	CacheMaxValueBytes        int
-	DatabaseURL               string `json:"-" yaml:"-"`
-	PlaybookEnabled           bool
-	PlaybookLearningMode      string
-	PlaybookMinConfidence     float64
-	PlaybookAllowedActions    []string
-	PlaybookAllowedNamespaces []string
-	PlaybookAllowedKinds      []string
-	PlaybookMaxSourceBytes    int
-	PlaybookMaxStepCount      int
-	PlaybookMaxTotalTextBytes int
+	EventDrivenScanning        bool
+	EventQueueCapacity         int
+	EventDebounce              time.Duration
+	LLMEndpointAllowlist       []string
+	Kubeconfig                 string
+	Port                       int
+	GRPCPort                   int
+	GRPCTLSCertFile            string
+	GRPCTLSKeyFile             string
+	GRPCTLSClientCAFile        string
+	GRPCReflection             bool
+	ScanInterval               time.Duration
+	ScanJitter                 time.Duration
+	LeaderElection             bool
+	LeaderElectionNamespace    string
+	LeaderElectionID           string
+	LeaderElectionIdentity     string
+	EnableAWSEKS               bool
+	AWSRegion                  string
+	EKSClusterName             string
+	Namespace                  string
+	LLMProvider                string
+	LLMMode                    string
+	LLMWireAPI                 string
+	LLMAPIKey                  string
+	LLMModel                   string
+	LLMBaseURL                 string
+	LLMOrganization            string
+	LLMProxyURL                string
+	LLMHeaders                 []string
+	HarnessCommand             string
+	WebhookURL                 string
+	AlertmanagerURL            string
+	AlertmanagerMinSeverity    string
+	AlertmanagerIncludePosture bool
+	PublicURL                  string
+	APIToken                   string
+	RequireAPIToken            bool
+	OIDCIssuer                 string
+	OIDCClientID               string
+	OIDCClientSecret           string `json:"-" yaml:"-"`
+	OIDCScopes                 []string
+	OIDCAllowedGroups          []string
+	AllowedOrigins             []string
+	TrustedClientIPHeader      string
+	TrustedProxyCIDRs          []string
+	MaxBodyBytes               int64
+	RequestsPerMinute          int
+	RequestBurst               int
+	DataDir                    string
+	IncludeNamespaces          []string
+	ExcludeNamespaces          []string
+	LabelSelector              string
+	ResourceKinds              []string
+	ResourceNames              []string
+	Analyzers                  []string
+	ScanConcurrency            int
+	ScanTimeout                time.Duration
+	HistoryDir                 string
+	CacheDir                   string
+	CacheEncryptionKey         string
+	CacheTTL                   time.Duration
+	CacheMaxEntries            int
+	CacheMaxValueBytes         int
+	DatabaseURL                string `json:"-" yaml:"-"`
+	PlaybookEnabled            bool
+	PlaybookLearningMode       string
+	PlaybookMinConfidence      float64
+	PlaybookAllowedActions     []string
+	PlaybookAllowedNamespaces  []string
+	PlaybookAllowedKinds       []string
+	PlaybookMaxSourceBytes     int
+	PlaybookMaxStepCount       int
+	PlaybookMaxTotalTextBytes  int
 }
 
 func (c Config) String() string {
@@ -146,6 +149,7 @@ func (c Config) redactedForLog() any {
 	redactString(&redacted.APIToken)
 	redactString(&redacted.OIDCClientSecret)
 	redactString(&redacted.WebhookURL)
+	redactString(&redacted.AlertmanagerURL)
 	redactString(&redacted.CacheEncryptionKey)
 	redacted.LLMHeaders = redactHeaderValues(c.LLMHeaders)
 	return redacted
@@ -222,6 +226,10 @@ func LoadConfigArgs(args []string) *Config {
 	flags.Func("custom-headers", "Alias for --llm-headers", appendHeaders)
 	flags.StringVar(&cfg.HarnessCommand, "harness-command", getEnv("HARNESS_COMMAND", ""), "Command path for agent harness CLI")
 	flags.StringVar(&cfg.WebhookURL, "webhook-url", getEnv("WEBHOOK_URL", ""), "Webhook URL for notifications (Slack/Discord)")
+	flags.StringVar(&cfg.AlertmanagerURL, "alertmanager-url", getEnv("SRE_ALERTMANAGER_URL", ""), "Alertmanager base URL for folded serious issue alerts")
+	flags.StringVar(&cfg.AlertmanagerMinSeverity, "alertmanager-min-severity", getEnv("SRE_ALERTMANAGER_MIN_SEVERITY", "HIGH"), "Minimum issue severity forwarded to Alertmanager (CRITICAL, HIGH, MEDIUM, LOW)")
+	cfg.AlertmanagerIncludePosture = getEnvBoolFailClosed("SRE_ALERTMANAGER_INCLUDE_POSTURE", false)
+	flags.BoolVar(&cfg.AlertmanagerIncludePosture, "alertmanager-include-posture", cfg.AlertmanagerIncludePosture, "Include passive security/hygiene posture findings in Alertmanager forwarding")
 	flags.StringVar(&cfg.PublicURL, "public-url", getEnv("PUBLIC_URL", "https://sre.kubebee.com"), "Public URL for web dashboard")
 	cfg.APIToken = getEnv("SRE_API_TOKEN", "")
 	flags.StringVar(&cfg.APIToken, "api-token", cfg.APIToken, "API token for authenticated API requests")

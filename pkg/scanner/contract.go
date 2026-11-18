@@ -38,7 +38,7 @@ func (s *ClusterScanner) RegisteredAnalyzers() []Analyzer {
 		analyzerAdapter{info: AnalyzerInfo{Name: "ReplicaSetAnalyzer", Resource: "ReplicaSet", Description: "Checks ReplicaSet provisioning and ready replicas", DocsURL: "https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/"}, run: s.scanReplicaSets},
 		analyzerAdapter{info: AnalyzerInfo{Name: "JobAnalyzer", Resource: "Job", Description: "Checks failed Jobs, retry limits, and deadlines", DocsURL: "https://kubernetes.io/docs/concepts/workloads/controllers/job/"}, run: s.scanJobs},
 		analyzerAdapter{info: AnalyzerInfo{Name: "CronJobAnalyzer", Resource: "CronJob", Description: "Checks CronJob schedules and failed executions", DocsURL: "https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/"}, run: s.scanCronJobs},
-		analyzerAdapter{info: AnalyzerInfo{Name: "ServiceAnalyzer", Resource: "Service", Description: "Checks Service selectors and ready endpoints", DocsURL: "https://kubernetes.io/docs/concepts/services-networking/service/"}, run: s.scanServices},
+		analyzerAdapter{info: AnalyzerInfo{Name: "ServiceAnalyzer", Resource: "Service", Description: "Checks Service selectors, ready endpoints, LoadBalancer provisioning, and CNI healthCheckNodePort alignment", DocsURL: "https://kubernetes.io/docs/concepts/services-networking/service/"}, run: s.scanServices},
 		analyzerAdapter{info: AnalyzerInfo{Name: "IngressAnalyzer", Resource: "Ingress", Description: "Checks Ingress classes, backends, and TLS references", DocsURL: "https://kubernetes.io/docs/concepts/services-networking/ingress/"}, run: s.scanIngresses},
 		analyzerAdapter{info: AnalyzerInfo{Name: "IngressSemanticsAnalyzer", Resource: "Ingress", Description: "Checks ingress class and Service backend ports", DocsURL: "https://kubernetes.io/docs/concepts/services-networking/ingress/"}, run: s.scanIngressSemantics},
 		analyzerAdapter{info: AnalyzerInfo{Name: "NetworkPolicyAnalyzer", Resource: "NetworkPolicy", Description: "Checks NetworkPolicy selectors and matching workloads", DocsURL: "https://kubernetes.io/docs/concepts/services-networking/network-policies/"}, run: s.scanNetworkPolicies},
@@ -48,7 +48,7 @@ func (s *ClusterScanner) RegisteredAnalyzers() []Analyzer {
 		analyzerAdapter{info: AnalyzerInfo{Name: "HPATargetAnalyzer", Resource: "HorizontalPodAutoscaler", Description: "Checks HPA target workloads and metric definitions", DocsURL: "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/"}, run: s.scanHPASemantics},
 		analyzerAdapter{info: AnalyzerInfo{Name: "PDBAnalyzer", Resource: "PodDisruptionBudget", Description: "Checks disruption budgets that block maintenance", DocsURL: "https://kubernetes.io/docs/concepts/workloads/pods/disruptions/"}, run: s.scanPDBs},
 		analyzerAdapter{info: AnalyzerInfo{Name: "PDBSelectorAnalyzer", Resource: "PodDisruptionBudget", Description: "Checks PDB selector validity and workload coverage", DocsURL: "https://kubernetes.io/docs/concepts/workloads/pods/disruptions/"}, run: s.scanPDBSemantics},
-		analyzerAdapter{info: AnalyzerInfo{Name: "LogAnalyzer", Resource: "Pod", Description: "Finds bounded error patterns in logs for restarted pods", DocsURL: "https://kubernetes.io/docs/concepts/cluster-administration/logging/"}, run: s.scanPodLogs},
+		analyzerAdapter{info: AnalyzerInfo{Name: "LogAnalyzer", Resource: "Pod", Description: "Finds bounded error and operational failure patterns in container logs", DocsURL: "https://kubernetes.io/docs/concepts/cluster-administration/logging/"}, run: s.scanPodLogs},
 		analyzerAdapter{info: AnalyzerInfo{Name: "WorkloadGraphAnalyzer", Resource: "Workload", Description: "Checks workload selectors against pod templates", DocsURL: "https://kubernetes.io/docs/concepts/workloads/controllers/"}, run: s.scanWorkloadDrift},
 		analyzerAdapter{info: AnalyzerInfo{Name: "CronJobScheduleAnalyzer", Resource: "CronJob", Description: "Validates CronJob schedules and reports suspended schedules", DocsURL: "https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/"}, run: s.scanCronSemantics},
 		analyzerAdapter{info: AnalyzerInfo{Name: "AdmissionWebhookAnalyzer", Resource: "Webhook", Description: "Checks admission webhook service targets and active pods", DocsURL: "https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/"}, run: s.scanWebhooks},
@@ -245,6 +245,7 @@ func cloneIssue(issue *Issue) *Issue {
 	copy := *issue
 	copy.AnalyzerNames = append([]string(nil), issue.AnalyzerNames...)
 	copy.Events = append([]string(nil), issue.Events...)
+	copy.AffectedResources = append([]string(nil), issue.AffectedResources...)
 	if issue.Parent != nil {
 		parent := *issue.Parent
 		copy.Parent = &parent

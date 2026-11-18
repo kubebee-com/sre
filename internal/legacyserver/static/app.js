@@ -81,6 +81,14 @@ function handleDashboardClick(event) {
       if (issue) renderIssueDetail(issue);
       break;
     }
+    case 'select-category-fold': {
+      const categorySelect = document.getElementById('filter-category');
+      if (categorySelect) {
+        categorySelect.value = target.dataset.category || '';
+        applyAnomalyFilters();
+      }
+      break;
+    }
     case 'ask-ai':
       askAIAboutIssue(target.dataset.issueId);
       break;
@@ -559,6 +567,8 @@ async function loadIssues() {
     const res = await apiFetch('/api/issues');
     const payload = await res.json();
     activeIssues = Array.isArray(payload) ? payload : [];
+    populateCategoryFilterOptions();
+    renderCategoryFolds();
     updateIssueSummary();
     applyAnomalyFilters();
   } catch (err) {
@@ -566,16 +576,74 @@ async function loadIssues() {
   }
 }
 
+function populateCategoryFilterOptions() {
+  const select = document.getElementById('filter-category');
+  if (!select) return;
+  const previous = select.value;
+  const counts = new Map();
+  for (const item of activeIssues) {
+    const cat = String(item.category || '');
+    if (!cat) continue;
+    const occ = Number(item.occurrence_count) > 1 ? Number(item.occurrence_count) : 1;
+    counts.set(cat, (counts.get(cat) || 0) + occ);
+  }
+  const options = ['<option value="">All Issue Types</option>'];
+  for (const [cat, total] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    options.push('<option value="' + escapeHtml(cat) + '">' + escapeHtml(cat) + ' (' + total + ')</option>');
+  }
+  select.innerHTML = options.join('');
+  if (previous && counts.has(previous)) select.value = previous;
+}
+
+function renderCategoryFolds() {
+  const container = document.getElementById('issue-category-folds');
+  if (!container) return;
+  if (!activeIssues.length) {
+    container.innerHTML = '';
+    return;
+  }
+  const selectedCategory = document.getElementById('filter-category')?.value || '';
+  const summary = new Map();
+  for (const item of activeIssues) {
+    const cat = String(item.category || '');
+    if (!cat) continue;
+    const prev = summary.get(cat) || {groups: 0, total: 0, severity: item.severity || 'LOW'};
+    prev.groups += 1;
+    prev.total += Number(item.occurrence_count) > 1 ? Number(item.occurrence_count) : 1;
+    summary.set(cat, prev);
+  }
+  const chips = [
+    '<button type="button" data-action="select-category-fold" data-category="" class="px-2 py-1 rounded text-xs font-mono ' +
+      (selectedCategory === '' ? 'bg-blue-600/30 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-300') +
+      '">All (' + activeIssues.length + ' folded)</button>'
+  ];
+  for (const [cat, stats] of [...summary.entries()].sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]))) {
+    const label = stats.total > stats.groups ? cat + ' (' + stats.groups + '/' + stats.total + ')' : cat + ' (' + stats.groups + ')';
+    const cls = selectedCategory === cat ? 'bg-blue-600/30 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-300';
+    chips.push('<button type="button" data-action="select-category-fold" data-category="' + escapeHtml(cat) + '" class="px-2 py-1 rounded text-xs font-mono ' + cls + '">' + escapeHtml(label) + '</button>');
+  }
+  container.innerHTML = chips.join('');
+}
+
 function applyAnomalyFilters() {
   const search = document.getElementById('filter-search')?.value.toLowerCase() || '';
   const group = document.getElementById('filter-group')?.value || '';
+  const category = document.getElementById('filter-category')?.value || '';
   const severity = document.getElementById('filter-severity')?.value || '';
+  renderCategoryFolds();
 
   const filtered = activeIssues.filter(i => {
-    const matchesSearch = !search || i.name.toLowerCase().includes(search) || i.namespace.toLowerCase().includes(search);
+    const affectedText = Array.isArray(i.affected_resources) ? i.affected_resources.join(' ').toLowerCase() : '';
+    const matchesSearch = !search ||
+      i.name.toLowerCase().includes(search) ||
+      i.namespace.toLowerCase().includes(search) ||
+      String(i.category || '').toLowerCase().includes(search) ||
+      String(i.summary || '').toLowerCase().includes(search) ||
+      affectedText.includes(search);
     const matchesGroup = !group || i.group === group;
+    const matchesCategory = !category || i.category === category;
     const matchesSeverity = !severity || i.severity === severity;
-    return matchesSearch && matchesGroup && matchesSeverity;
+    return matchesSearch && matchesGroup && matchesCategory && matchesSeverity;
   });
 
   const container = document.getElementById('issues-container');
@@ -587,6 +655,10 @@ function applyAnomalyFilters() {
 
   container.innerHTML = filtered.map(i => {
     const issueID = escapeHtml(i.id);
+    const occ = Number(i.occurrence_count) > 1 ? Number(i.occurrence_count) : 1;
+    const foldedBadge = occ > 1
+      ? '<span class="text-xs px-2 py-0.5 rounded bg-blue-600/30 text-blue-400 font-mono">x' + occ + ' similar</span>'
+      : '';
     const logButton = i.logs_snippet
       ? '<button type="button" data-action="resource-logs" data-issue-id="' + issueID + '" class="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs">Resource Logs</button>'
       : '';
@@ -599,12 +671,13 @@ function applyAnomalyFilters() {
           '<span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono">' + escapeHtml(i.kind) + '</span>' +
           '<span class="text-xs font-bold text-white" data-issue-name="' + escapeHtml(i.name) + '">' + escapeHtml(i.name) + '</span>' +
           '<span class="text-xs text-gray-400 font-mono">(' + escapeHtml(i.category) + ')</span>' +
+          foldedBadge +
         '</button>' +
         '<div class="issue-row-actions">' + logButton +
           '<button type="button" data-action="ask-ai" data-issue-id="' + issueID + '" class="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-400 border border-blue-500/50 rounded text-xs">Ask AI</button>' +
         '</div>' +
       '</div>' +
-      '<div class="issue-row-meta">' + namespace + escapeHtml(i.name) + ' - ' + escapeHtml(i.severity) + ' - ' + escapeHtml(i.category) + '</div>' +
+      '<div class="issue-row-meta">' + namespace + escapeHtml(i.name) + ' - ' + escapeHtml(i.severity) + ' - ' + escapeHtml(i.category) + (occ > 1 ? ' - ' + occ + ' folded' : '') + '</div>' +
       '<div class="text-xs text-gray-300 font-medium">' + escapeHtml(i.summary) + '</div>' +
       '<div class="text-xs text-gray-400">' + escapeHtml(i.details) + '</div>' +
     '</div>';
@@ -638,6 +711,9 @@ function renderIssueDetail(issue) {
     issue.summary || 'No summary supplied.',
     issue.details || 'No additional details supplied.'
   ];
+  if (Number(issue.occurrence_count) > 1 && Array.isArray(issue.affected_resources) && issue.affected_resources.length) {
+    detailParts.push('Folded occurrences (' + issue.occurrence_count + '): ' + issue.affected_resources.join(', '));
+  }
   detail.replaceChildren(...detailParts.map(value => {
     const paragraph = document.createElement('p');
     paragraph.className = 'mb-2';

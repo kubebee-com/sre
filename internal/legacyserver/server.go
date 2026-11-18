@@ -42,6 +42,7 @@ type ServerOptions struct {
 	RedactionSecrets      []string
 	Readiness             func() bool
 	Metrics               *metrics.Registry
+	Alertmanager          *notifier.AlertmanagerNotifier
 	Runtime               RuntimeSettings
 	OIDCIssuer            string
 	OIDCClientID          string
@@ -57,44 +58,46 @@ const (
 )
 
 type StatusSettings struct {
-	APITokenRequired    bool     `json:"api_token_required"`
-	AllowedOrigins      []string `json:"allowed_origins,omitempty"`
-	MaxRequestBytes     int64    `json:"max_request_bytes"`
-	MaxResponseBytes    int64    `json:"max_response_bytes"`
-	RequestsPerMinute   int      `json:"requests_per_minute"`
-	RequestBurst        int      `json:"request_burst"`
-	ReadinessManaged    bool     `json:"readiness_managed"`
-	LLMProvider         string   `json:"llm_provider,omitempty"`
-	LLMMode             string   `json:"llm_mode,omitempty"`
-	LLMWireAPI          string   `json:"llm_wire_api,omitempty"`
-	LLMModel            string   `json:"llm_model,omitempty"`
-	LLMBaseURLDisplay   string   `json:"llm_base_url_display,omitempty"`
-	ScanInterval        string   `json:"scan_interval,omitempty"`
-	ScanJitter          string   `json:"scan_jitter,omitempty"`
-	EventDrivenScanning bool     `json:"event_driven_scanning"`
-	EventQueueCapacity  int      `json:"event_queue_capacity"`
-	EventDebounce       string   `json:"event_debounce,omitempty"`
-	CacheEnabled        bool     `json:"cache_enabled"`
-	CacheConfigured     bool     `json:"cache_configured"`
-	WebhookConfigured   bool     `json:"webhook_configured"`
+	APITokenRequired       bool     `json:"api_token_required"`
+	AllowedOrigins         []string `json:"allowed_origins,omitempty"`
+	MaxRequestBytes        int64    `json:"max_request_bytes"`
+	MaxResponseBytes       int64    `json:"max_response_bytes"`
+	RequestsPerMinute      int      `json:"requests_per_minute"`
+	RequestBurst           int      `json:"request_burst"`
+	ReadinessManaged       bool     `json:"readiness_managed"`
+	LLMProvider            string   `json:"llm_provider,omitempty"`
+	LLMMode                string   `json:"llm_mode,omitempty"`
+	LLMWireAPI             string   `json:"llm_wire_api,omitempty"`
+	LLMModel               string   `json:"llm_model,omitempty"`
+	LLMBaseURLDisplay      string   `json:"llm_base_url_display,omitempty"`
+	ScanInterval           string   `json:"scan_interval,omitempty"`
+	ScanJitter             string   `json:"scan_jitter,omitempty"`
+	EventDrivenScanning    bool     `json:"event_driven_scanning"`
+	EventQueueCapacity     int      `json:"event_queue_capacity"`
+	EventDebounce          string   `json:"event_debounce,omitempty"`
+	CacheEnabled           bool     `json:"cache_enabled"`
+	CacheConfigured        bool     `json:"cache_configured"`
+	WebhookConfigured      bool     `json:"webhook_configured"`
+	AlertmanagerConfigured bool     `json:"alertmanager_configured"`
 }
 
 // RuntimeSettings is the sanitized configuration projection supplied by the
 // process owner. Secrets, custom headers, cache keys, and raw endpoint paths
 // are intentionally outside this type.
 type RuntimeSettings struct {
-	LLMProvider         string
-	LLMMode             string
-	LLMWireAPI          string
-	LLMModel            string
-	LLMBaseURLDisplay   string
-	ScanInterval        string
-	ScanJitter          string
-	EventDrivenScanning bool
-	EventQueueCapacity  int
-	EventDebounce       string
-	CacheEnabled        bool
-	CacheConfigured     bool
+	LLMProvider            string
+	LLMMode                string
+	LLMWireAPI             string
+	LLMModel               string
+	LLMBaseURLDisplay      string
+	ScanInterval           string
+	ScanJitter             string
+	EventDrivenScanning    bool
+	EventQueueCapacity     int
+	EventDebounce          string
+	CacheEnabled           bool
+	CacheConfigured        bool
+	AlertmanagerConfigured bool
 }
 
 type TokenUsageStatus struct {
@@ -127,6 +130,7 @@ type Server struct {
 	triage                triagepkg.TriageProvider
 	engine                *remediation.Engine
 	notifier              *notifier.WebhookNotifier
+	alertmanager          *notifier.AlertmanagerNotifier
 	authenticator         *tokenAuthenticator
 	oidcAuth              *oidcAuthenticator
 	publicURL             string
@@ -327,6 +331,7 @@ func NewServer(
 		triage:                triage,
 		engine:                engine,
 		notifier:              notifier,
+		alertmanager:          opts.Alertmanager,
 		authenticator:         newTokenAuthenticator(opts.APIToken),
 		oidcAuth:              oidcAuth,
 		publicURL:             opts.PublicURL,
@@ -691,6 +696,7 @@ func (s *Server) newHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/metrics/status", s.handleStatus)
 	mux.HandleFunc("/api/issues", s.handleListIssues)
+	mux.HandleFunc("/api/issues/categories", s.handleListIssueCategories)
 	mux.HandleFunc("/api/proposals", s.handleListProposals)
 	mux.HandleFunc("/api/proposals/", s.handleProposalAction)
 	mux.HandleFunc("/api/audit", s.handleAudit)
@@ -733,6 +739,7 @@ func (s *Server) newHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/playbooks/import", s.handlePlaybookImport)
 	mux.HandleFunc("/api/v1/playbooks/", s.handlePlaybookTransition)
 	mux.HandleFunc("/api/v1/issues", s.handleListIssues)
+	mux.HandleFunc("/api/v1/issues/categories", s.handleListIssueCategories)
 	mux.HandleFunc("/api/v1/analyzers", s.handleListAnalyzers)
 	mux.HandleFunc("/api/v1/scan", s.handleValidatedVersionedScan)
 	mux.HandleFunc("/api/v1/history", s.handleScanHistory)
@@ -862,10 +869,11 @@ func (s *Server) UpdateScanResults(issues []*scanner.Issue) {
 	snapshot := make([]*scanner.Issue, len(issues))
 	copy(snapshot, issues)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.lastScan = time.Now()
 	s.activeIssues = snapshot
 	s.activeIssuesExplicit = false
+	s.mu.Unlock()
+	s.observeIssueMetrics()
 }
 
 // issueSnapshot uses reconciled history so targeted results cannot hide other
@@ -894,10 +902,62 @@ func (s *Server) issueSnapshot() []*scanner.Issue {
 
 func (s *Server) SetActiveIssues(issues []*scanner.Issue) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.lastScan = time.Now()
 	s.activeIssues = append([]*scanner.Issue(nil), issues...)
 	s.activeIssuesExplicit = true
+	s.mu.Unlock()
+	s.observeIssueMetrics()
+}
+
+// SyncAlertmanager pushes folded serious findings to the configured
+// Alertmanager endpoint when enabled.
+func (s *Server) SyncAlertmanager(ctx context.Context, folded []*scanner.Issue, fullScope bool) error {
+	if s == nil || s.alertmanager == nil || !s.alertmanager.Enabled() {
+		return nil
+	}
+	return s.alertmanager.SyncFoldedIssues(ctx, folded, fullScope)
+}
+
+func (s *Server) observeIssueMetrics() {
+	if s == nil || s.metrics == nil {
+		return
+	}
+	raw := s.issueSnapshot()
+	folded := scanner.FoldIssues(raw)
+	type key struct {
+		cat string
+		grp string
+		sev string
+	}
+	counts := make(map[key]*metrics.IssueSeriesObservation)
+	ensure := func(issue *scanner.Issue) *metrics.IssueSeriesObservation {
+		grp := string(issue.Group)
+		if grp == "" {
+			grp = string(scanner.ResolveFindingGroup(issue.Category))
+		}
+		k := key{cat: string(issue.Category), grp: grp, sev: string(issue.Severity)}
+		entry, ok := counts[k]
+		if !ok {
+			entry = &metrics.IssueSeriesObservation{Category: k.cat, Group: k.grp, Severity: k.sev}
+			counts[k] = entry
+		}
+		return entry
+	}
+	for _, item := range raw {
+		if item != nil {
+			ensure(item).RawCount++
+		}
+	}
+	for _, item := range folded {
+		if item != nil {
+			ensure(item).FoldedCount++
+		}
+	}
+	observations := make([]metrics.IssueSeriesObservation, 0, len(counts))
+	for _, entry := range counts {
+		observations = append(observations, *entry)
+	}
+	s.metrics.ObserveIssueSeries(observations)
 }
 
 func (s *Server) SetReady(ready bool) {

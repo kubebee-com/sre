@@ -51,6 +51,7 @@ const (
 	CategoryServiceEndpointError    IssueCategory = "ServiceEndpointError"
 	CategoryServicePortMismatch     IssueCategory = "ServicePortMismatch"
 	CategoryServiceExternalInvalid  IssueCategory = "ServiceExternalNameInvalid"
+	CategoryServiceHealthCheck      IssueCategory = "ServiceHealthCheckUnreachable"
 	CategoryIngressBackendNotFound  IssueCategory = "IngressBackendNotFound"
 	CategoryIngressClassMissing     IssueCategory = "IngressClassMissing"
 	CategoryIngressPortInvalid      IssueCategory = "IngressPortInvalid"
@@ -124,7 +125,7 @@ func AllIssueCategories() []IssueCategory {
 		CategoryJobDeadlineExceeded, CategoryCronJobFailed, CategoryCronJobInvalid,
 		CategoryCronJobSuspended, CategoryCronJobMissed, CategoryWorkloadDrift,
 		CategoryServiceNoEndpoint, CategoryServiceEndpointError, CategoryServicePortMismatch,
-		CategoryServiceExternalInvalid, CategoryIngressBackendNotFound, CategoryIngressClassMissing,
+		CategoryServiceExternalInvalid, CategoryServiceHealthCheck, CategoryIngressBackendNotFound, CategoryIngressClassMissing,
 		CategoryIngressPortInvalid, CategoryIngressPathInvalid, CategoryIngressStatusPending,
 		CategoryIngressTLSSecretMissing, CategoryNetworkPolicyOrphaned, CategoryNetworkPolicyWide,
 		CategoryNodePressure, CategoryNodeNotReady, CategoryNodeNetworkUnavailable,
@@ -179,7 +180,7 @@ func ResolveFindingGroup(category IssueCategory) FindingGroup {
 	case CategoryImagePull, CategoryContainerConfig, CategoryFailedScheduling,
 		CategoryPodStuckTerminating, CategoryDeploymentMismatch, CategoryStatefulSetMismatch,
 		CategoryDaemonSetMismatch, CategoryReplicaSetStuck, CategoryServiceNoEndpoint,
-		CategoryServiceEndpointError, CategoryServicePortMismatch, CategoryServiceExternalInvalid,
+		CategoryServiceEndpointError, CategoryServicePortMismatch, CategoryServiceExternalInvalid, CategoryServiceHealthCheck,
 		CategoryIngressBackendNotFound, CategoryIngressClassMissing, CategoryIngressPortInvalid,
 		CategoryIngressPathInvalid, CategoryIngressStatusPending, CategoryIngressTLSSecretMissing,
 		CategoryPVCPending, CategoryPVCStorageClassMissing, CategoryStorageClassNoProvisioner,
@@ -218,6 +219,9 @@ type Issue struct {
 	LastObserved          time.Time     `json:"last_observed"`
 	Parent                *ResourceRef  `json:"parent,omitempty"`
 	DocsURL               string        `json:"docs_url,omitempty"`
+	OccurrenceCount       int           `json:"occurrence_count,omitempty"`
+	AffectedResources     []string      `json:"affected_resources,omitempty"`
+	FoldKey               string        `json:"fold_key,omitempty"`
 }
 
 type ResourceRef struct {

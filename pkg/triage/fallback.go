@@ -79,6 +79,8 @@ func ruleSpecFor(category scanner.IssueCategory) ruleSpec {
 		return manual("Service endpoints are invalid", "The service endpoint objects contain addresses or conditions that do not represent a usable backend.", "Inspect endpoint and EndpointSlice conditions alongside the selected pods.", "service")
 	case scanner.CategoryServicePortMismatch:
 		return manual("Service port does not match its backend", "The service target port cannot be resolved on the selected pods or endpoint slices.", "Align service ports and container ports through the workload source.", "service")
+	case scanner.CategoryServiceHealthCheck:
+		return manual("Service external health check is unreachable or pending", "The service uses local external traffic routing with a healthCheckNodePort disabled by the cluster CNI configuration, or its LoadBalancer ingress has not provisioned.", "Enable CNI healthCheckNodePort support (for example Cilium nodePort.enableHealthCheck=true with kube-proxy replacement) or verify load balancer provisioning.", "service")
 	case scanner.CategoryIngressBackendNotFound:
 		return ruleSpec{"Ingress backend service is missing", "The ingress references a service or port that is not present in the target namespace.", "Create or rename the backend through GitOps and verify controller status.", ActionGitOpsPR, "ingress", "describe"}
 	case scanner.CategoryIngressClassMissing:

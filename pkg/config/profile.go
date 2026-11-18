@@ -677,6 +677,11 @@ func ResolveConfig(options ResolveOptions) (*Config, UserConfig, error) {
 	stringValue(&cfg.APIToken, "api-token", "", flags, environment, "SRE_API_TOKEN", "API_TOKEN")
 	stringValue(&cfg.LLMAPIKey, "llm-api-key", "", flags, environment, "LLM_API_KEY", "SRE_LLM_API_KEY")
 	stringValue(&cfg.WebhookURL, "webhook-url", "", flags, environment, "WEBHOOK_URL")
+	stringValue(&cfg.AlertmanagerURL, "alertmanager-url", "", flags, environment, "SRE_ALERTMANAGER_URL")
+	stringValue(&cfg.AlertmanagerMinSeverity, "alertmanager-min-severity", "HIGH", flags, environment, "SRE_ALERTMANAGER_MIN_SEVERITY")
+	if err := boolValue(&cfg.AlertmanagerIncludePosture, "alertmanager-include-posture", false, flags, environment, "SRE_ALERTMANAGER_INCLUDE_POSTURE"); err != nil {
+		return nil, UserConfig{}, err
+	}
 	if err := boolValue(&cfg.RequireAPIToken, "require-api-token", settings.RequireAPIToken, flags, environment, "SRE_REQUIRE_API_TOKEN"); err != nil {
 		return nil, UserConfig{}, err
 	}

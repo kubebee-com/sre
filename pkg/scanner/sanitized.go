@@ -31,6 +31,9 @@ type SanitizedIssue struct {
 	LastObserved          time.Time                 `json:"last_observed"`
 	Parent                *ResourceRef              `json:"parent,omitempty"`
 	DocsURL               string                    `json:"docs_url,omitempty"`
+	OccurrenceCount       int                       `json:"occurrence_count,omitempty"`
+	AffectedResources     []string                  `json:"affected_resources,omitempty"`
+	FoldKey               string                    `json:"fold_key,omitempty"`
 	Report                sanitizer.RedactionReport `json:"-"`
 }
 
@@ -93,6 +96,14 @@ func sanitizeIssueWithRedactor(issue *Issue, redactor *sanitizer.Redactor) *Sani
 	result.LogsSnippet = sanitizeAndRecord(redactor, issue.LogsSnippet, "logs_snippet", &result.Report)
 	result.SpecSnippet = sanitizeAndRecord(redactor, issue.SpecSnippet, "spec_snippet", &result.Report)
 	result.DocsURL = redactor.SanitizeURL(issue.DocsURL)
+	result.OccurrenceCount = issue.OccurrenceCount
+	result.FoldKey = sanitizeAndRecord(redactor, issue.FoldKey, "fold_key", &result.Report)
+	if len(issue.AffectedResources) > 0 {
+		result.AffectedResources = make([]string, len(issue.AffectedResources))
+		for index, item := range issue.AffectedResources {
+			result.AffectedResources[index] = sanitizeAndRecord(redactor, item, "affected_resources", &result.Report)
+		}
+	}
 	if issue.Parent != nil {
 		result.Parent = &ResourceRef{
 			Namespace: sanitizeAndRecord(redactor, issue.Parent.Namespace, "parent.namespace", &result.Report),
@@ -160,6 +171,9 @@ func (i *SanitizedIssue) AsIssue() *Issue {
 		FirstObserved:         i.FirstObserved,
 		LastObserved:          i.LastObserved,
 		DocsURL:               i.DocsURL,
+		OccurrenceCount:       i.OccurrenceCount,
+		AffectedResources:     append([]string(nil), i.AffectedResources...),
+		FoldKey:               i.FoldKey,
 	}
 	if i.Parent != nil {
 		result.Parent = &ResourceRef{

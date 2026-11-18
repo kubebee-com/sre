@@ -717,6 +717,9 @@
             <option value="Errors">⚠️ Errors</option>
             <option value="Improvement">💡 Improvement</option>
           </select>
+          <select id="filter-category" data-action="issue-filter" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
+            <option value="">All Issue Types</option>
+          </select>
           <select id="filter-severity" data-action="issue-filter" class="px-2 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-gray-200 focus:outline-none">
             <option value="">All Severities</option>
             <option value="CRITICAL">Critical</option>
@@ -726,6 +729,7 @@
           </select>
         </div>
       </div>
+      <div id="issue-category-folds" class="flex flex-wrap gap-2"></div>
       <div id="triage-queue" class="space-y-3" aria-label="AI priority queue">
         <div id="issues-container" class="space-y-3">
         <!-- Injected via JavaScript -->

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	cron "github.com/robfig/cron/v3"
@@ -26,59 +28,135 @@ import (
 	"github.com/kubebee-com/sre/pkg/scanplan"
 )
 
-const maxPodLogSnippetBytes = 64 * 1024
+const (
+	maxPodLogSnippetBytes      = 64 * 1024
+	activePodLogSinceSeconds   = int64(3600)
+	maxConcurrentPodLogWorkers = 8
+)
 
 func (s *ClusterScanner) scanPodLogs(ctx context.Context, namespace string) ([]*Issue, error) {
 	pods, err := s.client.CoreV1().Pods(namespace).List(ctx, listOptionsForScan(ctx))
 	if err != nil {
 		return nil, err
 	}
-	issues := make([]*Issue, 0)
-	var logErrors []error
+	type logCheckTask struct {
+		pod          *corev1.Pod
+		target       podLogTarget
+		previous     bool
+		sinceSeconds int64
+	}
+	tasks := make([]logCheckTask, 0, len(pods.Items)*2)
 	for index := range pods.Items {
 		pod := &pods.Items[index]
 		if pod.Status.Phase == corev1.PodSucceeded {
 			continue
 		}
 		for _, target := range podLogTargets(pod) {
-			if target.restartCount == 0 {
+			if target.restartCount > 0 {
+				tasks = append(tasks,
+					logCheckTask{pod: pod, target: target, previous: true},
+					logCheckTask{pod: pod, target: target, previous: false},
+				)
 				continue
 			}
-			for _, previous := range []bool{true, false} {
-				logs, logErr := s.fetchBoundedContainerLogsSnippet(ctx, pod.Namespace, pod.Name, target.name, previous)
-				if logErr != nil {
-					if !apierrors.IsNotFound(logErr) {
-						logErrors = append(logErrors, logErr)
-					}
+			if !target.canReadCurrentLogs {
+				continue
+			}
+			tasks = append(tasks, logCheckTask{
+				pod:          pod,
+				target:       target,
+				previous:     false,
+				sinceSeconds: activePodLogSinceSeconds,
+			})
+		}
+	}
+	if len(tasks) == 0 {
+		return []*Issue{}, nil
+	}
+
+	workers := maxConcurrentPodLogWorkers
+	if len(tasks) < workers {
+		workers = len(tasks)
+	}
+	taskCh := make(chan logCheckTask, len(tasks))
+	for _, task := range tasks {
+		taskCh <- task
+	}
+	close(taskCh)
+
+	var (
+		mu        sync.Mutex
+		issues    = make([]*Issue, 0)
+		logErrors []error
+		wg        sync.WaitGroup
+	)
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range taskCh {
+				if ctx != nil && ctx.Err() != nil {
+					return
 				}
-				lines := matchingLogLines(logs)
+				logs, logErr := s.fetchBoundedContainerLogsSnippetSince(ctx, task.pod.Namespace, task.pod.Name, task.target.name, task.previous, task.sinceSeconds)
+				if logErr != nil && !isIgnorableContainerLogError(logErr) {
+					mu.Lock()
+					logErrors = append(logErrors, logErr)
+					mu.Unlock()
+				}
+				var lines []string
+				if task.target.restartCount == 0 {
+					lines = matchingOperationalFailureLines(logs)
+				} else {
+					lines = matchingLogLines(logs)
+				}
 				if len(lines) == 0 {
 					continue
 				}
 				phase := "current"
-				if previous {
+				if task.previous {
 					phase = "previous"
 				}
 				evidence := strings.Join(lines, "\n")
-				issues = append(issues, &Issue{
-					ID:        makeID(pod.Namespace, "Pod", pod.Name, "LogError-"+target.kind+"-"+target.name+"-"+phase),
-					Namespace: pod.Namespace, Kind: "Pod", Name: pod.Name,
-					TargetUID: string(pod.UID), TargetResourceVersion: pod.ResourceVersion,
-					Severity: SeverityMedium, Category: CategoryPodLogError,
-					Summary: fmt.Sprintf("Pod %s has %s error patterns in %s container logs", pod.Name, phase, target.kind),
+				severity := classifyPodLogSeverity(lines)
+				now := time.Now().UTC()
+				issue := &Issue{
+					ID:        makeID(task.pod.Namespace, "Pod", task.pod.Name, "LogError-"+task.target.kind+"-"+task.target.name+"-"+phase),
+					Namespace: task.pod.Namespace, Kind: "Pod", Name: task.pod.Name,
+					TargetUID: string(task.pod.UID), TargetResourceVersion: task.pod.ResourceVersion,
+					Severity: severity, Category: CategoryPodLogError,
+					Summary: fmt.Sprintf("Pod %s has %s error patterns in %s container logs", task.pod.Name, phase, task.target.kind),
 					Details: evidence, LogsSnippet: evidence,
-					FirstObserved: time.Now().UTC(), LastObserved: time.Now().UTC(), Parent: podOwnerReference(pod),
-				})
+					FirstObserved: now, LastObserved: now, Parent: podOwnerReference(task.pod),
+				}
+				mu.Lock()
+				issues = append(issues, issue)
+				mu.Unlock()
 			}
-		}
+		}()
 	}
+	wg.Wait()
+	sort.SliceStable(issues, func(i, j int) bool {
+		return issueLess(issues[i], issues[j])
+	})
 	return issues, errors.Join(logErrors...)
 }
 
 type podLogTarget struct {
-	kind         string
-	name         string
-	restartCount int32
+	kind               string
+	name               string
+	restartCount       int32
+	canReadCurrentLogs bool
+}
+
+func containerCanReadCurrentLogs(status corev1.ContainerStatus) bool {
+	if status.RestartCount > 0 {
+		return true
+	}
+	if status.State.Waiting != nil && status.State.Running == nil && status.State.Terminated == nil {
+		return false
+	}
+	return true
 }
 
 func podLogTargets(pod *corev1.Pod) []podLogTarget {
@@ -87,15 +165,31 @@ func podLogTargets(pod *corev1.Pod) []podLogTarget {
 	}
 	result := make([]podLogTarget, 0, len(pod.Spec.InitContainers)+len(pod.Spec.Containers)+len(pod.Spec.EphemeralContainers))
 	for _, status := range pod.Status.InitContainerStatuses {
-		result = append(result, podLogTarget{kind: "init", name: status.Name, restartCount: status.RestartCount})
+		result = append(result, podLogTarget{kind: "init", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status)})
 	}
 	for _, status := range pod.Status.ContainerStatuses {
-		result = append(result, podLogTarget{kind: "regular", name: status.Name, restartCount: status.RestartCount})
+		result = append(result, podLogTarget{kind: "regular", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status)})
 	}
 	for _, status := range pod.Status.EphemeralContainerStatuses {
-		result = append(result, podLogTarget{kind: "ephemeral", name: status.Name, restartCount: status.RestartCount})
+		result = append(result, podLogTarget{kind: "ephemeral", name: status.Name, restartCount: status.RestartCount, canReadCurrentLogs: containerCanReadCurrentLogs(status)})
 	}
 	return result
+}
+
+func isIgnorableContainerLogError(err error) bool {
+	if err == nil {
+		return true
+	}
+	if apierrors.IsNotFound(err) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	if apierrors.IsBadRequest(err) || strings.Contains(lower, "previous terminated container") || strings.Contains(lower, "is waiting to start") || strings.Contains(lower, "containercreating") || strings.Contains(lower, "podinitializing") {
+		if strings.Contains(lower, "not found") || strings.Contains(lower, "is waiting to start") || strings.Contains(lower, "containercreating") || strings.Contains(lower, "podinitializing") {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *ClusterScanner) fetchBoundedPodLogsSnippet(ctx context.Context, namespace, name string) string {
@@ -108,6 +202,10 @@ func (s *ClusterScanner) fetchBoundedPodLogsSnippet(ctx context.Context, namespa
 }
 
 func (s *ClusterScanner) fetchBoundedContainerLogsSnippet(ctx context.Context, namespace, name, container string, previous bool) (string, error) {
+	return s.fetchBoundedContainerLogsSnippetSince(ctx, namespace, name, container, previous, 0)
+}
+
+func (s *ClusterScanner) fetchBoundedContainerLogsSnippetSince(ctx context.Context, namespace, name, container string, previous bool, sinceSeconds int64) (string, error) {
 	if s == nil || s.client == nil {
 		return "", ErrKubernetesClientUnavailable
 	}
@@ -116,6 +214,9 @@ func (s *ClusterScanner) fetchBoundedContainerLogsSnippet(ctx context.Context, n
 	}
 	tailLines := int64(30)
 	options := &corev1.PodLogOptions{TailLines: &tailLines, Container: container, Previous: previous}
+	if sinceSeconds > 0 && !previous {
+		options.SinceSeconds = &sinceSeconds
+	}
 	stream, err := s.client.CoreV1().Pods(namespace).GetLogs(name, options).Stream(ctx)
 	if err != nil {
 		return "", err
@@ -142,23 +243,107 @@ func readBoundedLogSnippetWithError(reader io.Reader, maxBytes int64) (string, e
 }
 
 func matchingLogLines(logs string) []string {
+	return matchLogLinesFiltered(logs, false)
+}
+
+func matchingOperationalFailureLines(logs string) []string {
+	return matchLogLinesFiltered(logs, true)
+}
+
+func matchLogLinesFiltered(logs string, activeRunningOnly bool) []string {
 	lines := strings.Split(logs, "\n")
 	result := make([]string, 0, 5)
 	for _, line := range lines {
-		lower := strings.ToLower(line)
-		if !strings.Contains(lower, "error") && !strings.Contains(lower, "fatal") && !strings.Contains(lower, "panic") && !strings.Contains(lower, "exception") && !strings.Contains(lower, "oom") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
 			continue
 		}
-		line = strings.TrimSpace(line)
-		if line == "" {
+		lower := strings.ToLower(trimmed)
+		if isBenignLogLine(lower) {
 			continue
 		}
-		result = append(result, line)
+		if activeRunningOnly {
+			if !hasOperationalFailureSignal(lower) && !hasSeriousControllerFailureSignal(lower) {
+				continue
+			}
+		} else {
+			if !hasStandardErrorSignal(lower) && !hasOperationalFailureSignal(lower) && !hasSeriousControllerFailureSignal(lower) {
+				continue
+			}
+		}
+		result = append(result, trimmed)
 		if len(result) == 5 {
 			break
 		}
 	}
 	return result
+}
+
+func isBenignLogLine(lower string) bool {
+	if strings.Contains(lower, "level=debug") || strings.Contains(lower, `"level":"debug"`) || strings.Contains(lower, "level=trace") {
+		return true
+	}
+	for _, ignore := range []string{
+		"0 error", "0 errors", "no error", "errors=0", "errors: 0", `"errors":0`,
+		"error=nil", "error=<nil>", "error=null", `"error":null`, `"error":""`,
+		"err=nil", "err=<nil>", "err=null", "without error", "error_count=0",
+	} {
+		if strings.Contains(lower, ignore) && !hasSeriousControllerFailureSignal(lower) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasStandardErrorSignal(lower string) bool {
+	for _, token := range []string{"error", "fatal", "panic", "exception", "oom"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasOperationalFailureSignal(lower string) bool {
+	for _, token := range []string{
+		"level=error", `"level":"error"`, "severity=error", `"severity":"error"`,
+		"gslb error:", "error:", "failed to ", "unable to ",
+		"reconciliation failed", "reconcile failed", "sync failed", "discovery failed",
+		"health check failed", "healthcheck failed", "bad configuration",
+		"invalid configuration", "misconfigured",
+	} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSeriousControllerFailureSignal(lower string) bool {
+	for _, token := range []string{
+		"fatal", "panic:", "panic ", "level=fatal", `"level":"fatal"`,
+		"severity=critical", "health=critical",
+		"reconciliation failed", "reconcile failed", "sync failed", "discovery failed",
+		"health check failed", "healthcheck failed", "gslb error:", "gslb gc error:",
+		"unable to construct", "unable to resolve", "unable to list", "unable to connect",
+		"failed to reconcile", "failed to sync", "failed to bind", "failed to delete",
+		"failed to create", "failed to ensure",
+		"bad configuration", "invalid configuration", "misconfigured",
+	} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func classifyPodLogSeverity(lines []string) Severity {
+	for _, line := range lines {
+		if hasSeriousControllerFailureSignal(strings.ToLower(line)) {
+			return SeverityHigh
+		}
+	}
+	return SeverityMedium
 }
 
 func (s *ClusterScanner) scanWorkloadDrift(ctx context.Context, namespace string) ([]*Issue, error) {
