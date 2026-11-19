@@ -100,9 +100,11 @@ func TestDashboardIncludesMetricsAndSafeSettingsSurface(t *testing.T) {
 		"section-metrics",
 		"metric-error-count",
 		"metric-token-total",
+		"openai-provider-label",
 		"settings-provider",
 		"settings-wire-api",
 		"settings-model",
+		"settings-base-url",
 		"settings-scan-interval",
 		"settings-event-driven",
 		"settings-event-queue-capacity",
@@ -120,6 +122,11 @@ func TestDashboardIncludesMetricsAndSafeSettingsSurface(t *testing.T) {
 		"sre_provider_tokens_total",
 		"sre_errors_total",
 		"escapeHtml",
+		"openai-provider-label",
+		"openai_provider",
+		"openai_wire_api",
+		"openai_model",
+		"openai_api_endpoint_display",
 	} {
 		if !strings.Contains(appText, marker) {
 			t.Errorf("dashboard app is missing %q", marker)

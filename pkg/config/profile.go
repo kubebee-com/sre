@@ -72,7 +72,7 @@ type UserSettings struct {
 	EventDrivenScanning       *bool    `json:"event_driven_scanning,omitempty" yaml:"event_driven_scanning,omitempty"`
 	EventQueueCapacity        int      `json:"event_queue_capacity,omitempty" yaml:"event_queue_capacity,omitempty"`
 	EventDebounce             string   `json:"event_debounce,omitempty" yaml:"event_debounce,omitempty"`
-	LLMEndpointAllowlist      []string `json:"llm_endpoint_allowlist,omitempty" yaml:"llm_endpoint_allowlist,omitempty"`
+	OpenAIEndpointAllowlist   []string `json:"openai_endpoint_allowlist,omitempty" yaml:"openai_endpoint_allowlist,omitempty"`
 	Kubeconfig                string   `json:"kubeconfig,omitempty" yaml:"kubeconfig,omitempty"`
 	Port                      int      `json:"port,omitempty" yaml:"port,omitempty"`
 	GRPCPort                  int      `json:"grpc_port,omitempty" yaml:"grpc_port,omitempty"`
@@ -90,14 +90,14 @@ type UserSettings struct {
 	AWSRegion                 string   `json:"aws_region,omitempty" yaml:"aws_region,omitempty"`
 	EKSClusterName            string   `json:"eks_cluster_name,omitempty" yaml:"eks_cluster_name,omitempty"`
 	Namespace                 string   `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	LLMProvider               string   `json:"llm_provider,omitempty" yaml:"llm_provider,omitempty"`
-	LLMMode                   string   `json:"llm_mode,omitempty" yaml:"llm_mode,omitempty"`
-	LLMWireAPI                string   `json:"llm_wire_api,omitempty" yaml:"llm_wire_api,omitempty"`
-	LLMReasoningEffort        string   `json:"llm_reasoning_effort,omitempty" yaml:"llm_reasoning_effort,omitempty"`
-	LLMModel                  string   `json:"llm_model,omitempty" yaml:"llm_model,omitempty"`
-	LLMBaseURL                string   `json:"llm_base_url,omitempty" yaml:"llm_base_url,omitempty"`
-	LLMOrganization           string   `json:"llm_organization,omitempty" yaml:"llm_organization,omitempty"`
-	LLMProxyURL               string   `json:"llm_proxy_url,omitempty" yaml:"llm_proxy_url,omitempty"`
+	OpenAIProvider            string   `json:"openai_provider,omitempty" yaml:"openai_provider,omitempty"`
+	OpenAIMode                string   `json:"openai_mode,omitempty" yaml:"openai_mode,omitempty"`
+	OpenAIWireAPI             string   `json:"openai_wire_api,omitempty" yaml:"openai_wire_api,omitempty"`
+	OpenAIReasoningEffort     string   `json:"openai_reasoning_effort,omitempty" yaml:"openai_reasoning_effort,omitempty"`
+	OpenAIModel               string   `json:"openai_model,omitempty" yaml:"openai_model,omitempty"`
+	OpenAIAPIEndpoint         string   `json:"openai_api_endpoint,omitempty" yaml:"openai_api_endpoint,omitempty"`
+	OpenAIOrganization        string   `json:"openai_organization,omitempty" yaml:"openai_organization,omitempty"`
+	OpenAIProxyURL            string   `json:"openai_proxy_url,omitempty" yaml:"openai_proxy_url,omitempty"`
 	HarnessCommand            string   `json:"harness_command,omitempty" yaml:"harness_command,omitempty"`
 	PublicURL                 string   `json:"public_url,omitempty" yaml:"public_url,omitempty"`
 	RequireAPIToken           bool     `json:"require_api_token,omitempty" yaml:"require_api_token,omitempty"`
@@ -544,25 +544,25 @@ func ResolveConfig(options ResolveOptions) (*Config, UserConfig, error) {
 	settings := userConfig.Settings
 	if profile := selectedProfile(userConfig, ""); profile != nil {
 		if profile.Provider != "" {
-			settings.LLMProvider = profile.Provider
+			settings.OpenAIProvider = profile.Provider
 		}
 		if profile.Mode != "" {
-			settings.LLMMode = profile.Mode
+			settings.OpenAIMode = profile.Mode
 		}
 		if profile.WireAPI != "" {
-			settings.LLMWireAPI = profile.WireAPI
+			settings.OpenAIWireAPI = profile.WireAPI
 		}
 		if profile.Model != "" {
-			settings.LLMModel = profile.Model
+			settings.OpenAIModel = profile.Model
 		}
 		if profile.BaseURL != "" {
-			settings.LLMBaseURL = profile.BaseURL
+			settings.OpenAIAPIEndpoint = profile.BaseURL
 		}
 		if profile.Organization != "" {
-			settings.LLMOrganization = profile.Organization
+			settings.OpenAIOrganization = profile.Organization
 		}
 		if profile.ProxyURL != "" {
-			settings.LLMProxyURL = profile.ProxyURL
+			settings.OpenAIProxyURL = profile.ProxyURL
 		}
 	}
 	filterName := strings.TrimSpace(options.FilterName)
@@ -596,7 +596,7 @@ func ResolveConfig(options ResolveOptions) (*Config, UserConfig, error) {
 		EventDebounce:             scheduler.DefaultTriggerDebounce,
 		Port:                      8080,
 		ScanInterval:              defaultScanInterval,
-		LLMProvider:               "claude",
+		OpenAIProvider:            "claude",
 		PublicURL:                 "https://sre.kubebee.com",
 		MaxBodyBytes:              DefaultMaxBodyBytes,
 		RequestsPerMinute:         DefaultRequestsPerMinute,
@@ -664,21 +664,21 @@ func ResolveConfig(options ResolveOptions) (*Config, UserConfig, error) {
 	stringValue(&cfg.AWSRegion, "aws-region", settings.AWSRegion, flags, environment, "AWS_REGION", "AWS_DEFAULT_REGION")
 	stringValue(&cfg.EKSClusterName, "eks-cluster-name", settings.EKSClusterName, flags, environment, "SRE_EKS_CLUSTER_NAME")
 	stringValue(&cfg.Namespace, "namespace", settings.Namespace, flags, environment, "NAMESPACE")
-	stringValue(&cfg.LLMProvider, "llm-provider", settings.LLMProvider, flags, environment, "LLM_PROVIDER")
-	stringValue(&cfg.LLMMode, "llm-mode", settings.LLMMode, flags, environment, "LLM_MODE")
-	stringValue(&cfg.LLMWireAPI, "llm-wire-api", settings.LLMWireAPI, flags, environment, "LLM_WIRE_API")
-	stringValue(&cfg.LLMReasoningEffort, "llm-reasoning-effort", settings.LLMReasoningEffort, flags, environment, "LLM_REASONING_EFFORT")
-	cfg.LLMReasoningEffort = normalizeReasoningEffort(cfg.LLMReasoningEffort)
-	stringValue(&cfg.LLMModel, "llm-model", settings.LLMModel, flags, environment, "LLM_MODEL")
-	stringValue(&cfg.LLMBaseURL, "llm-base-url", settings.LLMBaseURL, flags, environment, "LLM_BASE_URL")
-	cfg.LLMEndpointAllowlist = listValue(settings.LLMEndpointAllowlist, flags, environment, "llm-endpoint-allowlist", "LLM_ENDPOINT_ALLOWLIST")
-	stringValue(&cfg.LLMOrganization, "llm-organization", settings.LLMOrganization, flags, environment, "LLM_ORGANIZATION")
-	stringValue(&cfg.LLMProxyURL, "llm-proxy-url", settings.LLMProxyURL, flags, environment, "LLM_PROXY_URL")
-	cfg.LLMHeaders = transientHeaderValues(flags, environment)
+	stringValue(&cfg.OpenAIProvider, "openai-provider", settings.OpenAIProvider, flags, environment, "OPENAI_PROVIDER")
+	stringValue(&cfg.OpenAIMode, "openai-mode", settings.OpenAIMode, flags, environment, "OPENAI_MODE")
+	stringValue(&cfg.OpenAIWireAPI, "openai-wire-api", settings.OpenAIWireAPI, flags, environment, "OPENAI_WIRE_API")
+	stringValue(&cfg.OpenAIReasoningEffort, "openai-reasoning-effort", settings.OpenAIReasoningEffort, flags, environment, "OPENAI_REASONING_EFFORT")
+	cfg.OpenAIReasoningEffort = normalizeReasoningEffort(cfg.OpenAIReasoningEffort)
+	stringValue(&cfg.OpenAIModel, "openai-model", settings.OpenAIModel, flags, environment, "OPENAI_MODEL")
+	stringValue(&cfg.OpenAIAPIEndpoint, "openai-api-endpoint", settings.OpenAIAPIEndpoint, flags, environment, "OPENAI_API_ENDPOINT")
+	cfg.OpenAIEndpointAllowlist = listValue(settings.OpenAIEndpointAllowlist, flags, environment, "openai-endpoint-allowlist", "OPENAI_ENDPOINT_ALLOWLIST")
+	stringValue(&cfg.OpenAIOrganization, "openai-organization", settings.OpenAIOrganization, flags, environment, "OPENAI_ORGANIZATION")
+	stringValue(&cfg.OpenAIProxyURL, "openai-proxy-url", settings.OpenAIProxyURL, flags, environment, "OPENAI_PROXY_URL")
+	cfg.OpenAIHeaders = transientHeaderValues(flags, environment)
 	stringValue(&cfg.HarnessCommand, "harness-command", settings.HarnessCommand, flags, environment, "HARNESS_COMMAND")
 	stringValue(&cfg.PublicURL, "public-url", settings.PublicURL, flags, environment, "PUBLIC_URL")
 	stringValue(&cfg.APIToken, "api-token", "", flags, environment, "SRE_API_TOKEN", "API_TOKEN")
-	stringValue(&cfg.LLMAPIKey, "llm-api-key", "", flags, environment, "LLM_API_KEY", "SRE_LLM_API_KEY")
+	stringValue(&cfg.OpenAIAPIKey, "openai-api-key", "", flags, environment, "OPENAI_API_KEY")
 	stringValue(&cfg.WebhookURL, "webhook-url", "", flags, environment, "WEBHOOK_URL")
 	stringValue(&cfg.AlertmanagerURL, "alertmanager-url", "", flags, environment, "SRE_ALERTMANAGER_URL")
 	stringValue(&cfg.AlertmanagerMinSeverity, "alertmanager-min-severity", "HIGH", flags, environment, "SRE_ALERTMANAGER_MIN_SEVERITY")
@@ -842,10 +842,10 @@ func listValue(fileValue []string, flags, environment map[string]string, flagKey
 }
 
 func transientHeaderValues(flags, environment map[string]string) []string {
-	if value, ok := firstMapValue(flags, "llm-headers"); ok {
+	if value, ok := firstMapValue(flags, "openai-headers", "custom-headers"); ok {
 		return splitCSV(value)
 	}
-	if value, ok := firstMapValue(environment, "LLM_CUSTOM_HEADERS", "K8SGPT_CUSTOM_HEADERS"); ok {
+	if value, ok := firstMapValue(environment, "OPENAI_CUSTOM_HEADERS"); ok {
 		return splitCSV(value)
 	}
 	return nil
@@ -1134,15 +1134,15 @@ func normalizeSettings(settings UserSettings) UserSettings {
 	settings.ScanInterval = strings.TrimSpace(settings.ScanInterval)
 	settings.EventDebounce = strings.TrimSpace(settings.EventDebounce)
 	settings.Namespace = strings.TrimSpace(settings.Namespace)
-	settings.LLMProvider = strings.ToLower(strings.TrimSpace(settings.LLMProvider))
-	settings.LLMMode = strings.ToLower(strings.TrimSpace(settings.LLMMode))
-	settings.LLMWireAPI = strings.ToLower(strings.TrimSpace(settings.LLMWireAPI))
-	settings.LLMReasoningEffort = normalizeReasoningEffort(settings.LLMReasoningEffort)
-	settings.LLMModel = strings.TrimSpace(settings.LLMModel)
-	settings.LLMBaseURL = strings.TrimSpace(settings.LLMBaseURL)
-	settings.LLMEndpointAllowlist = normalizeList(settings.LLMEndpointAllowlist)
-	settings.LLMOrganization = strings.TrimSpace(settings.LLMOrganization)
-	settings.LLMProxyURL = strings.TrimSpace(settings.LLMProxyURL)
+	settings.OpenAIProvider = strings.ToLower(strings.TrimSpace(settings.OpenAIProvider))
+	settings.OpenAIMode = strings.ToLower(strings.TrimSpace(settings.OpenAIMode))
+	settings.OpenAIWireAPI = strings.ToLower(strings.TrimSpace(settings.OpenAIWireAPI))
+	settings.OpenAIReasoningEffort = normalizeReasoningEffort(settings.OpenAIReasoningEffort)
+	settings.OpenAIModel = strings.TrimSpace(settings.OpenAIModel)
+	settings.OpenAIAPIEndpoint = strings.TrimSpace(settings.OpenAIAPIEndpoint)
+	settings.OpenAIEndpointAllowlist = normalizeList(settings.OpenAIEndpointAllowlist)
+	settings.OpenAIOrganization = strings.TrimSpace(settings.OpenAIOrganization)
+	settings.OpenAIProxyURL = strings.TrimSpace(settings.OpenAIProxyURL)
 	settings.HarnessCommand = strings.TrimSpace(settings.HarnessCommand)
 	settings.PublicURL = strings.TrimSpace(settings.PublicURL)
 	settings.OIDCIssuer = strings.TrimSpace(settings.OIDCIssuer)
@@ -1189,7 +1189,7 @@ func safeConfigCopy(cfg UserConfig) UserConfig {
 	copy.Settings.TrustedProxyCIDRs = append([]string(nil), cfg.Settings.TrustedProxyCIDRs...)
 	copy.Settings.IncludeNamespaces = append([]string(nil), cfg.Settings.IncludeNamespaces...)
 	copy.Settings.ExcludeNamespaces = append([]string(nil), cfg.Settings.ExcludeNamespaces...)
-	copy.Settings.LLMEndpointAllowlist = append([]string(nil), cfg.Settings.LLMEndpointAllowlist...)
+	copy.Settings.OpenAIEndpointAllowlist = append([]string(nil), cfg.Settings.OpenAIEndpointAllowlist...)
 	copy.Settings.ResourceKinds = append([]string(nil), cfg.Settings.ResourceKinds...)
 	copy.Settings.ResourceNames = append([]string(nil), cfg.Settings.ResourceNames...)
 	copy.Settings.Analyzers = append([]string(nil), cfg.Settings.Analyzers...)
@@ -1350,21 +1350,23 @@ func isMigratableSchema(value string) bool {
 }
 
 type legacyDocument struct {
-	LLMEndpointAllowlist      interface{}            `yaml:"llm_endpoint_allowlist"`
+	OpenAIEndpointAllowlist   interface{}            `yaml:"openai_endpoint_allowlist"`
 	EventDrivenScanning       *bool                  `yaml:"event_driven_scanning"`
 	EventQueueCapacity        int                    `yaml:"event_queue_capacity"`
 	EventDebounce             string                 `yaml:"event_debounce"`
 	Provider                  string                 `yaml:"provider"`
-	LLMProvider               string                 `yaml:"llm_provider"`
-	LLMMode                   string                 `yaml:"llm_mode"`
+	OpenAIProvider            string                 `yaml:"openai_provider"`
+	OpenAIMode                string                 `yaml:"openai_mode"`
+	OpenAIWireAPI             string                 `yaml:"openai_wire_api"`
+	OpenAIReasoningEffort     string                 `yaml:"openai_reasoning_effort"`
 	Model                     string                 `yaml:"model"`
-	LLMModel                  string                 `yaml:"llm_model"`
+	OpenAIModel               string                 `yaml:"openai_model"`
 	BaseURL                   string                 `yaml:"base_url"`
-	LLMBaseURL                string                 `yaml:"llm_base_url"`
+	OpenAIAPIEndpoint         string                 `yaml:"openai_api_endpoint"`
 	Organization              string                 `yaml:"organization"`
-	LLMOrganization           string                 `yaml:"llm_organization"`
+	OpenAIOrganization        string                 `yaml:"openai_organization"`
 	ProxyURL                  string                 `yaml:"proxy_url"`
-	LLMProxyURL               string                 `yaml:"llm_proxy_url"`
+	OpenAIProxyURL            string                 `yaml:"openai_proxy_url"`
 	Kubeconfig                string                 `yaml:"kubeconfig"`
 	Port                      int                    `yaml:"port"`
 	GRPCPort                  int                    `yaml:"grpc_port"`
@@ -1457,12 +1459,15 @@ func migrateLegacyConfig(data []byte) (UserConfig, error) {
 	cfg := NewUserConfig()
 	cfg.DefaultProfile = stringValueFrom(document.DefaultProfile, "default_profile")
 	cfg.DefaultFilter = stringValueFrom(document.DefaultFilter, "default_filter")
-	provider := stringValueFrom(firstNonEmpty(document.LLMProvider, document.Provider), "llm_provider", "provider")
-	model := stringValueFrom(firstNonEmpty(document.LLMModel, document.Model), "llm_model", "model")
-	baseURL := stringValueFrom(firstNonEmpty(document.LLMBaseURL, document.BaseURL), "llm_base_url", "base_url")
-	organization := stringValueFrom(firstNonEmpty(document.LLMOrganization, document.Organization), "llm_organization", "organization")
-	proxyURL := stringValueFrom(firstNonEmpty(document.LLMProxyURL, document.ProxyURL), "llm_proxy_url", "proxy_url")
-	profile := ProviderProfile{Name: "default", Provider: provider, Mode: stringValueFrom(document.LLMMode, "llm_mode"), Model: model, BaseURL: baseURL, Organization: organization, ProxyURL: proxyURL}
+	provider := stringValueFrom(firstNonEmpty(document.OpenAIProvider, document.Provider), "openai_provider", "provider")
+	mode := stringValueFrom(document.OpenAIMode, "openai_mode")
+	wireAPI := stringValueFrom(document.OpenAIWireAPI, "openai_wire_api")
+	reasoningEffort := normalizeReasoningEffort(stringValueFrom(document.OpenAIReasoningEffort, "openai_reasoning_effort"))
+	model := stringValueFrom(firstNonEmpty(document.OpenAIModel, document.Model), "openai_model", "model")
+	apiEndpoint := stringValueFrom(firstNonEmpty(document.OpenAIAPIEndpoint, document.BaseURL), "openai_api_endpoint", "base_url")
+	organization := stringValueFrom(firstNonEmpty(document.OpenAIOrganization, document.Organization), "openai_organization", "organization")
+	proxyURL := stringValueFrom(firstNonEmpty(document.OpenAIProxyURL, document.ProxyURL), "openai_proxy_url", "proxy_url")
+	profile := ProviderProfile{Name: "default", Provider: provider, Mode: mode, WireAPI: wireAPI, Model: model, BaseURL: apiEndpoint, Organization: organization, ProxyURL: proxyURL}
 	if profileValue := value("profile"); profileValue != nil {
 		if profileMap, ok := profileValue.(map[string]interface{}); ok {
 			profile = legacyProfileFromMap("default", profileMap)
@@ -1482,7 +1487,7 @@ func migrateLegacyConfig(data []byte) (UserConfig, error) {
 		EventDrivenScanning:       document.EventDrivenScanning,
 		EventQueueCapacity:        document.EventQueueCapacity,
 		EventDebounce:             stringValueFrom(document.EventDebounce, "event_debounce"),
-		LLMEndpointAllowlist:      legacyStrings(value("llm_endpoint_allowlist", "endpoint_allowlist")),
+		OpenAIEndpointAllowlist:   legacyStrings(value("openai_endpoint_allowlist", "endpoint_allowlist")),
 		Kubeconfig:                stringValueFrom(document.Kubeconfig, "kubeconfig"),
 		Port:                      document.Port,
 		GRPCPort:                  document.GRPCPort,
@@ -1500,12 +1505,14 @@ func migrateLegacyConfig(data []byte) (UserConfig, error) {
 		AWSRegion:                 stringValueFrom(document.AWSRegion, "aws_region"),
 		EKSClusterName:            stringValueFrom(document.EKSClusterName, "eks_cluster_name"),
 		Namespace:                 stringValueFrom(document.Namespace, "namespace"),
-		LLMProvider:               provider,
-		LLMMode:                   stringValueFrom(document.LLMMode, "llm_mode"),
-		LLMModel:                  model,
-		LLMBaseURL:                baseURL,
-		LLMOrganization:           organization,
-		LLMProxyURL:               proxyURL,
+		OpenAIProvider:            provider,
+		OpenAIMode:                mode,
+		OpenAIWireAPI:             wireAPI,
+		OpenAIReasoningEffort:     reasoningEffort,
+		OpenAIModel:               model,
+		OpenAIAPIEndpoint:         apiEndpoint,
+		OpenAIOrganization:        organization,
+		OpenAIProxyURL:            proxyURL,
 		HarnessCommand:            stringValueFrom(document.HarnessCommand, "harness_command"),
 		PublicURL:                 stringValueFrom(document.PublicURL, "public_url"),
 		RequireAPIToken:           document.RequireAPIToken,
@@ -1674,10 +1681,11 @@ func legacyProfileFromMap(name string, values map[string]interface{}) ProviderPr
 	}
 	return ProviderProfile{
 		Name:         strings.TrimSpace(name),
-		Provider:     stringFromMap("provider", "llm_provider"),
-		Mode:         stringFromMap("mode", "llm_mode"),
-		Model:        stringFromMap("model", "llm_model"),
-		BaseURL:      stringFromMap("base_url", "llm_base_url"),
+		Provider:     stringFromMap("provider", "openai_provider"),
+		Mode:         stringFromMap("mode", "openai_mode"),
+		WireAPI:      stringFromMap("wire_api", "openai_wire_api"),
+		Model:        stringFromMap("model", "openai_model"),
+		BaseURL:      stringFromMap("base_url", "openai_api_endpoint"),
 		Organization: stringFromMap("organization", "org"),
 		ProxyURL:     stringFromMap("proxy_url", "proxy"),
 	}

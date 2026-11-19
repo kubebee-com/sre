@@ -59,11 +59,11 @@ func startPlaybooks(ctx context.Context, cfg *config.Config, provider triage.Tri
 		closeCatalog = pg.Close
 	}
 	runner := playbookTaskRunner(provider)
-	switch strings.ToLower(strings.TrimSpace(cfg.LLMProvider)) {
+	switch strings.ToLower(strings.TrimSpace(cfg.OpenAIProvider)) {
 	case "claude", "anthropic", "rule", "noop", "bedrock", "aws-bedrock", "sagemaker", "aws-sagemaker", "cohere", "gemini", "huggingface", "ibm", "oci", "vertex":
 		runner = nil
 	}
-	service := playbook.NewService(catalog, runner, playbook.ServiceOptions{Settings: playbookSettings(cfg), Secrets: providerSecretValues(cfg), Observer: registry, ProviderName: cfg.LLMProvider, Timeout: 30 * time.Second})
+	service := playbook.NewService(catalog, runner, playbook.ServiceOptions{Settings: playbookSettings(cfg), Secrets: providerSecretValues(cfg), Observer: registry, ProviderName: cfg.OpenAIProvider, Timeout: 30 * time.Second})
 	return service, closeCatalog
 }
 

@@ -153,7 +153,7 @@ must be explicitly enabled and use host-provided credentials through the
 environment; unit test success is not evidence of live-provider availability.
 
 For the opt-in structured smoke test, provide the host credential as
-`LLM_API_KEY` and its authorized HTTPS endpoint as `LLM_BASE_URL`, then run:
+`OPENAI_API_KEY` and its authorized HTTPS endpoint as `OPENAI_API_ENDPOINT`, then run:
 
 ```sh
 SRE_TEST_LIVE_STRUCTURED=1 GOMAXPROCS=2 go test -p 2 ./pkg/triage \

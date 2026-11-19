@@ -135,12 +135,12 @@ func (c runtimeGRPCConfig) GetConfig(ctx context.Context) (interface{}, error) {
 		"aws_region":                    sanitizer.DefaultRedactor().SanitizeText(c.config.AWSRegion),
 		"eks_cluster_name":              sanitizer.DefaultRedactor().SanitizeText(c.config.EKSClusterName),
 		"namespace":                     sanitizer.DefaultRedactor().SanitizeText(c.config.Namespace),
-		"llm_provider":                  sanitizer.DefaultRedactor().SanitizeText(c.config.LLMProvider),
-		"llm_mode":                      sanitizer.DefaultRedactor().SanitizeText(c.config.LLMMode),
-		"llm_wire_api":                  sanitizer.DefaultRedactor().SanitizeText(effectiveWireAPI(c.config)),
-		"llm_reasoning_effort":          sanitizer.DefaultRedactor().SanitizeText(c.config.LLMReasoningEffort),
-		"llm_model":                     sanitizer.DefaultRedactor().SanitizeText(c.config.LLMModel),
-		"llm_headers_configured":        len(c.config.LLMHeaders) > 0,
+		"openai_provider":               sanitizer.DefaultRedactor().SanitizeText(c.config.OpenAIProvider),
+		"openai_mode":                   sanitizer.DefaultRedactor().SanitizeText(c.config.OpenAIMode),
+		"openai_wire_api":               sanitizer.DefaultRedactor().SanitizeText(effectiveWireAPI(c.config)),
+		"openai_reasoning_effort":       sanitizer.DefaultRedactor().SanitizeText(c.config.OpenAIReasoningEffort),
+		"openai_model":                  sanitizer.DefaultRedactor().SanitizeText(c.config.OpenAIModel),
+		"openai_headers_configured":     len(c.config.OpenAIHeaders) > 0,
 		"public_url":                    sanitizer.DefaultRedactor().SanitizeURL(c.config.PublicURL),
 		"require_api_token":             c.config.RequireAPIToken,
 		"allowed_origins":               append([]string(nil), c.config.AllowedOrigins...),
@@ -178,10 +178,10 @@ func effectiveWireAPI(cfg *config.Config) string {
 	if cfg == nil {
 		return string(triage.WireAPIChat)
 	}
-	if wireAPI := strings.ToLower(strings.TrimSpace(cfg.LLMWireAPI)); wireAPI != "" {
+	if wireAPI := strings.ToLower(strings.TrimSpace(cfg.OpenAIWireAPI)); wireAPI != "" {
 		return wireAPI
 	}
-	if strings.EqualFold(strings.TrimSpace(cfg.LLMProvider), "codex") {
+	if strings.EqualFold(strings.TrimSpace(cfg.OpenAIProvider), "codex") {
 		return string(triage.WireAPIResponses)
 	}
 	return string(triage.WireAPIChat)
@@ -367,19 +367,19 @@ func LegacyMain() {
 		Alertmanager:          alertmanagerNotifier,
 		Playbooks:             playbookService,
 		Runtime: server.RuntimeSettings{
-			LLMProvider:            cfg.LLMProvider,
-			LLMMode:                cfg.LLMMode,
-			LLMWireAPI:             effectiveWireAPI(cfg),
-			LLMModel:               cfg.LLMModel,
-			LLMBaseURLDisplay:      runtimeEndpointDisplay(cfg.LLMBaseURL),
-			ScanInterval:           cfg.ScanInterval.String(),
-			ScanJitter:             cfg.ScanJitter.String(),
-			EventDrivenScanning:    cfg.EventDrivenScanning,
-			EventQueueCapacity:     cfg.EventQueueCapacity,
-			EventDebounce:          cfg.EventDebounce.String(),
-			CacheEnabled:           strings.TrimSpace(cfg.CacheDir) != "" && strings.TrimSpace(cfg.CacheEncryptionKey) != "",
-			CacheConfigured:        strings.TrimSpace(cfg.CacheDir) != "",
-			AlertmanagerConfigured: alertmanagerNotifier != nil && alertmanagerNotifier.Enabled(),
+			OpenAIProvider:           cfg.OpenAIProvider,
+			OpenAIMode:               cfg.OpenAIMode,
+			OpenAIWireAPI:            effectiveWireAPI(cfg),
+			OpenAIModel:              cfg.OpenAIModel,
+			OpenAIAPIEndpointDisplay: runtimeEndpointDisplay(cfg.OpenAIAPIEndpoint),
+			ScanInterval:             cfg.ScanInterval.String(),
+			ScanJitter:               cfg.ScanJitter.String(),
+			EventDrivenScanning:      cfg.EventDrivenScanning,
+			EventQueueCapacity:       cfg.EventQueueCapacity,
+			EventDebounce:            cfg.EventDebounce.String(),
+			CacheEnabled:             strings.TrimSpace(cfg.CacheDir) != "" && strings.TrimSpace(cfg.CacheEncryptionKey) != "",
+			CacheConfigured:          strings.TrimSpace(cfg.CacheDir) != "",
+			AlertmanagerConfigured:   alertmanagerNotifier != nil && alertmanagerNotifier.Enabled(),
 		},
 	})
 
@@ -518,12 +518,11 @@ func runCLIInvocation(args []string) error {
 		Version:    buildinfo.String(),
 		ConfigPath: configPath,
 		SecretValues: []string{
-			os.Getenv("LLM_API_KEY"),
+			os.Getenv("OPENAI_API_KEY"),
 			os.Getenv("SRE_API_TOKEN"),
 			os.Getenv("WEBHOOK_URL"),
 			os.Getenv("SRE_CACHE_ENCRYPTION_KEY"),
-			os.Getenv("LLM_CUSTOM_HEADERS"),
-			os.Getenv("K8SGPT_CUSTOM_HEADERS"),
+			os.Getenv("OPENAI_CUSTOM_HEADERS"),
 		},
 	}
 
@@ -622,7 +621,7 @@ func firstCLICommand(args []string) string {
 
 func cliFlagTakesValue(name string) bool {
 	switch name {
-	case "config", "api-token", "kubeconfig", "port", "grpc-port", "grpc-tls-cert-file", "grpc-tls-key-file", "grpc-tls-client-ca-file", "scan-interval", "scan-jitter", "leader-election-namespace", "leader-election-id", "leader-election-identity", "aws-region", "eks-cluster-name", "namespace", "llm-provider", "llm-mode", "llm-wire-api", "llm-reasoning-effort", "llm-api-key", "llm-model", "llm-base-url", "llm-organization", "llm-proxy-url", "llm-headers", "custom-headers", "harness-command", "webhook-url", "alertmanager-url", "alertmanager-min-severity", "public-url", "allowed-origins", "trusted-client-ip-header", "trusted-proxy-cidrs", "max-body-bytes", "requests-per-minute", "request-burst", "data-dir", "cache-dir", "cache-ttl", "cache-max-entries", "cache-max-value-bytes", "include-namespaces", "exclude-namespaces", "label-selector", "resource-kinds", "resource-names", "analyzers", "scan-concurrency", "scan-timeout", "scan-history-dir", "database-url", "playbook-learning-mode", "playbook-min-confidence", "playbook-allowed-actions", "playbook-allowed-namespaces", "playbook-allowed-kinds", "playbook-max-source-bytes", "playbook-max-step-count", "playbook-max-total-text-bytes", "playbook-max-sources", "playbook-max-steps", "filter", "include-namespace", "exclude-namespace", "kind", "name", "analyzer", "concurrency", "timeout", "output", "interactive", "include-resource", "event-queue-capacity", "event-debounce", "llm-endpoint-allowlist":
+	case "config", "api-token", "kubeconfig", "port", "grpc-port", "grpc-tls-cert-file", "grpc-tls-key-file", "grpc-tls-client-ca-file", "scan-interval", "scan-jitter", "leader-election-namespace", "leader-election-id", "leader-election-identity", "aws-region", "eks-cluster-name", "namespace", "openai-provider", "openai-mode", "openai-wire-api", "openai-reasoning-effort", "openai-api-key", "openai-model", "openai-api-endpoint", "openai-organization", "openai-proxy-url", "openai-headers", "custom-headers", "harness-command", "webhook-url", "alertmanager-url", "alertmanager-min-severity", "public-url", "allowed-origins", "trusted-client-ip-header", "trusted-proxy-cidrs", "max-body-bytes", "requests-per-minute", "request-burst", "data-dir", "cache-dir", "cache-ttl", "cache-max-entries", "cache-max-value-bytes", "include-namespaces", "exclude-namespaces", "label-selector", "resource-kinds", "resource-names", "analyzers", "scan-concurrency", "scan-timeout", "scan-history-dir", "database-url", "playbook-learning-mode", "playbook-min-confidence", "playbook-allowed-actions", "playbook-allowed-namespaces", "playbook-allowed-kinds", "playbook-max-source-bytes", "playbook-max-step-count", "playbook-max-total-text-bytes", "playbook-max-sources", "playbook-max-steps", "filter", "include-namespace", "exclude-namespace", "kind", "name", "analyzer", "concurrency", "timeout", "output", "interactive", "include-resource", "event-queue-capacity", "event-debounce", "openai-endpoint-allowlist":
 		return true
 	default:
 		return false
@@ -654,8 +653,8 @@ func configFlagsFromArgs(args []string) map[string]string {
 		"api-token": "api-token", "kubeconfig": "kubeconfig", "port": "port", "grpc-port": "grpc-port", "grpc-tls-cert-file": "grpc-tls-cert-file", "grpc-tls-key-file": "grpc-tls-key-file", "grpc-tls-client-ca-file": "grpc-tls-client-ca-file", "grpc-reflection": "grpc-reflection", "scan-interval": "scan-interval", "scan-jitter": "scan-jitter", "event-driven-scanning": "event-driven-scanning", "event-queue-capacity": "event-queue-capacity", "event-debounce": "event-debounce",
 		"leader-election": "leader-election", "leader-election-namespace": "leader-election-namespace", "leader-election-id": "leader-election-id", "leader-election-identity": "leader-election-identity",
 		"enable-aws-eks": "enable-aws-eks", "aws-region": "aws-region", "eks-cluster-name": "eks-cluster-name",
-		"namespace": "namespace", "llm-provider": "llm-provider", "llm-mode": "llm-mode", "llm-wire-api": "llm-wire-api", "llm-reasoning-effort": "llm-reasoning-effort", "llm-api-key": "llm-api-key", "llm-model": "llm-model",
-		"llm-base-url": "llm-base-url", "llm-endpoint-allowlist": "llm-endpoint-allowlist", "llm-organization": "llm-organization", "llm-proxy-url": "llm-proxy-url", "llm-headers": "llm-headers", "custom-headers": "llm-headers",
+		"namespace": "namespace", "openai-provider": "openai-provider", "openai-mode": "openai-mode", "openai-wire-api": "openai-wire-api", "openai-reasoning-effort": "openai-reasoning-effort", "openai-api-key": "openai-api-key", "openai-model": "openai-model",
+		"openai-api-endpoint": "openai-api-endpoint", "openai-endpoint-allowlist": "openai-endpoint-allowlist", "openai-organization": "openai-organization", "openai-proxy-url": "openai-proxy-url", "openai-headers": "openai-headers", "custom-headers": "openai-headers",
 		"alertmanager-url": "alertmanager-url", "alertmanager-min-severity": "alertmanager-min-severity", "alertmanager-include-posture": "alertmanager-include-posture",
 		"harness-command": "harness-command", "webhook-url": "webhook-url", "public-url": "public-url",
 		"require-api-token": "require-api-token", "allowed-origins": "allowed-origins", "trusted-client-ip-header": "trusted-client-ip-header",
@@ -707,7 +706,7 @@ func configFlagsFromArgs(args []string) map[string]string {
 
 func repeatableConfigFlag(name string) bool {
 	switch name {
-	case "llm-headers", "playbook-allowed-actions", "playbook-allowed-namespaces", "playbook-allowed-kinds":
+	case "openai-headers", "playbook-allowed-actions", "playbook-allowed-namespaces", "playbook-allowed-kinds":
 		return true
 	default:
 		return false
@@ -810,7 +809,7 @@ func cliRuntimeArgs(args []string) []string {
 		"kubeconfig": true, "port": true, "grpc-port": true, "grpc-tls-cert-file": true, "grpc-tls-key-file": true, "grpc-tls-client-ca-file": true, "grpc-reflection": true, "scan-interval": true, "scan-jitter": true, "event-driven-scanning": true, "event-queue-capacity": true, "event-debounce": true,
 		"leader-election": true, "leader-election-namespace": true, "leader-election-id": true, "leader-election-identity": true, "namespace": true,
 		"enable-aws-eks": true, "aws-region": true, "eks-cluster-name": true,
-		"llm-provider": true, "llm-mode": true, "llm-wire-api": true, "llm-reasoning-effort": true, "llm-api-key": true, "llm-model": true, "llm-base-url": true, "llm-endpoint-allowlist": true, "llm-organization": true, "llm-proxy-url": true, "llm-headers": true, "custom-headers": true,
+		"openai-provider": true, "openai-mode": true, "openai-wire-api": true, "openai-reasoning-effort": true, "openai-api-key": true, "openai-model": true, "openai-api-endpoint": true, "openai-endpoint-allowlist": true, "openai-organization": true, "openai-proxy-url": true, "openai-headers": true, "custom-headers": true,
 		"harness-command": true, "webhook-url": true, "public-url": true, "require-api-token": true,
 		"allowed-origins": true, "trusted-client-ip-header": true, "trusted-proxy-cidrs": true,
 		"max-body-bytes": true, "requests-per-minute": true, "request-burst": true,
@@ -1212,16 +1211,16 @@ func providerProfileFromConfig(cfg *config.Config) triage.ProviderProfile {
 		return triage.ProviderProfile{}
 	}
 	return triage.ProviderProfile{
-		EndpointAllowlist: append([]string(nil), cfg.LLMEndpointAllowlist...),
-		Provider:          cfg.LLMProvider,
-		Mode:              triage.ProviderMode(strings.TrimSpace(cfg.LLMMode)),
-		WireAPI:           triage.WireAPI(strings.TrimSpace(cfg.LLMWireAPI)),
-		ReasoningEffort:   cfg.LLMReasoningEffort,
-		Model:             cfg.LLMModel,
-		Endpoint:          cfg.LLMBaseURL,
-		Organization:      cfg.LLMOrganization,
-		ProxyURL:          cfg.LLMProxyURL,
-		APIKey:            cfg.LLMAPIKey,
+		EndpointAllowlist: append([]string(nil), cfg.OpenAIEndpointAllowlist...),
+		Provider:          cfg.OpenAIProvider,
+		Mode:              triage.ProviderMode(strings.TrimSpace(cfg.OpenAIMode)),
+		WireAPI:           triage.WireAPI(strings.TrimSpace(cfg.OpenAIWireAPI)),
+		ReasoningEffort:   cfg.OpenAIReasoningEffort,
+		Model:             cfg.OpenAIModel,
+		Endpoint:          cfg.OpenAIAPIEndpoint,
+		Organization:      cfg.OpenAIOrganization,
+		ProxyURL:          cfg.OpenAIProxyURL,
+		APIKey:            cfg.OpenAIAPIKey,
 		AWSRegion:         cfg.AWSRegion,
 		Command:           cfg.HarnessCommand,
 		SecretValues:      providerSecretValues(cfg),
@@ -1233,13 +1232,13 @@ func buildTriageProvider(cfg *config.Config, observers ...cache.OperationObserve
 		return nil, triage.ErrProviderValidation
 	}
 	profile := providerProfileFromConfig(cfg)
-	customHeaders, err := parseProviderHeaders(cfg.LLMHeaders)
+	customHeaders, err := parseProviderHeaders(cfg.OpenAIHeaders)
 	if err != nil {
 		return nil, err
 	}
 	profile.CustomHeaders = customHeaders
-	providerName := strings.ToLower(strings.TrimSpace(cfg.LLMProvider))
-	if strings.TrimSpace(cfg.LLMAPIKey) == "" {
+	providerName := strings.ToLower(strings.TrimSpace(cfg.OpenAIProvider))
+	if strings.TrimSpace(cfg.OpenAIAPIKey) == "" {
 		switch providerName {
 		case "claude", "anthropic", "codex", "openai", "deepseek", "groq":
 			log.Printf("Notice: no API key provided for '%s'; using the internal deterministic SRE rule engine.", sanitizeLog(cfg, providerName))
@@ -1323,8 +1322,8 @@ func configureTriageCache(cfg *config.Config, provider triage.TriageProvider, ob
 		}
 	}
 	return triage.NewCachedProvider(provider, resultCache,
-		triage.WithCachedProviderModel(cfg.LLMModel),
-		triage.WithCachedProviderEndpoint(cfg.LLMBaseURL),
+		triage.WithCachedProviderModel(cfg.OpenAIModel),
+		triage.WithCachedProviderEndpoint(cfg.OpenAIAPIEndpoint),
 		triage.WithCachedProviderSecrets(providerSecretValues(cfg)...),
 	)
 }
@@ -1340,10 +1339,10 @@ func providerSecretValues(cfg *config.Config) []string {
 	if cfg == nil {
 		return nil
 	}
-	values := []string{cfg.LLMAPIKey, cfg.APIToken, cfg.OIDCClientSecret, cfg.WebhookURL, cfg.CacheEncryptionKey, cfg.DatabaseURL}
+	values := []string{cfg.OpenAIAPIKey, cfg.APIToken, cfg.OIDCClientSecret, cfg.WebhookURL, cfg.CacheEncryptionKey, cfg.DatabaseURL}
 	values = append(values, urlSecretVariants(cfg.WebhookURL)...)
 	values = append(values, urlSecretVariants(cfg.DatabaseURL)...)
-	for _, raw := range cfg.LLMHeaders {
+	for _, raw := range cfg.OpenAIHeaders {
 		if _, value, ok := strings.Cut(raw, ":"); ok {
 			values = append(values, strings.TrimSpace(value))
 		}

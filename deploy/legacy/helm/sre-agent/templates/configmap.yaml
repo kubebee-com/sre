@@ -18,13 +18,15 @@ data:
   SRE_CACHE_TTL: {{ .Values.config.cacheTTL | quote }}
   SRE_CACHE_MAX_ENTRIES: {{ .Values.config.cacheMaxEntries | quote }}
   SRE_CACHE_MAX_VALUE_BYTES: {{ .Values.config.cacheMaxValueBytes | quote }}
-  LLM_PROVIDER: {{ .Values.config.llmProvider | quote }}
-  LLM_MODE: {{ .Values.config.llmMode | quote }}
-  LLM_MODEL: {{ .Values.config.llmModel | quote }}
-  LLM_BASE_URL: {{ .Values.config.llmBaseURL | quote }}
-  LLM_ENDPOINT_ALLOWLIST: {{ .Values.config.llmEndpointAllowlist | quote }}
-  LLM_ORGANIZATION: {{ .Values.config.llmOrganization | quote }}
-  LLM_PROXY_URL: {{ .Values.config.llmProxyURL | quote }}
+  OPENAI_PROVIDER: {{ .Values.config.openaiProvider | quote }}
+  OPENAI_MODE: {{ .Values.config.openaiMode | quote }}
+  OPENAI_WIRE_API: {{ .Values.config.openaiWireAPI | quote }}
+  OPENAI_REASONING_EFFORT: {{ .Values.config.openaiReasoningEffort | quote }}
+  OPENAI_MODEL: {{ .Values.config.openaiModel | quote }}
+  OPENAI_API_ENDPOINT: {{ .Values.config.openaiAPIEndpoint | quote }}
+  OPENAI_ENDPOINT_ALLOWLIST: {{ .Values.config.openaiEndpointAllowlist | quote }}
+  OPENAI_ORGANIZATION: {{ .Values.config.openaiOrganization | quote }}
+  OPENAI_PROXY_URL: {{ .Values.config.openaiProxyURL | quote }}
   PUBLIC_URL: {{ .Values.config.publicURL | quote }}
   SCAN_INTERVAL: {{ .Values.config.scanInterval | quote }}
   SRE_SCAN_JITTER: {{ .Values.config.scanJitter | quote }}

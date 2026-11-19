@@ -26,7 +26,7 @@ Build and run the deterministic local mode:
 ```bash
 make build
 ./bin/sre-agent version
-./bin/sre-agent serve --llm-provider rule --port 8080
+./bin/sre-agent serve --openai-provider rule --port 8080
 ```
 
 The service uses the current kubeconfig when `KUBECONFIG` or
@@ -82,10 +82,9 @@ concurrency, and a per-scan timeout. Named filters provide reusable scope;
 explicit scan flags take precedence over the selected filter.
 
 Provider routing can also be overridden for a process or one CLI invocation
-with `--llm-organization`, `--llm-proxy-url`, and repeatable
-`--llm-headers KEY:value` (the `--custom-headers` alias is supported). The
-equivalent environment input is `LLM_CUSTOM_HEADERS` (with
-`K8SGPT_CUSTOM_HEADERS` retained as a compatibility alias). Header values are
+with `--openai-organization`, `--openai-proxy-url`, and repeatable
+`--openai-headers KEY:value` (the `--custom-headers` alias is supported). The
+equivalent environment input is `OPENAI_CUSTOM_HEADERS`. Header values are
 validated, redacted, and never persisted in user profiles or returned by the
 runtime config projection.
 
@@ -142,12 +141,12 @@ organization, custom headers, timeouts, token limits, and endpoint policy.
 Requests and responses are bounded and cancellable, and provider errors do
 not include upstream response bodies.
 
-For a non-default remote endpoint, set `LLM_ENDPOINT_ALLOWLIST` to a
-comma-separated list containing the endpoint origin or path. `LLM_BASE_URL`
+For a non-default remote endpoint, set `OPENAI_ENDPOINT_ALLOWLIST` to a
+comma-separated list containing the endpoint origin or path. `OPENAI_API_ENDPOINT`
 selects the endpoint, while the allowlist is the explicit outbound-request
 trust policy; local loopback endpoints remain available to local providers.
 
-`LLM_REASONING_EFFORT` (or `--llm-reasoning-effort`) sets `reasoning.effort`
+`OPENAI_REASONING_EFFORT` (or `--openai-reasoning-effort`) sets `reasoning.effort`
 for the `openai`/`codex` provider on the `responses` wire API. It takes `none`,
 `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`; left empty, no reasoning
 setting is sent. A reasoning request is given an output budget of at least
@@ -166,10 +165,10 @@ and starts none later than ninety seconds in; what is left over is diagnosed
 by the scans that follow, and an alert without a diagnosis is sent as it is.
 
 The named cloud adapters implement provider-specific bounded HTTP payloads.
-Set `LLM_MODE=aws` (or `--llm-mode aws`) with `LLM_PROVIDER=bedrock` or
-`LLM_PROVIDER=sagemaker` to use the maintained AWS SDK v2 runtime clients and
+Set `OPENAI_MODE=aws` (or `--openai-mode aws`) with `OPENAI_PROVIDER=bedrock` or
+`OPENAI_PROVIDER=sagemaker` to use the maintained AWS SDK v2 runtime clients and
 the ambient AWS credential chain. Set `AWS_REGION`; for SageMaker, pass the
-endpoint name through `LLM_BASE_URL`. Leave the mode empty or use `remote` for
+endpoint name through `OPENAI_API_ENDPOINT`. Leave the mode empty or use `remote` for
 the legacy bounded HTTP adapter.
 
 The remaining named cloud adapters implement provider-specific bounded HTTP

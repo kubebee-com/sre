@@ -27,7 +27,7 @@ func TestRunWithOrchestratorDoesNotFallBackToLegacyRuntime(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "run", "--orchestrator", "https://127.0.0.1:1")
-	cmd.Env = append(os.Environ(), "LLM_PROVIDER=definitely-unsupported")
+	cmd.Env = append(os.Environ(), "OPENAI_PROVIDER=definitely-unsupported")
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() != nil {
 		t.Fatalf("managed invocation did not terminate while validating arguments: %v", ctx.Err())

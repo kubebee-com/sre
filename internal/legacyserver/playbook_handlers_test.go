@@ -122,7 +122,7 @@ func (failingPlaybookCatalog) List(context.Context, int) ([]playbook.NormalizedP
 }
 func TestPlaybookErrorsAndStatusDoNotExposeCredentials(t *testing.T) {
 	service := playbook.NewService(failingPlaybookCatalog{playbook.NewMemoryCatalog()}, nil, playbook.ServiceOptions{Settings: playbook.DefaultServiceSettings()})
-	h := testHandler(t, NewServer(0, nil, nil, nil, nil, ServerOptions{APIToken: testAPIToken, Playbooks: service, RedactionSecrets: []string{"private-api-key"}, Runtime: RuntimeSettings{LLMModel: "private-api-key"}}))
+	h := testHandler(t, NewServer(0, nil, nil, nil, nil, ServerOptions{APIToken: testAPIToken, Playbooks: service, RedactionSecrets: []string{"private-api-key"}, Runtime: RuntimeSettings{OpenAIModel: "private-api-key"}}))
 	for _, path := range []string{"/api/v1/playbooks", "/api/v1/playbooks/status"} {
 		rr := playbookRequest(h, http.MethodGet, path, "", testAPIToken)
 		for _, secret := range []string{"database-password", "private-api-key"} {

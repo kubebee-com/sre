@@ -1,7 +1,7 @@
 # Deployment
 
 The production manifest expects an externally managed `sre-agent-secrets` Secret
-containing a non-empty `SRE_API_TOKEN`. `LLM_API_KEY` and `WEBHOOK_URL` are
+containing a non-empty `SRE_API_TOKEN`. `OPENAI_API_KEY` and `WEBHOOK_URL` are
 optional keys and are read explicitly; the application never imports every
 Secret key into its environment.
 
@@ -15,8 +15,8 @@ applying it in production.
 kubectl create namespace sre --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n sre create secret generic sre-agent-secrets \
   --from-literal=SRE_API_TOKEN="$SRE_API_TOKEN" \
-  --from-literal=LLM_API_KEY="${LLM_API_KEY:-}" \
-  --from-literal=LLM_CUSTOM_HEADERS="${LLM_CUSTOM_HEADERS:-}" \
+  --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
+  --from-literal=OPENAI_CUSTOM_HEADERS="${OPENAI_CUSTOM_HEADERS:-}" \
   --from-literal=WEBHOOK_URL="${WEBHOOK_URL:-}" \
   --from-literal=SRE_CACHE_ENCRYPTION_KEY="${SRE_CACHE_ENCRYPTION_KEY:-}"
 kubectl apply -k deploy/k8s
@@ -37,16 +37,16 @@ caching is also opt-in: set `SRE_CACHE_DIR` and provide
 `SRE_CACHE_ENCRYPTION_KEY` in the Secret. The cache stores only encrypted,
 bounded provider results.
 
-For native AWS model inference, set `LLM_MODE=aws` with `LLM_PROVIDER=bedrock`
-or `sagemaker`, and set `AWS_REGION`. SageMaker uses `LLM_BASE_URL` as its
+For native AWS model inference, set `OPENAI_MODE=aws` with `OPENAI_PROVIDER=bedrock`
+or `sagemaker`, and set `AWS_REGION`. SageMaker uses `OPENAI_API_ENDPOINT` as its
 endpoint name. The AWS SDK credential chain supplies credentials; no AWS
 credentials are stored in the ConfigMap.
 
-Set `LLM_ORGANIZATION` and `LLM_PROXY_URL` in the ConfigMap for non-secret
-provider routing settings. For a non-default remote `LLM_BASE_URL`, also set
-`LLM_ENDPOINT_ALLOWLIST` to the approved endpoint origin or path. Put custom
+Set `OPENAI_ORGANIZATION` and `OPENAI_PROXY_URL` in the ConfigMap for non-secret
+provider routing settings. For a non-default remote `OPENAI_API_ENDPOINT`, also set
+`OPENAI_ENDPOINT_ALLOWLIST` to the approved endpoint origin or path. Put custom
 `key:value` request headers in the
-`LLM_CUSTOM_HEADERS` Secret key; the application validates and redacts their
+`OPENAI_CUSTOM_HEADERS` Secret key; the application validates and redacts their
 values and does not persist them.
 
 The optional gRPC listener accepts `SRE_GRPC_PORT`. Configure

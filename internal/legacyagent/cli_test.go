@@ -109,7 +109,7 @@ func TestMCPCommandUsesExplicitStdioEntrypoint(t *testing.T) {
 func TestRootCommandAcceptsTransientProviderHeaders(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand(CLIOptions{Version: "test", Out: &out, ErrOut: &out})
-	root.SetArgs([]string{"version", "--llm-headers", "X-Test:enabled", "--custom-headers=X-Second:value"})
+	root.SetArgs([]string{"version", "--openai-headers", "X-Test:enabled", "--custom-headers=X-Second:value"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("version with provider headers error = %v", err)
 	}
@@ -260,7 +260,7 @@ func TestScanCommandUsesFiltersAndSanitizedJSONOutput(t *testing.T) {
 			Details:   "details cli-secret",
 		}},
 	}}
-	t.Setenv("LLM_API_KEY", "cli-secret")
+	t.Setenv("OPENAI_API_KEY", "cli-secret")
 	var out bytes.Buffer
 	root := NewRootCommand(CLIOptions{Scanner: service, Out: &out, ErrOut: &out, ConfigPath: t.TempDir() + "/config.yaml"})
 	root.SetArgs([]string{
@@ -374,7 +374,7 @@ func TestExplainNoCacheSkipsCacheReadAndWriteForInteractive(t *testing.T) {
 }
 
 func TestConfigCommandDoesNotPrintEnvironmentSecrets(t *testing.T) {
-	t.Setenv("LLM_API_KEY", "config-command-secret")
+	t.Setenv("OPENAI_API_KEY", "config-command-secret")
 	var out bytes.Buffer
 	root := NewRootCommand(CLIOptions{Out: &out, ErrOut: &out, ConfigPath: t.TempDir() + "/config.yaml"})
 	root.SetArgs([]string{"config", "show", "--output", "json"})
@@ -401,10 +401,10 @@ func TestFirstCLICommandSkipsFlagValues(t *testing.T) {
 
 func TestProviderProfileFromConfigCarriesNativeAWSMode(t *testing.T) {
 	profile := providerProfileFromConfig(&config.Config{
-		LLMProvider: "bedrock",
-		LLMMode:     "aws",
-		LLMModel:    "model",
-		AWSRegion:   "us-east-1",
+		OpenAIProvider: "bedrock",
+		OpenAIMode:     "aws",
+		OpenAIModel:    "model",
+		AWSRegion:      "us-east-1",
 	})
 	if profile.Mode != triage.ProviderModeAWS || profile.AWSRegion != "us-east-1" {
 		t.Fatalf("provider profile = %#v, want native AWS mode and region", profile)

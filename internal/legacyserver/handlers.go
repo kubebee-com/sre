@@ -89,7 +89,7 @@ func validateServerQueryableKind(kind string) error {
 }
 
 type StatusResponse struct {
-	LLMProvider             string            `json:"llm_provider"`
+	OpenAIProvider          string            `json:"openai_provider"`
 	LastScan                time.Time         `json:"last_scan"`
 	ActiveIssuesCount       int               `json:"active_issues_count"`
 	RawActiveIssuesCount    int               `json:"raw_active_issues_count,omitempty"`
@@ -141,7 +141,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	errorCounts := s.statusErrorSnapshot()
 	resp := StatusResponse{
-		LLMProvider:             providerName,
+		OpenAIProvider:          providerName,
 		LastScan:                lastScan,
 		ActiveIssuesCount:       issuesCount,
 		RawActiveIssuesCount:    len(rawIssues),
@@ -158,7 +158,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeStatusJSON(w http.ResponseWriter, status int, response StatusResponse) {
-	response.LLMProvider = s.redactor.SanitizeText(response.LLMProvider)
+	response.OpenAIProvider = s.redactor.SanitizeText(response.OpenAIProvider)
 	response.Version = s.redactor.SanitizeText(response.Version)
 	settings := response.Settings
 	for index := range settings.AllowedOrigins {
@@ -227,26 +227,26 @@ func (s *Server) statusSettings() StatusSettings {
 	}
 	slices.Sort(origins)
 	settings := StatusSettings{
-		APITokenRequired:       s.authenticator != nil && s.authenticator.enabled,
-		AllowedOrigins:         origins,
-		MaxRequestBytes:        s.maxBodyBytes,
-		MaxResponseBytes:       s.maxResponseBytes,
-		RequestsPerMinute:      s.requestsPerMinute,
-		RequestBurst:           s.requestBurst,
-		ReadinessManaged:       s.readiness != nil,
-		LLMProvider:            s.runtime.LLMProvider,
-		LLMMode:                s.runtime.LLMMode,
-		LLMWireAPI:             s.runtime.LLMWireAPI,
-		LLMModel:               s.runtime.LLMModel,
-		LLMBaseURLDisplay:      s.runtime.LLMBaseURLDisplay,
-		ScanInterval:           s.runtime.ScanInterval,
-		ScanJitter:             s.runtime.ScanJitter,
-		EventDrivenScanning:    s.runtime.EventDrivenScanning,
-		EventQueueCapacity:     s.runtime.EventQueueCapacity,
-		EventDebounce:          s.runtime.EventDebounce,
-		CacheEnabled:           s.runtime.CacheEnabled,
-		CacheConfigured:        s.runtime.CacheConfigured,
-		AlertmanagerConfigured: s.runtime.AlertmanagerConfigured,
+		APITokenRequired:         s.authenticator != nil && s.authenticator.enabled,
+		AllowedOrigins:           origins,
+		MaxRequestBytes:          s.maxBodyBytes,
+		MaxResponseBytes:         s.maxResponseBytes,
+		RequestsPerMinute:        s.requestsPerMinute,
+		RequestBurst:             s.requestBurst,
+		ReadinessManaged:         s.readiness != nil,
+		OpenAIProvider:           s.runtime.OpenAIProvider,
+		OpenAIMode:               s.runtime.OpenAIMode,
+		OpenAIWireAPI:            s.runtime.OpenAIWireAPI,
+		OpenAIModel:              s.runtime.OpenAIModel,
+		OpenAIAPIEndpointDisplay: s.runtime.OpenAIAPIEndpointDisplay,
+		ScanInterval:             s.runtime.ScanInterval,
+		ScanJitter:               s.runtime.ScanJitter,
+		EventDrivenScanning:      s.runtime.EventDrivenScanning,
+		EventQueueCapacity:       s.runtime.EventQueueCapacity,
+		EventDebounce:            s.runtime.EventDebounce,
+		CacheEnabled:             s.runtime.CacheEnabled,
+		CacheConfigured:          s.runtime.CacheConfigured,
+		AlertmanagerConfigured:   s.runtime.AlertmanagerConfigured,
 	}
 	if s.notifier != nil {
 		settings.WebhookConfigured = s.notifier.HasWebhookURL()
@@ -958,17 +958,17 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			providerName = s.redactor.SanitizeText(s.triage.Name())
 		}
 		s.writeJSON(w, http.StatusOK, map[string]interface{}{
-			"llm_provider":            providerName,
-			"settings":                settings,
-			"llm_mode":                settings.LLMMode,
-			"llm_wire_api":            settings.LLMWireAPI,
-			"llm_model":               settings.LLMModel,
-			"llm_base_url_display":    settings.LLMBaseURLDisplay,
-			"scan_interval":           settings.ScanInterval,
-			"scan_jitter":             settings.ScanJitter,
-			"cache_enabled":           settings.CacheEnabled,
-			"webhook_configured":      settings.WebhookConfigured,
-			"alertmanager_configured": settings.AlertmanagerConfigured,
+			"openai_provider":             providerName,
+			"settings":                    settings,
+			"openai_mode":                 settings.OpenAIMode,
+			"openai_wire_api":             settings.OpenAIWireAPI,
+			"openai_model":                settings.OpenAIModel,
+			"openai_api_endpoint_display": settings.OpenAIAPIEndpointDisplay,
+			"scan_interval":               settings.ScanInterval,
+			"scan_jitter":                 settings.ScanJitter,
+			"cache_enabled":               settings.CacheEnabled,
+			"webhook_configured":          settings.WebhookConfigured,
+			"alertmanager_configured":     settings.AlertmanagerConfigured,
 		})
 
 	case http.MethodPost:

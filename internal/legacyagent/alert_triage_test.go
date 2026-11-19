@@ -681,19 +681,19 @@ func TestRoutineProviderIsTheRuleEngineUnlessTriageIsDisabled(t *testing.T) {
 }
 
 func TestReasoningEffortReachesTheProviderProfile(t *testing.T) {
-	flags := configFlagsFromArgs([]string{"serve", "--llm-reasoning-effort", "max"})
-	if flags["llm-reasoning-effort"] != "max" {
+	flags := configFlagsFromArgs([]string{"serve", "--openai-reasoning-effort", "max"})
+	if flags["openai-reasoning-effort"] != "max" {
 		t.Fatalf("reasoning effort flag = %#v", flags)
 	}
-	profile := providerProfileFromConfig(&config.Config{LLMProvider: "codex", LLMModel: "gpt-6-luna", LLMReasoningEffort: "max"})
+	profile := providerProfileFromConfig(&config.Config{OpenAIProvider: "codex", OpenAIModel: "gpt-6-luna", OpenAIReasoningEffort: "max"})
 	if profile.ReasoningEffort != "max" {
 		t.Fatalf("provider profile reasoning effort = %q, want max", profile.ReasoningEffort)
 	}
-	settings, err := (runtimeGRPCConfig{config: &config.Config{LLMReasoningEffort: "max"}}).GetConfig(context.Background())
+	settings, err := (runtimeGRPCConfig{config: &config.Config{OpenAIReasoningEffort: "max"}}).GetConfig(context.Background())
 	if err != nil {
 		t.Fatalf("GetConfig() error = %v", err)
 	}
-	if got := settings.(map[string]interface{})["llm_reasoning_effort"]; got != "max" {
-		t.Fatalf("runtime config llm_reasoning_effort = %#v, want max", got)
+	if got := settings.(map[string]interface{})["openai_reasoning_effort"]; got != "max" {
+		t.Fatalf("runtime config openai_reasoning_effort = %#v, want max", got)
 	}
 }

@@ -331,7 +331,7 @@ async function loadStatus() {
     document.getElementById('stat-pending').textContent = data.pending_proposals_count;
     document.getElementById('stat-completed').textContent = data.completed_proposals_count;
     setDashboardText('nav-approval-count', data.pending_proposals_count);
-    document.getElementById('llm-provider-label').textContent = data.llm_provider;
+    document.getElementById('openai-provider-label').textContent = data.openai_provider;
     updateRuntimeSettings(data);
 
     const pendingBadge = document.getElementById('tab-badge-pending');
@@ -357,10 +357,10 @@ function updateRuntimeSettings(data) {
   if (!data) return;
   const settings = data.settings || {};
   const value = (key, fallbackKey) => settings[key] ?? data[key] ?? (fallbackKey ? data[fallbackKey] : undefined);
-  setDashboardText('settings-provider', value('llm_provider'));
-  setDashboardText('settings-wire-api', value('llm_wire_api', 'wire_api'));
-  setDashboardText('settings-model', value('llm_model'));
-  setDashboardText('settings-base-url', value('llm_base_url_display', 'base_url_display'), 'Masked');
+  setDashboardText('settings-provider', value('openai_provider'));
+  setDashboardText('settings-wire-api', value('openai_wire_api', 'wire_api'));
+  setDashboardText('settings-model', value('openai_model'));
+  setDashboardText('settings-base-url', value('openai_api_endpoint_display', 'api_endpoint_display'), 'Masked');
   setDashboardText('settings-scan-interval', value('scan_interval'));
   setDashboardText('settings-scan-jitter', value('scan_jitter'));
   const eventDriven = settings.event_driven_scanning ?? data.event_driven_scanning;

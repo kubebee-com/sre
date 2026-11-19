@@ -47,7 +47,7 @@ type CLIOptions struct {
 	Out                 io.Writer
 	ErrOut              io.Writer
 	ConfigPath          string
-	LLMHeaders          []string
+	OpenAIHeaders       []string
 	ExplainHistoryLimit int
 	Serve               func(context.Context) error
 	MCPStdio            func(context.Context) error
@@ -101,8 +101,8 @@ func NewRootCommand(options CLIOptions) *rootCommand {
 	root.SetErr(options.ErrOut)
 	root.SetIn(options.In)
 	root.PersistentFlags().StringVar(&options.ConfigPath, "config", options.ConfigPath, "path to the user configuration file")
-	root.PersistentFlags().StringSliceVar(&options.LLMHeaders, "llm-headers", options.LLMHeaders, "custom provider request header in key:value form; repeatable")
-	root.PersistentFlags().StringSliceVar(&options.LLMHeaders, "custom-headers", options.LLMHeaders, "alias for --llm-headers")
+	root.PersistentFlags().StringSliceVar(&options.OpenAIHeaders, "openai-headers", options.OpenAIHeaders, "custom provider request header in key:value form; repeatable")
+	root.PersistentFlags().StringSliceVar(&options.OpenAIHeaders, "custom-headers", options.OpenAIHeaders, "alias for --openai-headers")
 	registerRuntimeConfigFlags(root, options.RuntimeConfig)
 
 	root.AddCommand(newVersionCommand(options))
@@ -912,7 +912,7 @@ func csv(value string) []string {
 
 func cliSecretValues(options CLIOptions) []string {
 	values := append([]string(nil), options.SecretValues...)
-	for _, key := range []string{"LLM_API_KEY", "SRE_LLM_API_KEY", "SRE_API_TOKEN", "API_TOKEN", "WEBHOOK_URL", "SRE_CACHE_ENCRYPTION_KEY", "SRE_DATABASE_URL"} {
+	for _, key := range []string{"OPENAI_API_KEY", "OPENAI_CUSTOM_HEADERS", "SRE_API_TOKEN", "API_TOKEN", "WEBHOOK_URL", "SRE_CACHE_ENCRYPTION_KEY", "SRE_DATABASE_URL"} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 			values = append(values, value)
 		}

@@ -28,18 +28,18 @@ func TestStatusUsesProviderSnapshotAndSafeRuntimeSettings(t *testing.T) {
 		APIToken: "test-token",
 		Metrics:  registry,
 		Runtime: RuntimeSettings{
-			LLMProvider:         "codex",
-			LLMMode:             "remote",
-			LLMWireAPI:          "responses",
-			LLMModel:            "gpt-5.6-luna",
-			LLMBaseURLDisplay:   "https://llm.example.test",
-			ScanInterval:        "5s",
-			ScanJitter:          "0s",
-			EventDrivenScanning: true,
-			EventQueueCapacity:  64,
-			EventDebounce:       "250ms",
-			CacheEnabled:        true,
-			CacheConfigured:     true,
+			OpenAIProvider:           "codex",
+			OpenAIMode:               "remote",
+			OpenAIWireAPI:            "responses",
+			OpenAIModel:              "gpt-5.6-luna",
+			OpenAIAPIEndpointDisplay: "https://endpoint.example.test",
+			ScanInterval:             "5s",
+			ScanJitter:               "0s",
+			EventDrivenScanning:      true,
+			EventQueueCapacity:       64,
+			EventDebounce:            "250ms",
+			CacheEnabled:             true,
+			CacheConfigured:          true,
 		},
 	})
 	handler, err := server.newHandler()
@@ -60,11 +60,32 @@ func TestStatusUsesProviderSnapshotAndSafeRuntimeSettings(t *testing.T) {
 	if status.TokenUsage != (TokenUsageStatus{InputTokens: 12, OutputTokens: 8, TotalTokens: 20}) {
 		t.Fatalf("token usage = %#v, want provider-reported usage", status.TokenUsage)
 	}
-	if status.Settings.LLMProvider != "codex" || status.Settings.LLMWireAPI != "responses" || status.Settings.LLMBaseURLDisplay != "https://llm.example.test" || !status.Settings.CacheEnabled || !status.Settings.EventDrivenScanning || status.Settings.EventQueueCapacity != 64 || status.Settings.EventDebounce != "250ms" {
+	if status.Settings.OpenAIProvider != "codex" || status.Settings.OpenAIWireAPI != "responses" || status.Settings.OpenAIAPIEndpointDisplay != "https://endpoint.example.test" || !status.Settings.CacheEnabled || !status.Settings.EventDrivenScanning || status.Settings.EventQueueCapacity != 64 || status.Settings.EventDebounce != "250ms" {
 		t.Fatalf("runtime settings = %#v", status.Settings)
 	}
 	if strings.Contains(response.Body.String(), "api_key") || strings.Contains(response.Body.String(), "gpt-5.6-luna-secret") {
 		t.Fatalf("status response exposed a secret value: %s", response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), `"l`+`lm_`) {
+		t.Fatalf("status response exposed retired field names: %s", response.Body.String())
+	}
+
+	cfgRequest := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	cfgRequest.Header.Set("Authorization", "Bearer test-token")
+	cfgResponse := httptest.NewRecorder()
+	handler.ServeHTTP(cfgResponse, cfgRequest)
+	if cfgResponse.Code != http.StatusOK {
+		t.Fatalf("config code = %d, want %d; body = %s", cfgResponse.Code, http.StatusOK, cfgResponse.Body.String())
+	}
+	var cfgBody map[string]any
+	if err := json.Unmarshal(cfgResponse.Body.Bytes(), &cfgBody); err != nil {
+		t.Fatalf("decode config response: %v", err)
+	}
+	if cfgBody["openai_mode"] != "remote" || cfgBody["openai_wire_api"] != "responses" || cfgBody["openai_model"] != "gpt-5.6-luna" || cfgBody["openai_api_endpoint_display"] != "https://endpoint.example.test" {
+		t.Fatalf("config body = %#v", cfgBody)
+	}
+	if strings.Contains(cfgResponse.Body.String(), `"l`+`lm_`) {
+		t.Fatalf("config response exposed retired field names: %s", cfgResponse.Body.String())
 	}
 }
 

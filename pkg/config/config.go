@@ -39,7 +39,7 @@ type Config struct {
 	EventDrivenScanning        bool
 	EventQueueCapacity         int
 	EventDebounce              time.Duration
-	LLMEndpointAllowlist       []string
+	OpenAIEndpointAllowlist    []string
 	Kubeconfig                 string
 	Port                       int
 	GRPCPort                   int
@@ -57,16 +57,16 @@ type Config struct {
 	AWSRegion                  string
 	EKSClusterName             string
 	Namespace                  string
-	LLMProvider                string
-	LLMMode                    string
-	LLMWireAPI                 string
-	LLMReasoningEffort         string
-	LLMAPIKey                  string
-	LLMModel                   string
-	LLMBaseURL                 string
-	LLMOrganization            string
-	LLMProxyURL                string
-	LLMHeaders                 []string
+	OpenAIProvider             string
+	OpenAIMode                 string
+	OpenAIWireAPI              string
+	OpenAIReasoningEffort      string
+	OpenAIAPIKey               string
+	OpenAIModel                string
+	OpenAIAPIEndpoint          string
+	OpenAIOrganization         string
+	OpenAIProxyURL             string
+	OpenAIHeaders              []string
 	HarnessCommand             string
 	WebhookURL                 string
 	AlertmanagerURL            string
@@ -146,13 +146,13 @@ func (c Config) redactedForLog() any {
 	type printableConfig Config
 	redacted := printableConfig(c)
 	redactString(&redacted.DatabaseURL)
-	redactString(&redacted.LLMAPIKey)
+	redactString(&redacted.OpenAIAPIKey)
 	redactString(&redacted.APIToken)
 	redactString(&redacted.OIDCClientSecret)
 	redactString(&redacted.WebhookURL)
 	redactString(&redacted.AlertmanagerURL)
 	redactString(&redacted.CacheEncryptionKey)
-	redacted.LLMHeaders = redactHeaderValues(c.LLMHeaders)
+	redacted.OpenAIHeaders = redactHeaderValues(c.OpenAIHeaders)
 	return redacted
 }
 
@@ -172,12 +172,12 @@ func LoadConfigArgs(args []string) *Config {
 	resourceKinds := getEnv("SRE_RESOURCE_KINDS", "")
 	resourceNames := getEnv("SRE_RESOURCE_NAMES", "")
 	analyzers := getEnv("SRE_ANALYZERS", "")
-	llmEndpointAllowlist := getEnv("LLM_ENDPOINT_ALLOWLIST", "")
+	openaiEndpointAllowlist := getEnv("OPENAI_ENDPOINT_ALLOWLIST", "")
 	playbookAllowedActions := getEnv("SRE_PLAYBOOK_ALLOWED_ACTIONS", "")
 	playbookAllowedNamespaces := getEnv("SRE_PLAYBOOK_ALLOWED_NAMESPACES", "")
 	playbookAllowedKinds := getEnv("SRE_PLAYBOOK_ALLOWED_KINDS", "")
 	_, playbookEnabledEnvSet := os.LookupEnv("SRE_PLAYBOOK_ENABLED")
-	llmHeaders := splitCSV(getEnv("LLM_CUSTOM_HEADERS", getEnv("K8SGPT_CUSTOM_HEADERS", "")))
+	openaiHeaders := splitCSV(getEnv("OPENAI_CUSTOM_HEADERS", ""))
 	headersFlagSet := false
 	oidcScopes := getEnv("SRE_OIDC_SCOPES", "openid,email,profile")
 	oidcAllowedGroups := getEnv("SRE_OIDC_ALLOWED_GROUPS", "")
@@ -206,26 +206,26 @@ func LoadConfigArgs(args []string) *Config {
 	flags.StringVar(&cfg.AWSRegion, "aws-region", getEnv("AWS_REGION", getEnv("AWS_DEFAULT_REGION", "")), "AWS region for the optional EKS integration")
 	flags.StringVar(&cfg.EKSClusterName, "eks-cluster-name", getEnv("SRE_EKS_CLUSTER_NAME", ""), "Explicit EKS cluster name (otherwise derive it from kubeconfig)")
 	flags.StringVar(&cfg.Namespace, "namespace", getEnv("NAMESPACE", ""), "Namespace to scan (empty for all namespaces)")
-	flags.StringVar(&cfg.LLMProvider, "llm-provider", getEnv("LLM_PROVIDER", "claude"), "Triage provider: claude, codex, deepseek, harness, rule-based")
-	flags.StringVar(&cfg.LLMMode, "llm-mode", getEnv("LLM_MODE", ""), "Triage provider mode, such as remote, local, rule, noop, or aws")
-	flags.StringVar(&cfg.LLMWireAPI, "llm-wire-api", getEnv("LLM_WIRE_API", ""), "Triage provider wire API: chat or responses")
-	flags.StringVar(&cfg.LLMReasoningEffort, "llm-reasoning-effort", getEnv("LLM_REASONING_EFFORT", ""), "Reasoning effort for the responses wire API: none, minimal, low, medium, high, xhigh, or max")
-	flags.StringVar(&cfg.LLMAPIKey, "llm-api-key", getEnv("LLM_API_KEY", ""), "API Key for LLM provider")
-	flags.StringVar(&cfg.LLMModel, "llm-model", getEnv("LLM_MODEL", ""), "Model override (e.g. claude-3-7-sonnet, gpt-4o, deepseek-chat)")
-	flags.StringVar(&cfg.LLMBaseURL, "llm-base-url", getEnv("LLM_BASE_URL", ""), "Base URL override for LLM provider API")
-	flags.StringVar(&llmEndpointAllowlist, "llm-endpoint-allowlist", llmEndpointAllowlist, "Comma-separated provider endpoint origins or paths explicitly allowed for outbound requests")
-	flags.StringVar(&cfg.LLMOrganization, "llm-organization", getEnv("LLM_ORGANIZATION", ""), "Optional provider organization or tenant identifier")
-	flags.StringVar(&cfg.LLMProxyURL, "llm-proxy-url", getEnv("LLM_PROXY_URL", ""), "Optional provider HTTP proxy URL")
+	flags.StringVar(&cfg.OpenAIProvider, "openai-provider", getEnv("OPENAI_PROVIDER", "claude"), "Triage provider: claude, codex, deepseek, harness, rule-based")
+	flags.StringVar(&cfg.OpenAIMode, "openai-mode", getEnv("OPENAI_MODE", ""), "Triage provider mode, such as remote, local, rule, noop, or aws")
+	flags.StringVar(&cfg.OpenAIWireAPI, "openai-wire-api", getEnv("OPENAI_WIRE_API", ""), "Triage provider wire API: chat or responses")
+	flags.StringVar(&cfg.OpenAIReasoningEffort, "openai-reasoning-effort", getEnv("OPENAI_REASONING_EFFORT", ""), "Reasoning effort for the responses wire API: none, minimal, low, medium, high, xhigh, or max")
+	flags.StringVar(&cfg.OpenAIAPIKey, "openai-api-key", getEnv("OPENAI_API_KEY", ""), "API key for triage provider")
+	flags.StringVar(&cfg.OpenAIModel, "openai-model", getEnv("OPENAI_MODEL", ""), "Model override (e.g. claude-3-7-sonnet, gpt-4o, deepseek-chat)")
+	flags.StringVar(&cfg.OpenAIAPIEndpoint, "openai-api-endpoint", getEnv("OPENAI_API_ENDPOINT", ""), "API endpoint override for triage provider")
+	flags.StringVar(&openaiEndpointAllowlist, "openai-endpoint-allowlist", openaiEndpointAllowlist, "Comma-separated provider endpoint origins or paths explicitly allowed for outbound requests")
+	flags.StringVar(&cfg.OpenAIOrganization, "openai-organization", getEnv("OPENAI_ORGANIZATION", ""), "Optional provider organization or tenant identifier")
+	flags.StringVar(&cfg.OpenAIProxyURL, "openai-proxy-url", getEnv("OPENAI_PROXY_URL", ""), "Optional provider HTTP proxy URL")
 	appendHeaders := func(value string) error {
 		if !headersFlagSet {
-			llmHeaders = nil
+			openaiHeaders = nil
 			headersFlagSet = true
 		}
-		llmHeaders = append(llmHeaders, splitCSV(value)...)
+		openaiHeaders = append(openaiHeaders, splitCSV(value)...)
 		return nil
 	}
-	flags.Func("llm-headers", "Custom provider request headers in key:value form; repeat or comma-separate values", appendHeaders)
-	flags.Func("custom-headers", "Alias for --llm-headers", appendHeaders)
+	flags.Func("openai-headers", "Custom provider request headers in key:value form; repeat or comma-separate values", appendHeaders)
+	flags.Func("custom-headers", "Alias for --openai-headers", appendHeaders)
 	flags.StringVar(&cfg.HarnessCommand, "harness-command", getEnv("HARNESS_COMMAND", ""), "Command path for agent harness CLI")
 	flags.StringVar(&cfg.WebhookURL, "webhook-url", getEnv("WEBHOOK_URL", ""), "Webhook URL for notifications (Slack/Discord)")
 	flags.StringVar(&cfg.AlertmanagerURL, "alertmanager-url", getEnv("SRE_ALERTMANAGER_URL", ""), "Alertmanager base URL for folded serious issue alerts")
@@ -335,9 +335,9 @@ func LoadConfigArgs(args []string) *Config {
 	cfg.ResourceKinds = splitCSV(resourceKinds)
 	cfg.ResourceNames = splitCSV(resourceNames)
 	cfg.Analyzers = splitCSV(analyzers)
-	cfg.LLMEndpointAllowlist = splitCSV(llmEndpointAllowlist)
-	cfg.LLMReasoningEffort = normalizeReasoningEffort(cfg.LLMReasoningEffort)
-	cfg.LLMHeaders = append([]string(nil), llmHeaders...)
+	cfg.OpenAIEndpointAllowlist = splitCSV(openaiEndpointAllowlist)
+	cfg.OpenAIReasoningEffort = normalizeReasoningEffort(cfg.OpenAIReasoningEffort)
+	cfg.OpenAIHeaders = append([]string(nil), openaiHeaders...)
 	cfg.PlaybookLearningMode = normalizePlaybookLearningMode(cfg.PlaybookLearningMode)
 	cfg.PlaybookAllowedActions = splitCSV(playbookAllowedActions)
 	cfg.PlaybookAllowedNamespaces = splitCSV(playbookAllowedNamespaces)

@@ -12,7 +12,7 @@ installing, or explicitly opt in to chart-managed `stringData`:
 kubectl create namespace sre --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n sre create secret generic sre-agent-secrets \
   --from-literal=SRE_API_TOKEN="$SRE_API_TOKEN" \
-  --from-literal=LLM_API_KEY="${LLM_API_KEY:-}" \
+  --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
   --from-literal=WEBHOOK_URL="${WEBHOOK_URL:-}" \
   --from-literal=SRE_CACHE_ENCRYPTION_KEY="${SRE_CACHE_ENCRYPTION_KEY:-}"
 
@@ -45,19 +45,19 @@ caching, set `config.cacheDir` under the mounted data path and provide
 `config.cacheTTL`, `config.cacheMaxEntries`, and `config.cacheMaxValueBytes`.
 
 Provider organization and proxy settings are configured with
-`config.llmOrganization` and `config.llmProxyURL`. Custom request headers are
-transient and should be supplied as `LLM_CUSTOM_HEADERS` in the external Secret
-or through `secret.llmCustomHeaders` when chart-managed secrets are explicitly
+`config.openaiOrganization` and `config.openaiProxyURL`. Custom request headers are
+transient and should be supplied as `OPENAI_CUSTOM_HEADERS` in the external Secret
+or through `secret.openaiCustomHeaders` when chart-managed secrets are explicitly
 enabled. Values use comma-separated `key:value` entries and are never written
 to the user profile.
 
-For a non-default remote endpoint, set `config.llmBaseURL` together with
-`config.llmEndpointAllowlist` containing the approved endpoint origin or path.
+For a non-default remote endpoint, set `config.openaiAPIEndpoint` together with
+`config.openaiEndpointAllowlist` containing the approved endpoint origin or path.
 The allowlist is required by the provider endpoint policy.
 
-To use native AWS model clients, set `config.llmMode=aws`, choose
-`config.llmProvider=bedrock` or `sagemaker`, and set `config.awsRegion`.
-SageMaker uses `config.llmBaseURL` for the endpoint name; credentials come from
+To use native AWS model clients, set `config.openaiMode=aws`, choose
+`config.openaiProvider=bedrock` or `sagemaker`, and set `config.awsRegion`.
+SageMaker uses `config.openaiAPIEndpoint` for the endpoint name; credentials come from
 the AWS SDK credential chain.
 
 Set `grpc.enabled=true` to expose the authenticated gRPC Service. For TLS,

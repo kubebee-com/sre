@@ -154,72 +154,86 @@ func TestLoadConfigReadsAWSEKSSettingsWithFlagPrecedence(t *testing.T) {
 	}
 }
 
-func TestLoadConfigReadsLLMModeWithFlagPrecedence(t *testing.T) {
-	t.Setenv("LLM_MODE", "aws")
+func TestLoadConfigReadsOpenAIModeWithFlagPrecedence(t *testing.T) {
+	t.Setenv("OPENAI_MODE", "aws")
 
 	cfg := LoadConfigArgs(nil)
-	if cfg.LLMMode != "aws" {
-		t.Fatalf("environment LLMMode = %q, want aws", cfg.LLMMode)
+	if cfg.OpenAIMode != "aws" {
+		t.Fatalf("environment OpenAIMode = %q, want aws", cfg.OpenAIMode)
 	}
 
-	cfg = LoadConfigArgs([]string{"--llm-mode=remote"})
-	if cfg.LLMMode != "remote" {
-		t.Fatalf("flag LLMMode = %q, want remote", cfg.LLMMode)
+	cfg = LoadConfigArgs([]string{"--openai-mode=remote"})
+	if cfg.OpenAIMode != "remote" {
+		t.Fatalf("flag OpenAIMode = %q, want remote", cfg.OpenAIMode)
 	}
 }
 
-func TestLoadConfigReadsLLMWireAPIWithFlagPrecedence(t *testing.T) {
-	t.Setenv("LLM_WIRE_API", "responses")
+func TestLoadConfigReadsOpenAIWireAPIWithFlagPrecedence(t *testing.T) {
+	t.Setenv("OPENAI_WIRE_API", "responses")
 
 	cfg := LoadConfigArgs(nil)
-	if cfg.LLMWireAPI != "responses" {
-		t.Fatalf("environment LLMWireAPI = %q, want responses", cfg.LLMWireAPI)
+	if cfg.OpenAIWireAPI != "responses" {
+		t.Fatalf("environment OpenAIWireAPI = %q, want responses", cfg.OpenAIWireAPI)
 	}
 
-	cfg = LoadConfigArgs([]string{"--llm-wire-api=chat"})
-	if cfg.LLMWireAPI != "chat" {
-		t.Fatalf("flag LLMWireAPI = %q, want chat", cfg.LLMWireAPI)
+	cfg = LoadConfigArgs([]string{"--openai-wire-api=chat"})
+	if cfg.OpenAIWireAPI != "chat" {
+		t.Fatalf("flag OpenAIWireAPI = %q, want chat", cfg.OpenAIWireAPI)
 	}
 }
 
-func TestLoadConfigReadsLLMEndpointAllowlistWithFlagPrecedence(t *testing.T) {
-	t.Setenv("LLM_ENDPOINT_ALLOWLIST", "https://env.example.test/v1,https://env-two.example.test")
+func TestLoadConfigReadsOpenAIEndpointAllowlistWithFlagPrecedence(t *testing.T) {
+	t.Setenv("OPENAI_ENDPOINT_ALLOWLIST", "https://env.example.test/v1,https://env-two.example.test")
 
 	cfg := LoadConfigArgs(nil)
-	if !reflect.DeepEqual(cfg.LLMEndpointAllowlist, []string{"https://env.example.test/v1", "https://env-two.example.test"}) {
-		t.Fatalf("environment endpoint allowlist = %#v", cfg.LLMEndpointAllowlist)
+	if !reflect.DeepEqual(cfg.OpenAIEndpointAllowlist, []string{"https://env.example.test/v1", "https://env-two.example.test"}) {
+		t.Fatalf("environment endpoint allowlist = %#v", cfg.OpenAIEndpointAllowlist)
 	}
 
-	cfg = LoadConfigArgs([]string{"--llm-endpoint-allowlist=https://flag.example.test/v1"})
-	if !reflect.DeepEqual(cfg.LLMEndpointAllowlist, []string{"https://flag.example.test/v1"}) {
-		t.Fatalf("flag endpoint allowlist = %#v", cfg.LLMEndpointAllowlist)
+	cfg = LoadConfigArgs([]string{"--openai-endpoint-allowlist=https://flag.example.test/v1"})
+	if !reflect.DeepEqual(cfg.OpenAIEndpointAllowlist, []string{"https://flag.example.test/v1"}) {
+		t.Fatalf("flag endpoint allowlist = %#v", cfg.OpenAIEndpointAllowlist)
 	}
 }
 
 func TestLoadConfigReadsProviderHeadersAndTransportSettingsWithFlagPrecedence(t *testing.T) {
-	t.Setenv("LLM_CUSTOM_HEADERS", "X-Env:env-value,Authorization:Bearer env-token")
-	t.Setenv("LLM_ORGANIZATION", "env-org")
-	t.Setenv("LLM_PROXY_URL", "https://proxy.example.test")
+	t.Setenv("OPENAI_PROVIDER", "codex")
+	t.Setenv("OPENAI_MODEL", "env-model")
+	t.Setenv("OPENAI_API_ENDPOINT", "https://env-endpoint.example.test/v1")
+	t.Setenv("OPENAI_API_KEY", "env-api-key")
+	t.Setenv("OPENAI_CUSTOM_HEADERS", "X-Env:env-value,Authorization:Bearer env-token")
+	t.Setenv("OPENAI_ORGANIZATION", "env-org")
+	t.Setenv("OPENAI_PROXY_URL", "https://proxy.example.test")
 
 	cfg := LoadConfigArgs(nil)
-	if !reflect.DeepEqual(cfg.LLMHeaders, []string{"X-Env:env-value", "Authorization:Bearer env-token"}) {
-		t.Fatalf("environment LLMHeaders = %#v", cfg.LLMHeaders)
+	if cfg.OpenAIProvider != "codex" || cfg.OpenAIModel != "env-model" || cfg.OpenAIAPIEndpoint != "https://env-endpoint.example.test/v1" || cfg.OpenAIAPIKey != "env-api-key" {
+		t.Fatalf("environment provider settings = %#v", cfg)
 	}
-	if cfg.LLMOrganization != "env-org" || cfg.LLMProxyURL != "https://proxy.example.test" {
-		t.Fatalf("environment provider transport settings = organization %q proxy %q", cfg.LLMOrganization, cfg.LLMProxyURL)
+	if !reflect.DeepEqual(cfg.OpenAIHeaders, []string{"X-Env:env-value", "Authorization:Bearer env-token"}) {
+		t.Fatalf("environment OpenAIHeaders = %#v", cfg.OpenAIHeaders)
+	}
+	if cfg.OpenAIOrganization != "env-org" || cfg.OpenAIProxyURL != "https://proxy.example.test" {
+		t.Fatalf("environment provider transport settings = organization %q proxy %q", cfg.OpenAIOrganization, cfg.OpenAIProxyURL)
 	}
 
 	cfg = LoadConfigArgs([]string{
-		"--llm-headers", "X-Flag:first",
+		"--openai-provider=openai",
+		"--openai-model=flag-model",
+		"--openai-api-endpoint=https://flag-endpoint.example.test/v1",
+		"--openai-api-key=flag-api-key",
+		"--openai-headers", "X-Flag:first",
 		"--custom-headers=X-Flag:second",
-		"--llm-organization=flag-org",
-		"--llm-proxy-url", "https://flag-proxy.example.test",
+		"--openai-organization=flag-org",
+		"--openai-proxy-url", "https://flag-proxy.example.test",
 	})
-	if !reflect.DeepEqual(cfg.LLMHeaders, []string{"X-Flag:first", "X-Flag:second"}) {
-		t.Fatalf("flag LLMHeaders = %#v", cfg.LLMHeaders)
+	if cfg.OpenAIProvider != "openai" || cfg.OpenAIModel != "flag-model" || cfg.OpenAIAPIEndpoint != "https://flag-endpoint.example.test/v1" || cfg.OpenAIAPIKey != "flag-api-key" {
+		t.Fatalf("flag provider settings = %#v", cfg)
 	}
-	if cfg.LLMOrganization != "flag-org" || cfg.LLMProxyURL != "https://flag-proxy.example.test" {
-		t.Fatalf("flag provider transport settings = organization %q proxy %q", cfg.LLMOrganization, cfg.LLMProxyURL)
+	if !reflect.DeepEqual(cfg.OpenAIHeaders, []string{"X-Flag:first", "X-Flag:second"}) {
+		t.Fatalf("flag OpenAIHeaders = %#v", cfg.OpenAIHeaders)
+	}
+	if cfg.OpenAIOrganization != "flag-org" || cfg.OpenAIProxyURL != "https://flag-proxy.example.test" {
+		t.Fatalf("flag provider transport settings = organization %q proxy %q", cfg.OpenAIOrganization, cfg.OpenAIProxyURL)
 	}
 }
 
@@ -445,8 +459,8 @@ func TestConfigStringRedactsPlaybookDatabaseURL(t *testing.T) {
 	cfg := LoadConfigArgs([]string{
 		"--database-url=postgres://user:secret@db.example.test:5432/sre",
 		"--api-token=runtime-api-secret",
-		"--llm-api-key=runtime-llm-secret",
-		"--llm-headers=X-Provider-Token:runtime-header-secret",
+		"--openai-api-key=runtime-openai-secret",
+		"--openai-headers=X-Provider-Token:runtime-header-secret",
 	})
 
 	jsonBytes, err := json.Marshal(cfg)
@@ -464,7 +478,7 @@ func TestConfigStringRedactsPlaybookDatabaseURL(t *testing.T) {
 		fmt.Sprintf("%#v", *cfg) + "\n" +
 		string(jsonBytes) + "\n" +
 		string(yamlBytes)
-	for _, secret := range []string{"postgres://user:secret", "runtime-api-secret", "runtime-llm-secret", "runtime-header-secret"} {
+	for _, secret := range []string{"postgres://user:secret", "runtime-api-secret", "runtime-openai-secret", "runtime-header-secret"} {
 		if strings.Contains(text, secret) {
 			t.Fatalf("Config.String() leaked secret %q in %s", secret, text)
 		}
@@ -617,16 +631,36 @@ func TestExpandEnvDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadConfigReadsLLMReasoningEffortWithFlagPrecedence(t *testing.T) {
-	if cfg := LoadConfigArgs(nil); cfg.LLMReasoningEffort != "" {
-		t.Fatalf("default LLMReasoningEffort = %q, want none set", cfg.LLMReasoningEffort)
+func TestLoadConfigReadsOpenAIReasoningEffortWithFlagPrecedence(t *testing.T) {
+	if cfg := LoadConfigArgs(nil); cfg.OpenAIReasoningEffort != "" {
+		t.Fatalf("default OpenAIReasoningEffort = %q, want none set", cfg.OpenAIReasoningEffort)
 	}
 
-	t.Setenv("LLM_REASONING_EFFORT", " MAX ")
-	if cfg := LoadConfigArgs(nil); cfg.LLMReasoningEffort != "max" {
-		t.Fatalf("environment LLMReasoningEffort = %q, want max", cfg.LLMReasoningEffort)
+	t.Setenv("OPENAI_REASONING_EFFORT", " MAX ")
+	if cfg := LoadConfigArgs(nil); cfg.OpenAIReasoningEffort != "max" {
+		t.Fatalf("environment OpenAIReasoningEffort = %q, want max", cfg.OpenAIReasoningEffort)
 	}
-	if cfg := LoadConfigArgs([]string{"--llm-reasoning-effort=High"}); cfg.LLMReasoningEffort != "high" {
-		t.Fatalf("flag LLMReasoningEffort = %q, want high", cfg.LLMReasoningEffort)
+	if cfg := LoadConfigArgs([]string{"--openai-reasoning-effort=High"}); cfg.OpenAIReasoningEffort != "high" {
+		t.Fatalf("flag OpenAIReasoningEffort = %q, want high", cfg.OpenAIReasoningEffort)
+	}
+}
+
+func TestLoadConfigIgnoresRetiredPrefixVariables(t *testing.T) {
+	retiredPrefix := "L" + "LM_"
+	for _, suffix := range []string{
+		"PROVIDER", "MODE", "WIRE_API", "REASONING_EFFORT",
+		"API_KEY", "MODEL", "BASE_URL", "ENDPOINT_ALLOWLIST",
+		"ORGANIZATION", "PROXY_URL", "CUSTOM_HEADERS",
+	} {
+		t.Setenv(retiredPrefix+suffix, "retired-value")
+	}
+	t.Setenv("SRE_"+retiredPrefix+"API_KEY", "retired-sre-key")
+
+	cfg := LoadConfigArgs(nil)
+	if cfg.OpenAIProvider != "claude" || cfg.OpenAIMode != "" || cfg.OpenAIWireAPI != "" ||
+		cfg.OpenAIReasoningEffort != "" || cfg.OpenAIAPIKey != "" || cfg.OpenAIModel != "" ||
+		cfg.OpenAIAPIEndpoint != "" || len(cfg.OpenAIEndpointAllowlist) != 0 ||
+		cfg.OpenAIOrganization != "" || cfg.OpenAIProxyURL != "" || len(cfg.OpenAIHeaders) != 0 {
+		t.Fatalf("LoadConfigArgs() unexpectedly read retired prefix variables: %#v", cfg)
 	}
 }

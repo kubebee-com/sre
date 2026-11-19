@@ -117,58 +117,58 @@ host_config_top_value() {
 	' "$HOST_CONFIG_FILE"
 }
 
-LLM_PROVIDER=$(first_variable SRE_KIND_LLM_PROVIDER || true)
-LLM_PROVIDER=${LLM_PROVIDER:-codex}
-case "$LLM_PROVIDER" in
+OPENAI_PROVIDER=$(first_variable SRE_KIND_OPENAI_PROVIDER || true)
+OPENAI_PROVIDER=${OPENAI_PROVIDER:-codex}
+case "$OPENAI_PROVIDER" in
 codex|rule-based)
 	;;
 *)
-	printf 'unsupported SRE_KIND_LLM_PROVIDER=%s; use codex or explicit rule-based\n' "$LLM_PROVIDER" >&2
+	printf 'unsupported SRE_KIND_OPENAI_PROVIDER=%s; use codex or explicit rule-based\n' "$OPENAI_PROVIDER" >&2
 	exit 1
 	;;
 esac
 
-LLM_API_KEY=''
-if [[ "$LLM_PROVIDER" == codex ]]; then
+OPENAI_API_KEY_VALUE=''
+if [[ "$OPENAI_PROVIDER" == codex ]]; then
 	CREDENTIAL_ENV_KEY=$(host_config_value env_key || true)
-	credential_variables=(SRE_KIND_LLM_API_KEY)
+	credential_variables=(SRE_KIND_OPENAI_API_KEY)
 	if [[ "$CREDENTIAL_ENV_KEY" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
 		credential_variables+=("$CREDENTIAL_ENV_KEY")
 	fi
 	credential_variables+=(CODEX_LB_API_KEY SUB2API_API_KEY OPENAI_API_KEY)
-	LLM_API_KEY=$(first_variable "${credential_variables[@]}" || true)
-	if [[ -z "$LLM_API_KEY" ]]; then
-		printf 'Codex acceptance needs SRE_KIND_LLM_API_KEY or CODEX_LB_API_KEY/SUB2API_API_KEY/OPENAI_API_KEY; use SRE_KIND_LLM_PROVIDER=rule-based for offline mode\n' >&2
+	OPENAI_API_KEY_VALUE=$(first_variable "${credential_variables[@]}" || true)
+	if [[ -z "$OPENAI_API_KEY_VALUE" ]]; then
+		printf 'Codex acceptance needs SRE_KIND_OPENAI_API_KEY or CODEX_LB_API_KEY/SUB2API_API_KEY/OPENAI_API_KEY; use SRE_KIND_OPENAI_PROVIDER=rule-based for offline mode\n' >&2
 		exit 1
 	fi
 fi
 
-LLM_MODE=$(first_variable SRE_KIND_LLM_MODE || true)
-if [[ -z "$LLM_MODE" ]]; then
-	if [[ "$LLM_PROVIDER" == rule-based ]]; then
-		LLM_MODE=rule
+OPENAI_MODE=$(first_variable SRE_KIND_OPENAI_MODE || true)
+if [[ -z "$OPENAI_MODE" ]]; then
+	if [[ "$OPENAI_PROVIDER" == rule-based ]]; then
+		OPENAI_MODE=rule
 	else
-		LLM_MODE=remote
+		OPENAI_MODE=remote
 	fi
 fi
 
-LLM_BASE_URL=$(first_variable SRE_KIND_LLM_BASE_URL CODEX_BASE_URL CODEX_API_BASE_URL CODEX_API_BASE CODEX_ENDPOINT OPENAI_BASE_URL OPENAI_API_BASE || true)
-if [[ -z "$LLM_BASE_URL" ]]; then
-	LLM_BASE_URL=$(host_config_value base_url || true)
+OPENAI_API_ENDPOINT=$(first_variable SRE_KIND_OPENAI_API_ENDPOINT CODEX_BASE_URL CODEX_API_BASE_URL CODEX_API_BASE CODEX_ENDPOINT OPENAI_BASE_URL OPENAI_API_BASE || true)
+if [[ -z "$OPENAI_API_ENDPOINT" ]]; then
+	OPENAI_API_ENDPOINT=$(host_config_value base_url || true)
 fi
-LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+OPENAI_API_ENDPOINT=${OPENAI_API_ENDPOINT:-https://api.openai.com/v1}
 
-LLM_MODEL=$(first_variable SRE_KIND_LLM_MODEL CODEX_MODEL CODEX_MODEL_NAME OPENAI_MODEL || true)
-if [[ -z "$LLM_MODEL" ]]; then
-	LLM_MODEL=$(host_config_top_value model || true)
+OPENAI_MODEL=$(first_variable SRE_KIND_OPENAI_MODEL CODEX_MODEL CODEX_MODEL_NAME OPENAI_MODEL || true)
+if [[ -z "$OPENAI_MODEL" ]]; then
+	OPENAI_MODEL=$(host_config_top_value model || true)
 fi
-LLM_MODEL=${LLM_MODEL:-gpt-4o}
+OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
 
-LLM_WIRE_API=$(first_variable SRE_KIND_LLM_WIRE_API CODEX_WIRE_API OPENAI_WIRE_API || true)
-if [[ -z "$LLM_WIRE_API" ]]; then
-	LLM_WIRE_API=$(host_config_value wire_api || true)
+OPENAI_WIRE_API=$(first_variable SRE_KIND_OPENAI_WIRE_API CODEX_WIRE_API OPENAI_WIRE_API || true)
+if [[ -z "$OPENAI_WIRE_API" ]]; then
+	OPENAI_WIRE_API=$(host_config_value wire_api || true)
 fi
-LLM_WIRE_API=${LLM_WIRE_API:-responses}
+OPENAI_WIRE_API=${OPENAI_WIRE_API:-responses}
 
 collect_failure_artifacts() {
 	local artifact_dir="$WORK_DIR/failure-artifacts"
@@ -181,15 +181,15 @@ collect_failure_artifacts() {
 	kubectl --kubeconfig "$OPERATOR_KUBECONFIG" -n sre get pods -l app.kubernetes.io/name=sre-agent -o yaml >"$artifact_dir/agent-pods.yaml" 2>&1 || true
 	for pod in $(kubectl --kubeconfig "$OPERATOR_KUBECONFIG" -n sre get pods -l app.kubernetes.io/name=sre-agent -o name 2>/dev/null); do
 		kubectl --kubeconfig "$OPERATOR_KUBECONFIG" -n sre logs "$pod" --all-containers=true --prefix 2>/dev/null |
-			TOKEN="$TOKEN" LLM_API_KEY="$LLM_API_KEY" FIXTURE_TOKEN="$FIXTURE_TOKEN" perl -pe '
+			TOKEN="$TOKEN" OPENAI_API_KEY="$OPENAI_API_KEY_VALUE" FIXTURE_TOKEN="$FIXTURE_TOKEN" perl -pe '
 				s/\Q$ENV{TOKEN}\E/[REDACTED]/g if length($ENV{TOKEN} // "");
-				s/\Q$ENV{LLM_API_KEY}\E/[REDACTED]/g if length($ENV{LLM_API_KEY} // "");
+				s/\Q$ENV{OPENAI_API_KEY}\E/[REDACTED]/g if length($ENV{OPENAI_API_KEY} // "");
 				s/\Q$ENV{FIXTURE_TOKEN}\E/[REDACTED]/g if length($ENV{FIXTURE_TOKEN} // "");
 			' >"$artifact_dir/${pod##*/}-logs.txt" || true
 		kubectl --kubeconfig "$OPERATOR_KUBECONFIG" -n sre logs "$pod" --all-containers=true --prefix --previous 2>/dev/null |
-			TOKEN="$TOKEN" LLM_API_KEY="$LLM_API_KEY" FIXTURE_TOKEN="$FIXTURE_TOKEN" perl -pe '
+			TOKEN="$TOKEN" OPENAI_API_KEY="$OPENAI_API_KEY_VALUE" FIXTURE_TOKEN="$FIXTURE_TOKEN" perl -pe '
 				s/\Q$ENV{TOKEN}\E/[REDACTED]/g if length($ENV{TOKEN} // "");
-				s/\Q$ENV{LLM_API_KEY}\E/[REDACTED]/g if length($ENV{LLM_API_KEY} // "");
+				s/\Q$ENV{OPENAI_API_KEY}\E/[REDACTED]/g if length($ENV{OPENAI_API_KEY} // "");
 				s/\Q$ENV{FIXTURE_TOKEN}\E/[REDACTED]/g if length($ENV{FIXTURE_TOKEN} // "");
 			' >"$artifact_dir/${pod##*/}-previous-logs.txt" || true
 	done
@@ -250,18 +250,18 @@ printf 'Deploying base manifests and Kind overlay\n'
 kubectl --kubeconfig "$OPERATOR_KUBECONFIG" apply -f "$ROOT_DIR/deploy/k8s/namespace.yaml" >"$WORK_DIR/base-namespace-apply.txt"
 kubectl --kubeconfig "$OPERATOR_KUBECONFIG" -n sre create secret generic sre-agent-secrets \
 	--from-literal=SRE_API_TOKEN="$TOKEN" \
-	--from-literal=LLM_API_KEY="$LLM_API_KEY" \
+	--from-literal=OPENAI_API_KEY="$OPENAI_API_KEY_VALUE" \
 	--dry-run=client -o yaml |
 	kubectl --kubeconfig "$OPERATOR_KUBECONFIG" apply -f - >"$WORK_DIR/secret-apply.txt"
 kubectl --kubeconfig "$OPERATOR_KUBECONFIG" apply -k "$ROOT_DIR/deploy/overlays/kind" >"$WORK_DIR/overlay-apply.txt"
 
 jq -n \
-	--arg provider "$LLM_PROVIDER" \
-	--arg mode "$LLM_MODE" \
-	--arg model "$LLM_MODEL" \
-	--arg base_url "$LLM_BASE_URL" \
-	--arg wire_api "$LLM_WIRE_API" \
-	'{"data":{"LLM_PROVIDER":$provider,"LLM_MODE":$mode,"LLM_MODEL":$model,"LLM_BASE_URL":$base_url,"LLM_ENDPOINT_ALLOWLIST":$base_url,"LLM_WIRE_API":$wire_api,"SCAN_INTERVAL":"5s","SRE_SCAN_JITTER":"0s","SRE_LEADER_ELECTION":"false"}}' \
+	--arg provider "$OPENAI_PROVIDER" \
+	--arg mode "$OPENAI_MODE" \
+	--arg model "$OPENAI_MODEL" \
+	--arg api_endpoint "$OPENAI_API_ENDPOINT" \
+	--arg wire_api "$OPENAI_WIRE_API" \
+	'{"data":{"OPENAI_PROVIDER":$provider,"OPENAI_MODE":$mode,"OPENAI_MODEL":$model,"OPENAI_API_ENDPOINT":$api_endpoint,"OPENAI_ENDPOINT_ALLOWLIST":$api_endpoint,"OPENAI_WIRE_API":$wire_api,"SCAN_INTERVAL":"5s","SRE_SCAN_JITTER":"0s","SRE_LEADER_ELECTION":"false"}}' \
 	>"$WORK_DIR/configmap-patch.json"
 kubectl --kubeconfig "$OPERATOR_KUBECONFIG" -n sre patch configmap sre-agent-config --type=merge --patch-file "$WORK_DIR/configmap-patch.json" >"$WORK_DIR/configmap-patch.txt"
 kubectl --kubeconfig "$OPERATOR_KUBECONFIG" -n sre rollout restart deployment/sre-agent >"$WORK_DIR/rollout-restart.txt"
@@ -308,12 +308,12 @@ dashboard_status=$(curl --silent --show-error --output "$WORK_DIR/dashboard-stat
 	printf 'expected authenticated /api/metrics/status to return 200, got %s\n' "$dashboard_status" >&2
 	exit 1
 }
-kind_assert_dashboard_status "$WORK_DIR/dashboard-status.json" "$LLM_PROVIDER" "$LLM_WIRE_API" "$TOKEN" "$FIXTURE_TOKEN"
-kind_assert_json_safety "$WORK_DIR/dashboard-status.json" "$LLM_API_KEY"
+kind_assert_dashboard_status "$WORK_DIR/dashboard-status.json" "$OPENAI_PROVIDER" "$OPENAI_WIRE_API" "$TOKEN" "$FIXTURE_TOKEN"
+kind_assert_json_safety "$WORK_DIR/dashboard-status.json" "$OPENAI_API_KEY_VALUE"
 curl --silent --show-error --fail --max-time 30 \
 	-H "Authorization: Bearer $TOKEN" "$BASE_URL/metrics" >"$WORK_DIR/dashboard-prometheus.txt"
 kind_assert_prometheus_metrics "$WORK_DIR/dashboard-prometheus.txt" "$TOKEN" "$FIXTURE_TOKEN"
-kind_assert_json_safety "$WORK_DIR/dashboard-prometheus.txt" "$LLM_API_KEY"
+kind_assert_json_safety "$WORK_DIR/dashboard-prometheus.txt" "$OPENAI_API_KEY_VALUE"
 
 printf 'Applying typed and optional fixture bundles through operator kubeconfig\n'
 kind_apply_fixture_bundle "$OPERATOR_KUBECONFIG" "$FIXTURE_TOKEN" "$WORK_DIR/fixtures"
@@ -327,13 +327,13 @@ fixture_scan_status=$(curl --silent --show-error --max-time 180 --output "$WORK_
 	printf 'expected full fixture scan to return 200, got %s\n' "$fixture_scan_status" >&2
 	exit 1
 }
-kind_assert_scan_response "$WORK_DIR/fixture-scan.json" "$NAMESPACE" "$LLM_API_KEY"
+kind_assert_scan_response "$WORK_DIR/fixture-scan.json" "$NAMESPACE" "$OPENAI_API_KEY_VALUE"
 
 printf 'Waiting for typed diagnosis categories\n'
 kind_wait_for_issue_categories "$BASE_URL/api/v1/issues" "$TOKEN" "$(kind_fixture_expectations_file)" "$WORK_DIR/issues.json" 300 "$FIXTURE_TOKEN" "$NAMESPACE"
 kind_assert_json_safety "$WORK_DIR/issues.json" "$TOKEN"
 kind_assert_json_safety "$WORK_DIR/issues.json" "$FIXTURE_TOKEN"
-kind_assert_json_safety "$WORK_DIR/issues.json" "$LLM_API_KEY"
+kind_assert_json_safety "$WORK_DIR/issues.json" "$OPENAI_API_KEY_VALUE"
 curl --silent --show-error --fail --max-time 30 \
 	-H "Authorization: Bearer $TOKEN" "$BASE_URL/api/v1/issues" >"$WORK_DIR/issues-repeat.json"
 kind_assert_stable_issue_ids "$WORK_DIR/issues.json" "$WORK_DIR/issues-repeat.json"
@@ -357,7 +357,7 @@ scan_status=$(curl --silent --show-error --max-time 120 --output "$WORK_DIR/scan
 kind_assert_scan_response "$WORK_DIR/scan.json" "$NAMESPACE"
 kind_assert_json_safety "$WORK_DIR/scan.json" "$TOKEN"
 kind_assert_json_safety "$WORK_DIR/scan.json" "$FIXTURE_TOKEN"
-kind_assert_json_safety "$WORK_DIR/scan.json" "$LLM_API_KEY"
+kind_assert_json_safety "$WORK_DIR/scan.json" "$OPENAI_API_KEY_VALUE"
 jq '.issues' "$WORK_DIR/scan.json" >"$WORK_DIR/scan-issues.json"
 scan_repeat_status=$(curl --silent --show-error --max-time 120 --output "$WORK_DIR/scan-repeat.json" --write-out '%{http_code}' \
 	-H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -374,18 +374,18 @@ printf 'Waiting for safe diagnosis proposals\n'
 kind_wait_for_proposals "$BASE_URL/api/proposals" "$TOKEN" "$WORK_DIR/issues.json" "$WORK_DIR/proposals.json" 300 "$FIXTURE_TOKEN"
 kind_assert_json_safety "$WORK_DIR/proposals.json" "$TOKEN"
 kind_assert_json_safety "$WORK_DIR/proposals.json" "$FIXTURE_TOKEN"
-kind_assert_json_safety "$WORK_DIR/proposals.json" "$LLM_API_KEY"
+kind_assert_json_safety "$WORK_DIR/proposals.json" "$OPENAI_API_KEY_VALUE"
 curl --silent --show-error --fail --max-time 30 \
 	-H "Authorization: Bearer $TOKEN" "$BASE_URL/api/metrics/status" >"$WORK_DIR/dashboard-status-final.json"
-kind_assert_dashboard_status "$WORK_DIR/dashboard-status-final.json" "$LLM_PROVIDER" "$LLM_WIRE_API" "$TOKEN" "$FIXTURE_TOKEN"
-kind_assert_json_safety "$WORK_DIR/dashboard-status-final.json" "$LLM_API_KEY"
+kind_assert_dashboard_status "$WORK_DIR/dashboard-status-final.json" "$OPENAI_PROVIDER" "$OPENAI_WIRE_API" "$TOKEN" "$FIXTURE_TOKEN"
+kind_assert_json_safety "$WORK_DIR/dashboard-status-final.json" "$OPENAI_API_KEY_VALUE"
 curl --silent --show-error --fail --max-time 30 \
 	-H "Authorization: Bearer $TOKEN" "$BASE_URL/metrics" >"$WORK_DIR/dashboard-prometheus-final.txt"
 kind_assert_prometheus_metrics "$WORK_DIR/dashboard-prometheus-final.txt" "$TOKEN" "$FIXTURE_TOKEN"
-kind_assert_json_safety "$WORK_DIR/dashboard-prometheus-final.txt" "$LLM_API_KEY"
+kind_assert_json_safety "$WORK_DIR/dashboard-prometheus-final.txt" "$OPENAI_API_KEY_VALUE"
 
 printf 'Kind diagnosis acceptance passed: cluster=%s provider=%s fixture_ids=%s issue_count=%s category_count=%s proposal_count=%s\n' \
-	"$KIND_CLUSTER_NAME" "$LLM_PROVIDER" "$(kind_fixture_ids | wc -l | tr -d ' ')" \
+	"$KIND_CLUSTER_NAME" "$OPENAI_PROVIDER" "$(kind_fixture_ids | wc -l | tr -d ' ')" \
 	"$(kind_issue_count "$WORK_DIR/issues.json")" \
 	"$(kind_category_count "$WORK_DIR/issues.json")" \
 	"$(kind_proposal_count "$WORK_DIR/proposals.json")"

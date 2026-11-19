@@ -85,17 +85,17 @@ spec:
                   name: {{ include "sre-agent.secretName" . }}
                   key: SRE_API_TOKEN
                   optional: {{ not .Values.auth.requireAPIToken }}
-            - name: LLM_API_KEY
+            - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "sre-agent.secretName" . }}
-                  key: LLM_API_KEY
+                  key: OPENAI_API_KEY
                   optional: true
-            - name: LLM_CUSTOM_HEADERS
+            - name: OPENAI_CUSTOM_HEADERS
               valueFrom:
                 secretKeyRef:
                   name: {{ include "sre-agent.secretName" . }}
-                  key: LLM_CUSTOM_HEADERS
+                  key: OPENAI_CUSTOM_HEADERS
                   optional: true
             - name: WEBHOOK_URL
               valueFrom:

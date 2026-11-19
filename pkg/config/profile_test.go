@@ -13,10 +13,10 @@ import (
 
 func TestStoreMigratesLegacyConfigurationAndDropsSecrets(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	legacy := `llm_provider: ollama
-llm_model: llama3
-llm_base_url: http://127.0.0.1:11434/v1
-llm_api_key: legacy-api-key
+	legacy := `openai_provider: ollama
+openai_model: llama3
+openai_api_endpoint: http://127.0.0.1:11434/v1
+openai_api_key: legacy-api-key
 api_token: legacy-api-token
 namespace: payments
 analyzers: PodAnalyzer, ServiceAnalyzer
@@ -51,7 +51,7 @@ analyzers: PodAnalyzer, ServiceAnalyzer
 		t.Fatalf("read migrated config: %v", err)
 	}
 	text := string(rewritten)
-	for _, secret := range []string{"legacy-api-key", "legacy-api-token", "llm_api_key", "api_token"} {
+	for _, secret := range []string{"legacy-api-key", "legacy-api-token", "openai_api_key", "api_token"} {
 		if strings.Contains(text, secret) {
 			t.Fatalf("migrated config contains secret material %q: %s", secret, text)
 		}
@@ -96,35 +96,35 @@ func TestResolveConfigUsesFlagEnvironmentAndFilePrecedence(t *testing.T) {
 	resolved, _, err := ResolveConfig(ResolveOptions{
 		Path: path,
 		Environment: map[string]string{
-			"LLM_PROVIDER":           "env-provider",
-			"LLM_MODEL":              "env-model",
-			"NAMESPACE":              "env-namespace",
-			"SRE_LABEL_SELECTOR":     "team=env",
-			"LLM_ENDPOINT_ALLOWLIST": "https://llm.example.test/backend-api/codex",
-			"LLM_API_KEY":            "env-api-key",
+			"OPENAI_PROVIDER":           "env-provider",
+			"OPENAI_MODEL":              "env-model",
+			"NAMESPACE":                 "env-namespace",
+			"SRE_LABEL_SELECTOR":        "team=env",
+			"OPENAI_ENDPOINT_ALLOWLIST": "https://endpoint.example.test/backend-api/codex",
+			"OPENAI_API_KEY":            "env-api-key",
 		},
 		Flags: map[string]string{
-			"llm-provider": "flag-provider",
-			"namespace":    "flag-namespace",
+			"openai-provider": "flag-provider",
+			"namespace":       "flag-namespace",
 		},
 	})
 	if err != nil {
 		t.Fatalf("ResolveConfig() error = %v", err)
 	}
-	if resolved.LLMProvider != "flag-provider" || resolved.Namespace != "flag-namespace" {
-		t.Fatalf("flag precedence result = provider %q namespace %q", resolved.LLMProvider, resolved.Namespace)
+	if resolved.OpenAIProvider != "flag-provider" || resolved.Namespace != "flag-namespace" {
+		t.Fatalf("flag precedence result = provider %q namespace %q", resolved.OpenAIProvider, resolved.Namespace)
 	}
-	if resolved.LLMModel != "env-model" || resolved.LabelSelector != "team=env" {
-		t.Fatalf("environment precedence result = model %q selector %q", resolved.LLMModel, resolved.LabelSelector)
+	if resolved.OpenAIModel != "env-model" || resolved.LabelSelector != "team=env" {
+		t.Fatalf("environment precedence result = model %q selector %q", resolved.OpenAIModel, resolved.LabelSelector)
 	}
-	if resolved.LLMBaseURL != "http://127.0.0.1:8080/v1" {
-		t.Fatalf("file profile base URL = %q, want file value", resolved.LLMBaseURL)
+	if resolved.OpenAIAPIEndpoint != "http://127.0.0.1:8080/v1" {
+		t.Fatalf("file profile API endpoint = %q, want file value", resolved.OpenAIAPIEndpoint)
 	}
-	if resolved.LLMAPIKey != "env-api-key" {
-		t.Fatalf("environment API key = %q, want env-api-key", resolved.LLMAPIKey)
+	if resolved.OpenAIAPIKey != "env-api-key" {
+		t.Fatalf("environment API key = %q, want env-api-key", resolved.OpenAIAPIKey)
 	}
-	if !reflect.DeepEqual(resolved.LLMEndpointAllowlist, []string{"https://llm.example.test/backend-api/codex"}) {
-		t.Fatalf("environment endpoint allowlist = %#v", resolved.LLMEndpointAllowlist)
+	if !reflect.DeepEqual(resolved.OpenAIEndpointAllowlist, []string{"https://endpoint.example.test/backend-api/codex"}) {
+		t.Fatalf("environment endpoint allowlist = %#v", resolved.OpenAIEndpointAllowlist)
 	}
 	if resolved.ScanJitter != 3*time.Second || !resolved.LeaderElection || resolved.LeaderElectionNamespace != "sre" || resolved.LeaderElectionID != "lease-file" || resolved.LeaderElectionIdentity != "worker-a" {
 		t.Fatalf("resolved scheduler settings = %#v", resolved)
@@ -205,40 +205,40 @@ func TestResolveConfigUsesProviderModePrecedence(t *testing.T) {
 		Provider: "bedrock",
 		Mode:     "aws",
 	}}
-	userConfig.Settings.LLMMode = "local"
+	userConfig.Settings.OpenAIMode = "local"
 	if err := store.Save(userConfig); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 
 	resolved, _, err := ResolveConfig(ResolveOptions{
 		Path:        path,
-		Environment: map[string]string{"LLM_MODE": "remote"},
-		Flags:       map[string]string{"llm-mode": "aws"},
+		Environment: map[string]string{"OPENAI_MODE": "remote"},
+		Flags:       map[string]string{"openai-mode": "aws"},
 	})
 	if err != nil {
 		t.Fatalf("ResolveConfig() error = %v", err)
 	}
-	if resolved.LLMMode != "aws" {
-		t.Fatalf("flag LLMMode = %q, want aws", resolved.LLMMode)
+	if resolved.OpenAIMode != "aws" {
+		t.Fatalf("flag OpenAIMode = %q, want aws", resolved.OpenAIMode)
 	}
 
 	resolved, _, err = ResolveConfig(ResolveOptions{
 		Path:        path,
-		Environment: map[string]string{"LLM_MODE": "remote"},
+		Environment: map[string]string{"OPENAI_MODE": "remote"},
 	})
 	if err != nil {
 		t.Fatalf("ResolveConfig() environment error = %v", err)
 	}
-	if resolved.LLMMode != "remote" {
-		t.Fatalf("environment LLMMode = %q, want remote", resolved.LLMMode)
+	if resolved.OpenAIMode != "remote" {
+		t.Fatalf("environment OpenAIMode = %q, want remote", resolved.OpenAIMode)
 	}
 
 	resolved, _, err = ResolveConfig(ResolveOptions{Path: path, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatalf("ResolveConfig() profile error = %v", err)
 	}
-	if resolved.LLMMode != "aws" {
-		t.Fatalf("profile LLMMode = %q, want aws", resolved.LLMMode)
+	if resolved.OpenAIMode != "aws" {
+		t.Fatalf("profile OpenAIMode = %q, want aws", resolved.OpenAIMode)
 	}
 }
 
@@ -264,17 +264,17 @@ func TestResolveConfigUsesTransientProviderHeadersAndProfileTransportSettings(t 
 
 	resolved, persisted, err := ResolveConfig(ResolveOptions{
 		Path:        path,
-		Environment: map[string]string{"LLM_CUSTOM_HEADERS": "X-Env:env", "LLM_ORGANIZATION": "env-org"},
-		Flags:       map[string]string{"llm-headers": "X-Flag:flag", "llm-organization": "flag-org"},
+		Environment: map[string]string{"OPENAI_CUSTOM_HEADERS": "X-Env:env", "OPENAI_ORGANIZATION": "env-org"},
+		Flags:       map[string]string{"openai-headers": "X-Flag:flag", "openai-organization": "flag-org"},
 	})
 	if err != nil {
 		t.Fatalf("ResolveConfig() error = %v", err)
 	}
-	if !reflect.DeepEqual(resolved.LLMHeaders, []string{"X-Flag:flag"}) {
-		t.Fatalf("flag LLMHeaders = %#v", resolved.LLMHeaders)
+	if !reflect.DeepEqual(resolved.OpenAIHeaders, []string{"X-Flag:flag"}) {
+		t.Fatalf("flag OpenAIHeaders = %#v", resolved.OpenAIHeaders)
 	}
-	if resolved.LLMOrganization != "flag-org" || resolved.LLMProxyURL != "https://profile-proxy.example.test" {
-		t.Fatalf("resolved provider transport settings = organization %q proxy %q", resolved.LLMOrganization, resolved.LLMProxyURL)
+	if resolved.OpenAIOrganization != "flag-org" || resolved.OpenAIProxyURL != "https://profile-proxy.example.test" {
+		t.Fatalf("resolved provider transport settings = organization %q proxy %q", resolved.OpenAIOrganization, resolved.OpenAIProxyURL)
 	}
 	if len(persisted.Settings.AllowedOrigins) != 0 {
 		t.Fatalf("unexpected unrelated persisted settings = %#v", persisted.Settings)
@@ -282,21 +282,21 @@ func TestResolveConfigUsesTransientProviderHeadersAndProfileTransportSettings(t 
 
 	resolved, _, err = ResolveConfig(ResolveOptions{
 		Path:        path,
-		Environment: map[string]string{"LLM_CUSTOM_HEADERS": "X-Env:env", "LLM_ORGANIZATION": "env-org"},
+		Environment: map[string]string{"OPENAI_CUSTOM_HEADERS": "X-Env:env", "OPENAI_ORGANIZATION": "env-org"},
 	})
 	if err != nil {
 		t.Fatalf("ResolveConfig() environment error = %v", err)
 	}
-	if !reflect.DeepEqual(resolved.LLMHeaders, []string{"X-Env:env"}) || resolved.LLMOrganization != "env-org" {
-		t.Fatalf("environment provider settings = headers %#v organization %q", resolved.LLMHeaders, resolved.LLMOrganization)
+	if !reflect.DeepEqual(resolved.OpenAIHeaders, []string{"X-Env:env"}) || resolved.OpenAIOrganization != "env-org" {
+		t.Fatalf("environment provider settings = headers %#v organization %q", resolved.OpenAIHeaders, resolved.OpenAIOrganization)
 	}
 
 	resolved, _, err = ResolveConfig(ResolveOptions{Path: path, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatalf("ResolveConfig() profile error = %v", err)
 	}
-	if resolved.LLMOrganization != "profile-org" || resolved.LLMProxyURL != "https://profile-proxy.example.test" || len(resolved.LLMHeaders) != 0 {
-		t.Fatalf("profile provider settings = headers %#v organization %q proxy %q", resolved.LLMHeaders, resolved.LLMOrganization, resolved.LLMProxyURL)
+	if resolved.OpenAIOrganization != "profile-org" || resolved.OpenAIProxyURL != "https://profile-proxy.example.test" || len(resolved.OpenAIHeaders) != 0 {
+		t.Fatalf("profile provider settings = headers %#v organization %q proxy %q", resolved.OpenAIHeaders, resolved.OpenAIOrganization, resolved.OpenAIProxyURL)
 	}
 }
 
@@ -377,20 +377,20 @@ func TestResolveConfigAWSEKSProfileSettingsRemainSecretFree(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	llmSecret := "runtime-llm-secret"
+	openaiSecret := "runtime-openai-secret"
 	apiSecret := "runtime-api-secret"
 	resolved, persisted, err := ResolveConfig(ResolveOptions{
 		Path: path,
 		Environment: map[string]string{
-			"LLM_API_KEY":   llmSecret,
-			"SRE_API_TOKEN": apiSecret,
+			"OPENAI_API_KEY": openaiSecret,
+			"SRE_API_TOKEN":  apiSecret,
 		},
 	})
 	if err != nil {
 		t.Fatalf("ResolveConfig() error = %v", err)
 	}
-	if resolved.LLMAPIKey != llmSecret || resolved.APIToken != apiSecret {
-		t.Fatalf("runtime credentials = LLMAPIKey %q APIToken %q", resolved.LLMAPIKey, resolved.APIToken)
+	if resolved.OpenAIAPIKey != openaiSecret || resolved.APIToken != apiSecret {
+		t.Fatalf("runtime credentials = OpenAIAPIKey %q APIToken %q", resolved.OpenAIAPIKey, resolved.APIToken)
 	}
 	if !resolved.EnableAWSEKS || resolved.AWSRegion != "us-west-2" || resolved.EKSClusterName != "sre-prod" {
 		t.Fatalf("runtime AWS/EKS settings = enabled %t region %q cluster %q", resolved.EnableAWSEKS, resolved.AWSRegion, resolved.EKSClusterName)
@@ -403,7 +403,7 @@ func TestResolveConfigAWSEKSProfileSettingsRemainSecretFree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal persisted config: %v", err)
 	}
-	for _, secret := range []string{profileSecret, llmSecret, apiSecret} {
+	for _, secret := range []string{profileSecret, openaiSecret, apiSecret} {
 		if strings.Contains(string(encoded), secret) {
 			t.Fatalf("persisted runtime config contains secret %q: %s", secret, encoded)
 		}
@@ -678,7 +678,7 @@ func TestResolveConfigUsesPersistedProviderWhenNoOverrideExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveConfig() error = %v", err)
 	}
-	if resolved.LLMProvider != "ollama" || resolved.LLMModel != "llama3" || resolved.LLMBaseURL != "http://127.0.0.1:11434/v1" {
+	if resolved.OpenAIProvider != "ollama" || resolved.OpenAIModel != "llama3" || resolved.OpenAIAPIEndpoint != "http://127.0.0.1:11434/v1" {
 		t.Fatalf("resolved provider = %#v", resolved)
 	}
 	if resolved.PublicURL != "https://sre.example.test" {
@@ -739,7 +739,7 @@ func TestResolveConfigReasoningEffortFlagOverEnvironmentOverSettings(t *testing.
 		t.Fatalf("NewStore() error = %v", err)
 	}
 	userConfig := NewUserConfig()
-	userConfig.Settings.LLMReasoningEffort = " Low "
+	userConfig.Settings.OpenAIReasoningEffort = " Low "
 	if err := store.Save(userConfig); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -750,10 +750,10 @@ func TestResolveConfigReasoningEffortFlagOverEnvironmentOverSettings(t *testing.
 		want        string
 	}{
 		"settings file": {environment: map[string]string{}, want: "low"},
-		"environment":   {environment: map[string]string{"LLM_REASONING_EFFORT": " MAX "}, want: "max"},
+		"environment":   {environment: map[string]string{"OPENAI_REASONING_EFFORT": " MAX "}, want: "max"},
 		"flag": {
-			environment: map[string]string{"LLM_REASONING_EFFORT": "max"},
-			flags:       map[string]string{"llm-reasoning-effort": "XHigh"},
+			environment: map[string]string{"OPENAI_REASONING_EFFORT": "max"},
+			flags:       map[string]string{"openai-reasoning-effort": "XHigh"},
 			want:        "xhigh",
 		},
 	} {
@@ -761,12 +761,61 @@ func TestResolveConfigReasoningEffortFlagOverEnvironmentOverSettings(t *testing.
 		if err != nil {
 			t.Fatalf("ResolveConfig(%s) error = %v", name, err)
 		}
-		if resolved.LLMReasoningEffort != test.want {
-			t.Errorf("%s LLMReasoningEffort = %q, want %q", name, resolved.LLMReasoningEffort, test.want)
+		if resolved.OpenAIReasoningEffort != test.want {
+			t.Errorf("%s OpenAIReasoningEffort = %q, want %q", name, resolved.OpenAIReasoningEffort, test.want)
 		}
 	}
 
-	if resolved, _, err := ResolveConfig(ResolveOptions{Path: filepath.Join(t.TempDir(), "absent.yaml"), Environment: map[string]string{}}); err != nil || resolved.LLMReasoningEffort != "" {
-		t.Fatalf("unset LLMReasoningEffort = %q (error %v), want none set", resolved.LLMReasoningEffort, err)
+	if resolved, _, err := ResolveConfig(ResolveOptions{Path: filepath.Join(t.TempDir(), "absent.yaml"), Environment: map[string]string{}}); err != nil || resolved.OpenAIReasoningEffort != "" {
+		t.Fatalf("unset OpenAIReasoningEffort = %q (error %v), want none set", resolved.OpenAIReasoningEffort, err)
+	}
+}
+
+func TestResolveConfigIgnoresRetiredPrefixSettingsAndEnvironment(t *testing.T) {
+	retiredLower := "l" + "lm_"
+	retiredUpper := "L" + "LM_"
+	retiredFlag := "l" + "lm-"
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	data := "schema_version: config/v1\nsettings:\n  " +
+		retiredLower + "provider: ollama\n  " +
+		retiredLower + "mode: local\n  " +
+		retiredLower + "wire_api: responses\n  " +
+		retiredLower + "reasoning_effort: high\n  " +
+		retiredLower + "model: llama3\n  " +
+		retiredLower + "base_url: http://127.0.0.1:11434/v1\n"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	resolved, _, err := ResolveConfig(ResolveOptions{
+		Path: path,
+		Environment: map[string]string{
+			retiredUpper + "PROVIDER":           "codex",
+			retiredUpper + "MODE":               "remote",
+			retiredUpper + "WIRE_API":           "responses",
+			retiredUpper + "REASONING_EFFORT":   "max",
+			retiredUpper + "MODEL":              "gpt-6-luna",
+			retiredUpper + "BASE_URL":           "https://retired.example.test/v1",
+			retiredUpper + "ENDPOINT_ALLOWLIST": "https://retired.example.test/v1",
+			retiredUpper + "ORGANIZATION":       "retired-org",
+			retiredUpper + "PROXY_URL":          "https://proxy.retired.example.test",
+			retiredUpper + "API_KEY":            "retired-secret",
+			"SRE_" + retiredUpper + "API_KEY":   "retired-sre-secret",
+			retiredUpper + "CUSTOM_HEADERS":     "X-Retired:1",
+		},
+		Flags: map[string]string{
+			retiredFlag + "provider": "bedrock",
+			retiredFlag + "mode":     "aws",
+			retiredFlag + "headers":  "X-Retired-Flag:1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveConfig() error = %v", err)
+	}
+	if resolved.OpenAIProvider != "" || resolved.OpenAIMode != "" || resolved.OpenAIWireAPI != "" ||
+		resolved.OpenAIReasoningEffort != "" || resolved.OpenAIModel != "" || resolved.OpenAIAPIEndpoint != "" ||
+		len(resolved.OpenAIEndpointAllowlist) != 0 || resolved.OpenAIOrganization != "" ||
+		resolved.OpenAIProxyURL != "" || resolved.OpenAIAPIKey != "" || len(resolved.OpenAIHeaders) != 0 {
+		t.Fatalf("ResolveConfig() unexpectedly read retired prefix inputs: %#v", resolved)
 	}
 }

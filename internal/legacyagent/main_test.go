@@ -28,11 +28,11 @@ import (
 
 func TestRuntimeGRPCConfigExposesProviderModeWithoutSecrets(t *testing.T) {
 	value, err := (runtimeGRPCConfig{config: &config.Config{
-		LLMProvider:        "bedrock",
-		LLMMode:            "aws",
-		LLMModel:           "anthropic.claude-v2",
-		LLMAPIKey:          "should-not-be-returned",
-		LLMHeaders:         []string{"X-Provider-Token:header-secret"},
+		OpenAIProvider:     "bedrock",
+		OpenAIMode:         "aws",
+		OpenAIModel:        "anthropic.claude-v2",
+		OpenAIAPIKey:       "should-not-be-returned",
+		OpenAIHeaders:      []string{"X-Provider-Token:header-secret"},
 		CacheEncryptionKey: "cache-secret",
 	}}).GetConfig(context.Background())
 	if err != nil {
@@ -42,22 +42,22 @@ func TestRuntimeGRPCConfigExposesProviderModeWithoutSecrets(t *testing.T) {
 	if !ok {
 		t.Fatalf("GetConfig() type = %T, want map[string]interface{}", value)
 	}
-	if settings["llm_provider"] != "bedrock" || settings["llm_mode"] != "aws" || settings["llm_model"] != "anthropic.claude-v2" {
+	if settings["openai_provider"] != "bedrock" || settings["openai_mode"] != "aws" || settings["openai_model"] != "anthropic.claude-v2" {
 		t.Fatalf("provider settings = %#v", settings)
 	}
-	if settings["llm_wire_api"] != "chat" {
-		t.Fatalf("runtime config wire API = %#v, want chat", settings["llm_wire_api"])
+	if settings["openai_wire_api"] != "chat" {
+		t.Fatalf("runtime config wire API = %#v, want chat", settings["openai_wire_api"])
 	}
-	if _, ok := settings["llm_api_key"]; ok {
-		t.Fatal("runtime config exposed llm_api_key")
+	if _, ok := settings["openai_api_key"]; ok {
+		t.Fatal("runtime config exposed openai_api_key")
 	}
 	if _, ok := settings["cache_encryption_key"]; ok {
 		t.Fatal("runtime config exposed cache_encryption_key")
 	}
-	if settings["llm_headers_configured"] != true {
+	if settings["openai_headers_configured"] != true {
 		t.Fatalf("runtime config did not report configured provider headers: %#v", settings)
 	}
-	if _, ok := settings["llm_headers"]; ok {
+	if _, ok := settings["openai_headers"]; ok {
 		t.Fatal("runtime config exposed provider header values")
 	}
 }
@@ -75,8 +75,8 @@ func TestRuntimeGRPCConfigProjectsSafePlaybookStateWithoutDatabaseCredentials(t 
 		PlaybookMaxSourceBytes:    2048,
 		PlaybookMaxStepCount:      4,
 		PlaybookMaxTotalTextBytes: 8192,
-		LLMAPIKey:                 "llm-secret",
-		LLMHeaders:                []string{"X-Provider-Token:header-secret"},
+		OpenAIAPIKey:              "openai-secret",
+		OpenAIHeaders:             []string{"X-Provider-Token:header-secret"},
 		WebhookURL:                "https://hooks.example.test/webhook-secret",
 		APIToken:                  "api-secret",
 		CacheEncryptionKey:        "cache-secret",
@@ -106,7 +106,7 @@ func TestRuntimeGRPCConfigProjectsSafePlaybookStateWithoutDatabaseCredentials(t 
 			t.Fatalf("runtime config %s = %#v, want %#v", key, settings[key], expected)
 		}
 	}
-	for _, key := range []string{"database_url", "llm_api_key", "llm_headers", "webhook_url", "api_token", "cache_encryption_key"} {
+	for _, key := range []string{"database_url", "openai_api_key", "openai_headers", "webhook_url", "api_token", "cache_encryption_key"} {
 		if _, exists := settings[key]; exists {
 			t.Fatalf("runtime config exposed secret field %q", key)
 		}
@@ -115,7 +115,7 @@ func TestRuntimeGRPCConfigProjectsSafePlaybookStateWithoutDatabaseCredentials(t 
 	if err != nil {
 		t.Fatalf("marshal projected runtime config: %v", err)
 	}
-	for _, secret := range []string{databaseURL, "runtime_user", "runtime-password", "llm-secret", "header-secret", "webhook-secret", "api-secret", "cache-secret"} {
+	for _, secret := range []string{databaseURL, "runtime_user", "runtime-password", "openai-secret", "header-secret", "webhook-secret", "api-secret", "cache-secret"} {
 		if strings.Contains(string(encoded), secret) {
 			t.Fatalf("projected runtime config exposed secret %q: %s", secret, encoded)
 		}
@@ -147,23 +147,50 @@ func TestParseProviderHeadersPreservesRepeatedValuesAndRejectsUnsafeInput(t *tes
 }
 
 func TestConfigFlagsCaptureRepeatedProviderHeaders(t *testing.T) {
-	flags := configFlagsFromArgs([]string{"explain", "--llm-headers", "X-One:first", "--custom-headers=X-Two:second"})
-	if flags["llm-headers"] != "X-One:first,X-Two:second" {
+	flags := configFlagsFromArgs([]string{"explain", "--openai-headers", "X-One:first", "--custom-headers=X-Two:second"})
+	if flags["openai-headers"] != "X-One:first,X-Two:second" {
 		t.Fatalf("provider header flags = %#v", flags)
 	}
 }
 
-func TestConfigFlagsCaptureLLMWireAPI(t *testing.T) {
-	flags := configFlagsFromArgs([]string{"serve", "--llm-wire-api", "responses"})
-	if flags["llm-wire-api"] != "responses" {
+func TestConfigFlagsCaptureOpenAIWireAPI(t *testing.T) {
+	flags := configFlagsFromArgs([]string{"serve", "--openai-wire-api", "responses"})
+	if flags["openai-wire-api"] != "responses" {
 		t.Fatalf("wire API flags = %#v", flags)
 	}
 }
 
-func TestConfigFlagsCaptureLLMEndpointAllowlist(t *testing.T) {
-	flags := configFlagsFromArgs([]string{"explain", "--llm-endpoint-allowlist", "https://llm.example.test/backend-api/codex"})
-	if flags["llm-endpoint-allowlist"] != "https://llm.example.test/backend-api/codex" {
+func TestConfigFlagsCaptureOpenAIEndpointAllowlist(t *testing.T) {
+	flags := configFlagsFromArgs([]string{"explain", "--openai-endpoint-allowlist", "https://endpoint.example.test/backend-api/codex"})
+	if flags["openai-endpoint-allowlist"] != "https://endpoint.example.test/backend-api/codex" {
 		t.Fatalf("endpoint allowlist flags = %#v", flags)
+	}
+}
+
+func TestConfigFlagsCaptureOpenAIAPIEndpointAndTransportFlags(t *testing.T) {
+	flags := configFlagsFromArgs([]string{
+		"serve",
+		"--openai-provider", "codex",
+		"--openai-mode", "remote",
+		"--openai-model", "gpt-5",
+		"--openai-api-endpoint", "https://endpoint.example.test/backend-api/codex",
+		"--openai-api-key", "runtime-key",
+		"--openai-organization", "org-1",
+		"--openai-proxy-url", "https://proxy.example.test",
+	})
+	want := map[string]string{
+		"openai-provider":     "codex",
+		"openai-mode":         "remote",
+		"openai-model":        "gpt-5",
+		"openai-api-endpoint": "https://endpoint.example.test/backend-api/codex",
+		"openai-api-key":      "runtime-key",
+		"openai-organization": "org-1",
+		"openai-proxy-url":    "https://proxy.example.test",
+	}
+	for k, v := range want {
+		if flags[k] != v {
+			t.Fatalf("flag %q = %q, want %q", k, flags[k], v)
+		}
 	}
 }
 
@@ -330,16 +357,16 @@ func TestConfigFlagsPreserveNegativePlaybookValuesForValidation(t *testing.T) {
 
 func TestProviderProfileFromConfigCarriesRuntimeTransportSettings(t *testing.T) {
 	profile := providerProfileFromConfig(&config.Config{
-		LLMProvider:          "custom",
-		LLMWireAPI:           "responses",
-		LLMBaseURL:           "https://llm.example.test/backend-api/codex",
-		LLMEndpointAllowlist: []string{"https://llm.example.test/backend-api/codex"},
-		LLMOrganization:      "org",
-		LLMProxyURL:          "https://proxy.example.test",
-		LLMAPIKey:            "api-key",
-		LLMHeaders:           []string{"X-Header:value"},
+		OpenAIProvider:          "custom",
+		OpenAIWireAPI:           "responses",
+		OpenAIAPIEndpoint:       "https://endpoint.example.test/backend-api/codex",
+		OpenAIEndpointAllowlist: []string{"https://endpoint.example.test/backend-api/codex"},
+		OpenAIOrganization:      "org",
+		OpenAIProxyURL:          "https://proxy.example.test",
+		OpenAIAPIKey:            "api-key",
+		OpenAIHeaders:           []string{"X-Header:value"},
 	})
-	if profile.WireAPI != triage.WireAPIResponses || profile.Endpoint != "https://llm.example.test/backend-api/codex" || len(profile.EndpointAllowlist) != 1 || profile.EndpointAllowlist[0] != "https://llm.example.test/backend-api/codex" || profile.Organization != "org" || profile.ProxyURL != "https://proxy.example.test" {
+	if profile.WireAPI != triage.WireAPIResponses || profile.Endpoint != "https://endpoint.example.test/backend-api/codex" || len(profile.EndpointAllowlist) != 1 || profile.EndpointAllowlist[0] != "https://endpoint.example.test/backend-api/codex" || profile.Organization != "org" || profile.ProxyURL != "https://proxy.example.test" {
 		t.Fatalf("provider profile transport settings = %#v", profile)
 	}
 }
@@ -358,12 +385,12 @@ func TestBuildTriageProviderRedactsDatabaseDSNFromProviderBoundary(t *testing.T)
 	defer server.Close()
 
 	provider, err := buildTriageProvider(&config.Config{
-		LLMProvider: "custom",
-		LLMMode:     "local",
-		LLMBaseURL:  server.URL,
-		LLMModel:    "runtime-model",
-		LLMAPIKey:   "runtime-key",
-		DatabaseURL: databaseURL,
+		OpenAIProvider:    "custom",
+		OpenAIMode:        "local",
+		OpenAIAPIEndpoint: server.URL,
+		OpenAIModel:       "runtime-model",
+		OpenAIAPIKey:      "runtime-key",
+		DatabaseURL:       databaseURL,
 	})
 	if err != nil {
 		t.Fatalf("buildTriageProvider() error = %v", err)
@@ -506,13 +533,13 @@ func TestBuildTriageProviderAppliesRuntimeProviderHeaders(t *testing.T) {
 	defer server.Close()
 
 	provider, err := buildTriageProvider(&config.Config{
-		LLMProvider:     "custom",
-		LLMMode:         "local",
-		LLMBaseURL:      server.URL,
-		LLMModel:        "runtime-model",
-		LLMAPIKey:       "runtime-key",
-		LLMOrganization: "runtime-org",
-		LLMHeaders:      []string{"X-Request-Tag:first", "X-Request-Tag:second"},
+		OpenAIProvider:     "custom",
+		OpenAIMode:         "local",
+		OpenAIAPIEndpoint:  server.URL,
+		OpenAIModel:        "runtime-model",
+		OpenAIAPIKey:       "runtime-key",
+		OpenAIOrganization: "runtime-org",
+		OpenAIHeaders:      []string{"X-Request-Tag:first", "X-Request-Tag:second"},
 	})
 	if err != nil {
 		t.Fatalf("buildTriageProvider() error = %v", err)
@@ -578,10 +605,10 @@ func TestObservedTriageProviderPreservesStructuredTaskRunner(t *testing.T) {
 	defer server.Close()
 
 	provider, err := buildTriageProvider(&config.Config{
-		LLMProvider: "custom",
-		LLMMode:     "local",
-		LLMBaseURL:  server.URL,
-		LLMModel:    "runtime-model",
+		OpenAIProvider:    "custom",
+		OpenAIMode:        "local",
+		OpenAIAPIEndpoint: server.URL,
+		OpenAIModel:       "runtime-model",
 	})
 	if err != nil {
 		t.Fatalf("buildTriageProvider() error = %v", err)

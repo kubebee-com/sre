@@ -16,7 +16,7 @@ func TestLiveStructuredPlaybookTask(t *testing.T) {
 	if os.Getenv("SRE_TEST_LIVE_STRUCTURED") != "1" {
 		t.Skip("set SRE_TEST_LIVE_STRUCTURED=1 for an authorized live provider smoke test")
 	}
-	key, endpoint := os.Getenv("LLM_API_KEY"), os.Getenv("LLM_BASE_URL")
+	key, endpoint := os.Getenv("OPENAI_API_KEY"), os.Getenv("OPENAI_API_ENDPOINT")
 	if key == "" || endpoint == "" {
 		t.Fatal("live provider credential and endpoint are required")
 	}

@@ -209,7 +209,7 @@ func (s *Server) handlePlaybookStatus(w http.ResponseWriter, r *http.Request) {
 	for name, count := range status.Outcomes {
 		outcomes[s.redactor.SanitizeText(name)] = count
 	}
-	response := map[string]any{"enabled": status.Enabled, "available": status.Available, "reason": s.redactor.SanitizeText(status.Reason), "catalog": status.Catalog, "tasks": tasks, "outcomes": outcomes, "token_usage": usage, "usage_note": "Token usage is unavailable until reported by the provider; monetary cost is unavailable.", "provider": s.redactor.SanitizeText(s.runtime.LLMProvider), "model": s.redactor.SanitizeText(s.runtime.LLMModel)}
+	response := map[string]any{"enabled": status.Enabled, "available": status.Available, "reason": s.redactor.SanitizeText(status.Reason), "catalog": status.Catalog, "tasks": tasks, "outcomes": outcomes, "token_usage": usage, "usage_note": "Token usage is unavailable until reported by the provider; monetary cost is unavailable.", "provider": s.redactor.SanitizeText(s.runtime.OpenAIProvider), "model": s.redactor.SanitizeText(s.runtime.OpenAIModel)}
 	payload, err := json.Marshal(response)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "response serialization failed")

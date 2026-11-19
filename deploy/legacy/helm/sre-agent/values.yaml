@@ -47,12 +47,15 @@ config:
   cacheTTL: 15m
   cacheMaxEntries: 256
   cacheMaxValueBytes: 1048576
-  llmProvider: rule-based
-  llmModel: ""
-  llmBaseURL: ""
-  llmEndpointAllowlist: ""
-  llmOrganization: ""
-  llmProxyURL: ""
+  openaiProvider: rule-based
+  openaiMode: ""
+  openaiWireAPI: ""
+  openaiReasoningEffort: ""
+  openaiModel: ""
+  openaiAPIEndpoint: ""
+  openaiEndpointAllowlist: ""
+  openaiOrganization: ""
+  openaiProxyURL: ""
   publicURL: ""
   scanInterval: 2m
   scanJitter: 15s
@@ -60,7 +63,6 @@ config:
   leaderElectionNamespace: ""
   leaderElectionID: sre-agent
   leaderElectionIdentity: ""
-  llmMode: ""
   allowedOrigins: []
   maxBodyBytes: "1048576"
   requestsPerMinute: "120"
@@ -86,8 +88,8 @@ secret:
   create: false
   name: ""
   apiToken: ""
-  llmAPIKey: ""
-  llmCustomHeaders: ""
+  openaiAPIKey: ""
+  openaiCustomHeaders: ""
   webhookURL: ""
   stringData: {}
 

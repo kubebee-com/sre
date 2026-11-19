@@ -36,9 +36,9 @@ kind_assert_dashboard_status() {
 	jq -e --arg provider "$provider" --arg wire_api "$wire_api" '
 		type == "object" and
 		(.settings | type == "object" and
-			.llm_provider == $provider and
-			.llm_wire_api == $wire_api and
-			(.llm_model | type == "string") and
+			.openai_provider == $provider and
+			.openai_wire_api == $wire_api and
+			(.openai_model | type == "string") and
 			(.scan_interval | type == "string") and
 			(.scan_jitter | type == "string") and
 			(.cache_enabled | type == "boolean") and

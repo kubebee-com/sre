@@ -11,8 +11,8 @@ func TestSanitizeLogUsesConfiguredRedactorAndSafeFormatter(t *testing.T) {
 	secret := "main-log-configured-secret"
 	databaseURL := "postgres://db_user:db-password@db.example.test:5432/sre?sslmode=require"
 	cfg := &config.Config{
-		LLMAPIKey:          secret,
-		LLMHeaders:         []string{"X-Token:header-configured-secret"},
+		OpenAIAPIKey:       secret,
+		OpenAIHeaders:      []string{"X-Token:header-configured-secret"},
 		WebhookURL:         "https://hooks.example.test/runtime-webhook-secret",
 		APIToken:           "runtime-api-secret",
 		CacheEncryptionKey: "runtime-cache-secret",

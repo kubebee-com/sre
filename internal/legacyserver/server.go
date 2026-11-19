@@ -58,46 +58,46 @@ const (
 )
 
 type StatusSettings struct {
-	APITokenRequired       bool     `json:"api_token_required"`
-	AllowedOrigins         []string `json:"allowed_origins,omitempty"`
-	MaxRequestBytes        int64    `json:"max_request_bytes"`
-	MaxResponseBytes       int64    `json:"max_response_bytes"`
-	RequestsPerMinute      int      `json:"requests_per_minute"`
-	RequestBurst           int      `json:"request_burst"`
-	ReadinessManaged       bool     `json:"readiness_managed"`
-	LLMProvider            string   `json:"llm_provider,omitempty"`
-	LLMMode                string   `json:"llm_mode,omitempty"`
-	LLMWireAPI             string   `json:"llm_wire_api,omitempty"`
-	LLMModel               string   `json:"llm_model,omitempty"`
-	LLMBaseURLDisplay      string   `json:"llm_base_url_display,omitempty"`
-	ScanInterval           string   `json:"scan_interval,omitempty"`
-	ScanJitter             string   `json:"scan_jitter,omitempty"`
-	EventDrivenScanning    bool     `json:"event_driven_scanning"`
-	EventQueueCapacity     int      `json:"event_queue_capacity"`
-	EventDebounce          string   `json:"event_debounce,omitempty"`
-	CacheEnabled           bool     `json:"cache_enabled"`
-	CacheConfigured        bool     `json:"cache_configured"`
-	WebhookConfigured      bool     `json:"webhook_configured"`
-	AlertmanagerConfigured bool     `json:"alertmanager_configured"`
+	APITokenRequired         bool     `json:"api_token_required"`
+	AllowedOrigins           []string `json:"allowed_origins,omitempty"`
+	MaxRequestBytes          int64    `json:"max_request_bytes"`
+	MaxResponseBytes         int64    `json:"max_response_bytes"`
+	RequestsPerMinute        int      `json:"requests_per_minute"`
+	RequestBurst             int      `json:"request_burst"`
+	ReadinessManaged         bool     `json:"readiness_managed"`
+	OpenAIProvider           string   `json:"openai_provider,omitempty"`
+	OpenAIMode               string   `json:"openai_mode,omitempty"`
+	OpenAIWireAPI            string   `json:"openai_wire_api,omitempty"`
+	OpenAIModel              string   `json:"openai_model,omitempty"`
+	OpenAIAPIEndpointDisplay string   `json:"openai_api_endpoint_display,omitempty"`
+	ScanInterval             string   `json:"scan_interval,omitempty"`
+	ScanJitter               string   `json:"scan_jitter,omitempty"`
+	EventDrivenScanning      bool     `json:"event_driven_scanning"`
+	EventQueueCapacity       int      `json:"event_queue_capacity"`
+	EventDebounce            string   `json:"event_debounce,omitempty"`
+	CacheEnabled             bool     `json:"cache_enabled"`
+	CacheConfigured          bool     `json:"cache_configured"`
+	WebhookConfigured        bool     `json:"webhook_configured"`
+	AlertmanagerConfigured   bool     `json:"alertmanager_configured"`
 }
 
 // RuntimeSettings is the sanitized configuration projection supplied by the
 // process owner. Secrets, custom headers, cache keys, and raw endpoint paths
 // are intentionally outside this type.
 type RuntimeSettings struct {
-	LLMProvider            string
-	LLMMode                string
-	LLMWireAPI             string
-	LLMModel               string
-	LLMBaseURLDisplay      string
-	ScanInterval           string
-	ScanJitter             string
-	EventDrivenScanning    bool
-	EventQueueCapacity     int
-	EventDebounce          string
-	CacheEnabled           bool
-	CacheConfigured        bool
-	AlertmanagerConfigured bool
+	OpenAIProvider           string
+	OpenAIMode               string
+	OpenAIWireAPI            string
+	OpenAIModel              string
+	OpenAIAPIEndpointDisplay string
+	ScanInterval             string
+	ScanJitter               string
+	EventDrivenScanning      bool
+	EventQueueCapacity       int
+	EventDebounce            string
+	CacheEnabled             bool
+	CacheConfigured          bool
+	AlertmanagerConfigured   bool
 }
 
 type TokenUsageStatus struct {
