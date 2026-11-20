@@ -53,7 +53,7 @@ The following are not proven by the commands above and remain `Partial` or
 - Full K8sGPT edge-semantic parity for every analyzer, including controller,
   EndpointSlice, Gateway API, OLM, webhook, storage, security, and policy
   behavior.
-- Google workload identity, IBM/OCI native auth, cloud discovery, provider
+- IBM/OCI native auth, cloud discovery, provider
   quality, external model availability, or production retry policy. The
   native AWS triage adapters still require an AWS credential/configuration
   chain and live model access for operational proof.

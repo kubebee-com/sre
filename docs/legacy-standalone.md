@@ -131,11 +131,11 @@ profiles are:
 - Remote and local OpenAI-compatible: `openai`, `custom`, `deepseek`, `groq`,
   `litellm`, `localai`, and `ollama`.
 - Native message or process modes: `claude`, `harness`, `rule`, and `noop`.
-- Named cloud adapters: `azureopenai`, `bedrock`, `cohere`, `gemini`,
-  `huggingface`, `ibm`, `oci`, `sagemaker`, and `vertex`.
+- Named cloud adapters: `azureopenai`, `bedrock`, `cohere`,
+  `huggingface`, `ibm`, `oci`, and `sagemaker`.
 
 Aliases include `codex` for `openai`, `anthropic` for `claude`, `watsonx` for
-`ibm`, `oracle` for `oci`, and the corresponding Azure, AWS, Vertex, local,
+`ibm`, `oracle` for `oci`, and the corresponding Azure, AWS, local,
 rule, and no-op spellings. Provider profiles validate model, endpoint, proxy,
 organization, custom headers, timeouts, token limits, and endpoint policy.
 Requests and responses are bounded and cancellable, and provider errors do
@@ -172,7 +172,7 @@ endpoint name through `OPENAI_API_ENDPOINT`. Leave the mode empty or use `remote
 the legacy bounded HTTP adapter.
 
 The remaining named cloud adapters implement provider-specific bounded HTTP
-payloads. Google workload identity, IBM/OCI native authentication, and
+payloads. IBM/OCI native authentication and
 production credential discovery for those adapters remain deployment
 responsibilities. `rule` is deterministic and offline; `noop` explicitly
 disables explanations.

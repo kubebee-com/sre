@@ -30,7 +30,7 @@ func (m ProviderMetadata) profile(key string) (triage.ProviderProfile, error) {
 	}
 	// Command/harness providers are intentionally unavailable to remote jobs.
 	switch m.Provider {
-	case "openai", "claude", "gemini", "azureopenai", "bedrock", "sagemaker", "cohere", "custom", "ollama", "localai", "litellm", "groq", "deepseek", "vertex", "ibm", "oci", "huggingface":
+	case "openai", "claude", "azureopenai", "bedrock", "sagemaker", "cohere", "custom", "ollama", "localai", "litellm", "groq", "deepseek", "ibm", "oci", "huggingface":
 	default:
 		return triage.ProviderProfile{}, ErrProvider
 	}

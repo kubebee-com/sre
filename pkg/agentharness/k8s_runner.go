@@ -318,7 +318,7 @@ func (r *K8sJobRunner) runJob(ctx context.Context, harness HarnessKind, phase Ph
 			Name:      cmName,
 			Namespace: r.cfg.Namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/component": "sre-agent-sandbox",
+				"app.kubernetes.io/component":  "sre-agent-sandbox",
 				"app.kubernetes.io/managed-by": "kubebee-sre",
 			},
 		},

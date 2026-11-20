@@ -201,7 +201,6 @@ var providerAliases = map[string]string{
 	"codex":             "openai",
 	"cohere":            "cohere",
 	"deepseek":          "deepseek",
-	"gemini":            "gemini",
 	"groq":              "groq",
 	"huggingface":       "huggingface",
 	"hugging-face":      "huggingface",
@@ -230,9 +229,6 @@ var providerAliases = map[string]string{
 	"custom":            "custom",
 	"custom-rest":       "custom",
 	"custom_rest":       "custom",
-	"vertex":            "vertex",
-	"vertex-ai":         "vertex",
-	"vertex_ai":         "vertex",
 }
 
 var defaultProviderModels = map[string]string{
@@ -241,7 +237,6 @@ var defaultProviderModels = map[string]string{
 	"bedrock":     "anthropic.claude-3-5-sonnet-20241022-v2:0",
 	"cohere":      "command-r-plus",
 	"deepseek":    "deepseek-chat",
-	"gemini":      "gemini-2.0-flash",
 	"groq":        "llama-3.3-70b-versatile",
 	"huggingface": "text-generation-model",
 	"ibm":         "granite-3-8b-instruct",
@@ -253,14 +248,12 @@ var defaultProviderModels = map[string]string{
 	"oci":         "cohere.command-r-plus",
 	"rule":        "rule-engine",
 	"sagemaker":   "model",
-	"vertex":      "gemini-2.0-flash",
 }
 
 var defaultProviderEndpoints = map[string]string{
 	"claude":      "https://api.anthropic.com/v1",
 	"cohere":      "https://api.cohere.com/v2",
 	"deepseek":    "https://api.deepseek.com/v1",
-	"gemini":      "https://generativelanguage.googleapis.com/v1beta",
 	"groq":        "https://api.groq.com/openai/v1",
 	"huggingface": "https://api-inference.huggingface.co",
 	"ibm":         "",
@@ -269,7 +262,6 @@ var defaultProviderEndpoints = map[string]string{
 	"ollama":      "http://127.0.0.1:11434/v1",
 	"openai":      "https://api.openai.com/v1",
 	"oci":         "",
-	"vertex":      "",
 	"azureopenai": "",
 	"bedrock":     "",
 	"sagemaker":   "",
@@ -277,7 +269,7 @@ var defaultProviderEndpoints = map[string]string{
 
 // SupportedProviderNames returns canonical names in deterministic order.
 func SupportedProviderNames() []string {
-	result := []string{"azureopenai", "bedrock", "claude", "cohere", "deepseek", "gemini", "groq", "harness", "huggingface", "ibm", "litellm", "localai", "noop", "oci", "ollama", "openai", "rule", "sagemaker", "vertex", "custom"}
+	result := []string{"azureopenai", "bedrock", "claude", "cohere", "deepseek", "groq", "harness", "huggingface", "ibm", "litellm", "localai", "noop", "oci", "ollama", "openai", "rule", "sagemaker", "custom"}
 	return result
 }
 
@@ -688,7 +680,7 @@ func NewProviderFromProfileWithAWS(profile ProviderProfile, awsOptions AWSProvid
 		} else {
 			provider, err = NewCloudProvider(normalized)
 		}
-	case "azureopenai", "cohere", "gemini", "huggingface", "ibm", "oci", "vertex":
+	case "azureopenai", "cohere", "huggingface", "ibm", "oci":
 		provider, err = NewCloudProvider(normalized)
 	case "claude":
 		provider = NewClaudeProvider(normalized.APIKey, normalized.Model, normalized.Endpoint, normalized.SecretValues...)

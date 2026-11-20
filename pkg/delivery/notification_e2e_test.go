@@ -136,7 +136,6 @@ func TestNotificationE2EProviderDelivery(t *testing.T) {
 		{"teams", "https://test.logic.azure.com/workflows/test/triggers/manual/paths/invoke?sig=test-signature", "", "", "test.logic.azure.com", "/workflows/test/triggers/manual/paths/invoke"},
 		{"discord", "https://discord.com/api/webhooks/123/test-token", "", "", "discord.com", "/api/webhooks/123/test-token"},
 		{"telegram", "", "123456:test-token", "-123456", "api.telegram.org", "/bot123456:test-token/sendMessage"},
-		{"google_chat", "https://chat.googleapis.com/v1/spaces/test/messages?key=test-key&token=test-token", "", "", "chat.googleapis.com", "/v1/spaces/test/messages"},
 		{"whatsapp", "https://graph.facebook.com/v23.0/123456/messages", "test-bearer", "15551234567", "graph.facebook.com", "/v23.0/123456/messages"},
 		{"matrix", "https://matrix.example.com", "test-bearer", "!room:example.com", "matrix.example.com", "/_matrix/client/v3/rooms/!room:example.com/send/m.room.message/"},
 	}
@@ -218,10 +217,6 @@ func TestNotificationE2EProviderDelivery(t *testing.T) {
 				case "telegram":
 					if body["chat_id"] != tc.destination || body["link_preview_options"].(map[string]any)["is_disabled"] != true {
 						t.Error("invalid Telegram payload")
-					}
-				case "google_chat":
-					if body["text"] == nil {
-						t.Error("missing Google Chat text")
 					}
 				case "whatsapp":
 					template := body["template"].(map[string]any)

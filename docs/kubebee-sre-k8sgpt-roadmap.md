@@ -197,7 +197,7 @@ WP-P0-01 identity and transport
 
 **Behavior to add:**
 
-- Azure OpenAI, AWS Bedrock/Converse/SageMaker/Mantle, Gemini/Vertex, OCI, IBM, Cohere, Hugging Face, and explicit NoOp adapters with common validation/deadline/error contracts.
+- Azure OpenAI, AWS Bedrock/Converse/SageMaker/Mantle, OCI, IBM, Cohere, Hugging Face, and explicit NoOp adapters with common validation/deadline/error contracts.
 - S3, GCS, Azure Blob, and Interplex cache backends with TLS-by-default, scoped prefixes, KMS envelope encryption, retention, precise error classification, and non-fatal setup.
 - Cloud identity/region/project allowlists and secret-safe health diagnostics.
 

@@ -64,6 +64,6 @@ See [migration and configuration](docs/unified-sre-migration.md) for credential,
 package, chart, and historical-state changes. The [approved design](docs/superpowers/specs/2026-09-08-unified-sre-design.md)
 describes the architecture and acceptance requirements.
 
-Configure Slack, Teams, Discord, Telegram, Google Chat, WhatsApp and Matrix using the [messaging channel guide](docs/messaging.md). Slack, Discord and Telegram support verified approval and clarification commands.
+Configure Slack, Teams, Discord, Telegram, WhatsApp and Matrix using the [messaging channel guide](docs/messaging.md). Slack, Discord and Telegram support verified approval and clarification commands.
 
 The [Kind acceptance guide](docs/kind-acceptance.md) describes the comprehensive two-cluster suite and its resource requirements. Run it later on a suitable host with `make unified-kind-test`.

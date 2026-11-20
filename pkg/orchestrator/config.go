@@ -80,7 +80,7 @@ func ReadDeploymentConfig(reader io.Reader) (DeploymentConfig, error) {
 	ids := map[string]bool{}
 	for _, provider := range config.Providers {
 		switch provider.Provider {
-		case "rule", "openai", "claude", "gemini", "azureopenai", "bedrock", "sagemaker", "cohere", "custom", "ollama", "localai", "litellm", "groq", "deepseek", "vertex", "ibm", "oci", "huggingface":
+		case "rule", "openai", "claude", "azureopenai", "bedrock", "sagemaker", "cohere", "custom", "ollama", "localai", "litellm", "groq", "deepseek", "ibm", "oci", "huggingface":
 		default:
 			return config, ErrDeploymentConfig
 		}

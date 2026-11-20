@@ -91,7 +91,7 @@ require_text docs/legacy-standalone.md '--openai-headers'
 require_text docs/legacy-standalone.md 'OPENAI_CUSTOM_HEADERS'
 require_text docs/legacy-standalone.md 'OPENAI_ENDPOINT_ALLOWLIST'
 
-require_text docs/kubebee-sre-k8sgpt-feature-gap.md '14 `Covered`, 31 `Partial`, and 0 `Missing` slices'
+require_text docs/kubebee-sre-k8sgpt-feature-gap.md '14 `Covered`, 30 `Partial`, and 0 `Missing` slices'
 require_text docs/kubebee-sre-k8sgpt-feature-gap.md 'KG-CLI-01'
 require_text docs/kubebee-sre-k8sgpt-feature-gap.md 'KG-OPS-04'
 require_text docs/kubebee-sre-k8sgpt-feature-gap.md 'Go Cloud `BlobObjectStore`'
@@ -114,7 +114,7 @@ covered=$(grep -Ec '^\| KG-[^|]+ \| Covered \|' docs/kubebee-sre-k8sgpt-feature-
 partial=$(grep -Ec '^\| KG-[^|]+ \| Partial \|' docs/kubebee-sre-k8sgpt-feature-gap.md || true)
 missing=$(grep -Ec '^\| KG-[^|]+ \| Missing \|' docs/kubebee-sre-k8sgpt-feature-gap.md || true)
 total=$((covered + partial + missing))
-[[ "$covered" -eq 14 && "$partial" -eq 31 && "$missing" -eq 0 && "$total" -eq 45 ]] || {
+[[ "$covered" -eq 14 && "$partial" -eq 30 && "$missing" -eq 0 && "$total" -eq 44 ]] || {
 	printf 'docs check failed: matrix counts are Covered=%s Partial=%s Missing=%s\n' "$covered" "$partial" "$missing" >&2
 	exit 1
 }

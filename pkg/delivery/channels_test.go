@@ -16,7 +16,7 @@ import (
 func channelFixture(t *testing.T, provider string) Channel {
 	t.Helper()
 	c := Channel{Provider: provider, EndpointEnv: "TEST_CHANNEL_ENDPOINT"}
-	endpoints := map[string]string{"slack": "https://hooks.slack.com/services/T/B/secret", "teams": "https://prod-01.westus.logic.azure.com/workflows/id/triggers/manual/paths/invoke?sig=secret", "discord": "https://discord.com/api/webhooks/123/secret", "google_chat": "https://chat.googleapis.com/v1/spaces/space/messages?key=key&token=secret", "whatsapp": "https://graph.facebook.com/v23.0/123/messages", "matrix": "https://matrix.example"}
+	endpoints := map[string]string{"slack": "https://hooks.slack.com/services/T/B/secret", "teams": "https://prod-01.westus.logic.azure.com/workflows/id/triggers/manual/paths/invoke?sig=secret", "discord": "https://discord.com/api/webhooks/123/secret", "whatsapp": "https://graph.facebook.com/v23.0/123/messages", "matrix": "https://matrix.example"}
 	t.Setenv(c.EndpointEnv, endpoints[provider])
 	if provider == "telegram" || provider == "whatsapp" || provider == "matrix" {
 		c.TokenEnv = "TEST_CHANNEL_TOKEN"
@@ -41,7 +41,7 @@ func channelNotification() incident.Notification {
 }
 
 func TestChannelNativeRequests(t *testing.T) {
-	for _, provider := range []string{"slack", "teams", "discord", "telegram", "google_chat", "whatsapp", "matrix"} {
+	for _, provider := range []string{"slack", "teams", "discord", "telegram", "whatsapp", "matrix"} {
 		t.Run(provider, func(t *testing.T) {
 			c := channelFixture(t, provider)
 			if err := c.Validate(); err != nil {
@@ -86,10 +86,6 @@ func TestChannelNativeRequests(t *testing.T) {
 					if r.URL.Host != "api.telegram.org" || r.URL.Path != "/bot123:secret_token/sendMessage" || p["chat_id"] != "-123" || p["parse_mode"] != nil {
 						t.Fatal(r.URL, p)
 					}
-				case "google_chat":
-					if p["text"] == nil {
-						t.Fatal(p)
-					}
 				case "whatsapp":
 					if r.Header.Get("Authorization") != "Bearer secret-token" || p["type"] != "template" || p["messaging_product"] != "whatsapp" || p["to"] != c.Destination {
 						t.Fatal(p)
@@ -131,12 +127,6 @@ func TestChannelRejectsInvalidConfiguration(t *testing.T) {
 		{"empty slack segment", "slack", func(t *testing.T, c *Channel) { t.Setenv(c.EndpointEnv, "https://hooks.slack.com/services/T//token") }},
 		{"foreign discord", "discord", func(t *testing.T, c *Channel) { t.Setenv(c.EndpointEnv, "https://evil.example/api/webhooks/id/token") }},
 		{"empty discord segment", "discord", func(t *testing.T, c *Channel) { t.Setenv(c.EndpointEnv, "https://discord.com/api/webhooks//token") }},
-		{"foreign google", "google_chat", func(t *testing.T, c *Channel) {
-			t.Setenv(c.EndpointEnv, "https://evil.example/v1/spaces/a/messages?key=a&token=b")
-		}},
-		{"missing google token", "google_chat", func(t *testing.T, c *Channel) {
-			t.Setenv(c.EndpointEnv, "https://chat.googleapis.com/v1/spaces/a/messages?key=a")
-		}},
 		{"foreign teams", "teams", func(t *testing.T, c *Channel) { t.Setenv(c.EndpointEnv, "https://evil.example/invoke?sig=a") }},
 		{"telegram endpoint", "telegram", func(t *testing.T, c *Channel) { c.EndpointEnv = "OTHER" }},
 		{"telegram token", "telegram", func(t *testing.T, c *Channel) { t.Setenv(c.TokenEnv, "123:foo/path") }},

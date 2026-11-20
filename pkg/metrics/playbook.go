@@ -76,7 +76,7 @@ func playbookOperationLabel(operation string) string {
 
 func playbookProviderLabel(provider string) string {
 	switch name := strings.ToLower(strings.TrimSpace(provider)); name {
-	case "codex", "openai", "harness", "claude", "anthropic", "deepseek", "azure", "bedrock", "sagemaker", "groq", "gemini", "ollama", "custom", "rule-based", "noop":
+	case "codex", "openai", "harness", "claude", "anthropic", "deepseek", "azure", "bedrock", "sagemaker", "groq", "ollama", "custom", "rule-based", "noop":
 		return name
 	default:
 		return unknownLabel

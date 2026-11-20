@@ -60,25 +60,25 @@ const (
 )
 
 type StatusSettings struct {
-	APITokenRequired         bool     `json:"api_token_required"`
-	AllowedOrigins           []string `json:"allowed_origins,omitempty"`
-	MaxRequestBytes          int64    `json:"max_request_bytes"`
-	MaxResponseBytes         int64    `json:"max_response_bytes"`
-	RequestsPerMinute        int      `json:"requests_per_minute"`
-	RequestBurst             int      `json:"request_burst"`
-	ReadinessManaged         bool     `json:"readiness_managed"`
-	OpenAIProvider           string   `json:"openai_provider,omitempty"`
-	OpenAIMode               string   `json:"openai_mode,omitempty"`
-	OpenAIWireAPI            string   `json:"openai_wire_api,omitempty"`
-	OpenAIModel              string   `json:"openai_model,omitempty"`
-	OpenAIAPIEndpointDisplay string   `json:"openai_api_endpoint_display,omitempty"`
-	ScanInterval             string   `json:"scan_interval,omitempty"`
-	ScanJitter               string   `json:"scan_jitter,omitempty"`
-	EventDrivenScanning      bool     `json:"event_driven_scanning"`
-	EventQueueCapacity       int      `json:"event_queue_capacity"`
-	EventDebounce            string   `json:"event_debounce,omitempty"`
-	CacheEnabled             bool     `json:"cache_enabled"`
-	CacheConfigured          bool     `json:"cache_configured"`
+	APITokenRequired          bool     `json:"api_token_required"`
+	AllowedOrigins            []string `json:"allowed_origins,omitempty"`
+	MaxRequestBytes           int64    `json:"max_request_bytes"`
+	MaxResponseBytes          int64    `json:"max_response_bytes"`
+	RequestsPerMinute         int      `json:"requests_per_minute"`
+	RequestBurst              int      `json:"request_burst"`
+	ReadinessManaged          bool     `json:"readiness_managed"`
+	OpenAIProvider            string   `json:"openai_provider,omitempty"`
+	OpenAIMode                string   `json:"openai_mode,omitempty"`
+	OpenAIWireAPI             string   `json:"openai_wire_api,omitempty"`
+	OpenAIModel               string   `json:"openai_model,omitempty"`
+	OpenAIAPIEndpointDisplay  string   `json:"openai_api_endpoint_display,omitempty"`
+	ScanInterval              string   `json:"scan_interval,omitempty"`
+	ScanJitter                string   `json:"scan_jitter,omitempty"`
+	EventDrivenScanning       bool     `json:"event_driven_scanning"`
+	EventQueueCapacity        int      `json:"event_queue_capacity"`
+	EventDebounce             string   `json:"event_debounce,omitempty"`
+	CacheEnabled              bool     `json:"cache_enabled"`
+	CacheConfigured           bool     `json:"cache_configured"`
 	WebhookConfigured         bool     `json:"webhook_configured"`
 	AlertmanagerConfigured    bool     `json:"alertmanager_configured"`
 	AgentSolverEnabled        bool     `json:"agent_solver_enabled"`

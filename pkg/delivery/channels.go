@@ -93,10 +93,6 @@ func (c Channel) credentials() (string, string, error) {
 		q.Set("wait", "true")
 		u.RawQuery = q.Encode()
 		endpoint = u.String()
-	case "google_chat":
-		if host != "chat.googleapis.com" || !strings.HasPrefix(u.Path, "/v1/spaces/") || !strings.HasSuffix(u.Path, "/messages") || u.Query().Get("key") == "" || u.Query().Get("token") == "" {
-			return fail()
-		}
 	case "whatsapp":
 		if host != "graph.facebook.com" || !whatsappEndpoint.MatchString(u.Path) || u.RawQuery != "" || !whatsappDestination.MatchString(c.Destination) || !whatsappTemplate.MatchString(c.Template) || !whatsappLanguage.MatchString(c.Language) {
 			return fail()
@@ -153,8 +149,6 @@ func (s *HTTPSender) SendChannel(ctx context.Context, c Channel, n incident.Noti
 		payload = map[string]any{"content": text, "allowed_mentions": map[string]any{"parse": []string{}}}
 	case "telegram":
 		payload = map[string]any{"chat_id": c.Destination, "text": text, "link_preview_options": map[string]bool{"is_disabled": true}}
-	case "google_chat":
-		payload = map[string]string{"text": text}
 	case "whatsapp":
 		params := []any{}
 		for _, value := range []string{n.Kind, n.IncidentID, n.ID, link} {

@@ -89,7 +89,7 @@ func NewCloudProvider(profile ProviderProfile) (*CloudProvider, error) {
 
 func isCloudProvider(provider string) bool {
 	switch provider {
-	case "azureopenai", "bedrock", "cohere", "gemini", "huggingface", "ibm", "oci", "sagemaker", "vertex":
+	case "azureopenai", "bedrock", "cohere", "huggingface", "ibm", "oci", "sagemaker":
 		return true
 	default:
 		return false
@@ -303,16 +303,6 @@ func (p *CloudProvider) requestPayload(system, user string, structured bool) (in
 			payload["temperature"] = temperature
 		}
 		return payload, "/chat"
-	case "gemini", "vertex":
-		generationConfig := map[string]interface{}{"maxOutputTokens": maxTokens}
-		payload := map[string]interface{}{
-			"contents":         []map[string]interface{}{{"role": "user", "parts": []map[string]string{{"text": user}}}},
-			"generationConfig": generationConfig,
-		}
-		if p.profile.TemperatureSet || temperature != 0 {
-			generationConfig["temperature"] = temperature
-		}
-		return payload, "/models/" + url.PathEscape(model) + ":generateContent"
 	case "huggingface":
 		return map[string]interface{}{"inputs": user, "parameters": map[string]interface{}{"max_new_tokens": maxTokens}}, "/models/" + url.PathEscape(model)
 	default:
@@ -325,8 +315,6 @@ func (p *CloudProvider) applyHeaders(request *http.Request) {
 		switch p.profile.Provider {
 		case "azureopenai":
 			request.Header.Set("api-key", p.profile.APIKey)
-		case "gemini":
-			request.Header.Set("x-goog-api-key", p.profile.APIKey)
 		default:
 			request.Header.Set("Authorization", "Bearer "+p.profile.APIKey)
 		}

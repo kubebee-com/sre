@@ -4,7 +4,7 @@
 
 **Architecture:** Explicit typed notification channels extend the existing durable delivery routes. A separate messaging package verifies platform requests and maps configured account/conversation/user identities to principals. The orchestrator executes typed commands through existing services. Secrets remain environment references.
 
-- [x] Add native Slack, Teams, Discord, Telegram, Google Chat, WhatsApp template and Matrix outbound adapters, with mocked HTTP contract and failure tests.
+- [x] Add native Slack, Teams, Discord, Telegram, WhatsApp template and Matrix outbound adapters, with mocked HTTP contract and failure tests.
 - [x] Extend delivery routes to select typed channels while preserving generic endpoint routes, retries and escalation. Test validation and dispatch selection.
 - [x] Add signed Slack/Discord and secret-authenticated Telegram incoming commands with strict account/conversation/user bindings, bounded parsing and negative authentication tests.
 - [x] Wire callbacks into orchestrator startup and existing approve/cancel/clarification/ack services. Restrict commands to existing versioned transitions; no arbitrary chat-triggered execution.

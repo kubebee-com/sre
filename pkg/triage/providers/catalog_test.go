@@ -7,7 +7,7 @@ import (
 )
 
 func TestCatalogIncludesNamedCloudAdapters(t *testing.T) {
-	for _, name := range []string{"azureopenai", "bedrock", "sagemaker", "gemini", "vertex", "oci", "ibm", "cohere", "huggingface"} {
+	for _, name := range []string{"azureopenai", "bedrock", "sagemaker", "oci", "ibm", "cohere", "huggingface"} {
 		spec, ok := Lookup(name)
 		if !ok || !spec.Cloud || spec.WireProtocol == "" || spec.DocsURL == "" {
 			t.Fatalf("Lookup(%q) = %#v, %v; want documented cloud provider", name, spec, ok)

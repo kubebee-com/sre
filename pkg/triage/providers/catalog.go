@@ -27,7 +27,6 @@ var catalog = map[string]Spec{
 	"cohere":      {Name: "cohere", DisplayName: "Cohere", WireProtocol: "cohere-chat", DocsURL: "https://docs.cohere.com/reference/chat", CredentialEnv: "OPENAI_API_KEY", RequiresEndpoint: true, Cloud: true},
 	"custom":      {Name: "custom", DisplayName: "Custom OpenAI-compatible", WireProtocol: "openai-chat", DocsURL: "https://github.com/openai/openai-openapi", CredentialEnv: "OPENAI_API_KEY", RequiresEndpoint: true},
 	"deepseek":    {Name: "deepseek", DisplayName: "DeepSeek", WireProtocol: "openai-chat", DocsURL: "https://api-docs.deepseek.com/", CredentialEnv: "OPENAI_API_KEY", RequiresEndpoint: false},
-	"gemini":      {Name: "gemini", DisplayName: "Google Gemini", WireProtocol: "gemini-content", DocsURL: "https://ai.google.dev/api/generate-content", CredentialEnv: "OPENAI_API_KEY", RequiresEndpoint: true, Cloud: true},
 	"groq":        {Name: "groq", DisplayName: "Groq", WireProtocol: "openai-chat", DocsURL: "https://console.groq.com/docs/api-reference", CredentialEnv: "OPENAI_API_KEY", RequiresEndpoint: false},
 	"harness":     {Name: "harness", DisplayName: "External CLI harness", WireProtocol: "stdin-stdout", DocsURL: "https://github.com/kubebee-com/sre", RequiresEndpoint: false},
 	"huggingface": {Name: "huggingface", DisplayName: "Hugging Face", WireProtocol: "inference", DocsURL: "https://huggingface.co/docs/api-inference/index", CredentialEnv: "OPENAI_API_KEY", RequiresEndpoint: true, Cloud: true},
@@ -40,7 +39,6 @@ var catalog = map[string]Spec{
 	"openai":      {Name: "openai", DisplayName: "OpenAI", WireProtocol: "openai-chat", DocsURL: "https://platform.openai.com/docs/api-reference/chat", CredentialEnv: "OPENAI_API_KEY", RequiresEndpoint: false},
 	"rule":        {Name: "rule", DisplayName: "Deterministic rule engine", WireProtocol: "local-rules", DocsURL: "https://github.com/kubebee-com/sre", RequiresEndpoint: false},
 	"sagemaker":   {Name: "sagemaker", DisplayName: "Amazon SageMaker", WireProtocol: "sagemaker-invoke", DocsURL: "https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_runtime_InvokeEndpoint.html", CredentialEnv: "AWS workload identity", RequiresEndpoint: true, Cloud: true},
-	"vertex":      {Name: "vertex", DisplayName: "Google Vertex AI", WireProtocol: "gemini-content", DocsURL: "https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference", CredentialEnv: "Google workload identity", RequiresEndpoint: true, Cloud: true},
 }
 
 func Supported() []Spec {
@@ -55,7 +53,7 @@ func Supported() []Spec {
 func Lookup(name string) (Spec, bool) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	canonical := name
-	if aliases := map[string]string{"azure": "azureopenai", "azure-openai": "azureopenai", "aws-bedrock": "bedrock", "cohere": "cohere", "gemini": "gemini", "vertex-ai": "vertex", "hugging-face": "huggingface", "watsonx": "ibm", "oracle": "oci", "aws-sagemaker": "sagemaker"}; aliases[name] != "" {
+	if aliases := map[string]string{"azure": "azureopenai", "azure-openai": "azureopenai", "aws-bedrock": "bedrock", "cohere": "cohere", "hugging-face": "huggingface", "watsonx": "ibm", "oracle": "oci", "aws-sagemaker": "sagemaker"}; aliases[name] != "" {
 		canonical = aliases[name]
 	}
 	spec, ok := catalog[canonical]

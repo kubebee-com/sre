@@ -7,12 +7,12 @@ import (
 type ActionType string
 
 const (
-	ActionRestartPod      ActionType = "RestartPod"
-	ActionDeleteFailedPod ActionType = "DeleteFailedPod"
-	ActionScaleWorkload   ActionType = "ScaleWorkload"
-	ActionRolloutRestart  ActionType = "RolloutRestart"
-	ActionCordonNode      ActionType = "CordonNode"
-	ActionCleanupPods     ActionType = "CleanupPods"
+	ActionRestartPod       ActionType = "RestartPod"
+	ActionDeleteFailedPod  ActionType = "DeleteFailedPod"
+	ActionScaleWorkload    ActionType = "ScaleWorkload"
+	ActionRolloutRestart   ActionType = "RolloutRestart"
+	ActionCordonNode       ActionType = "CordonNode"
+	ActionCleanupPods      ActionType = "CleanupPods"
 	ActionBumpVersion      ActionType = "BumpVersion"
 	ActionUpgradeApp       ActionType = "UpgradeApp"
 	ActionGitOpsPR         ActionType = "GitOpsPR"

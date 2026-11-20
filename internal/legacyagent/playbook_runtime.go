@@ -60,7 +60,7 @@ func startPlaybooks(ctx context.Context, cfg *config.Config, provider triage.Tri
 	}
 	runner := playbookTaskRunner(provider)
 	switch strings.ToLower(strings.TrimSpace(cfg.OpenAIProvider)) {
-	case "claude", "anthropic", "rule", "noop", "bedrock", "aws-bedrock", "sagemaker", "aws-sagemaker", "cohere", "gemini", "huggingface", "ibm", "oci", "vertex":
+	case "claude", "anthropic", "rule", "noop", "bedrock", "aws-bedrock", "sagemaker", "aws-sagemaker", "cohere", "huggingface", "ibm", "oci":
 		runner = nil
 	}
 	service := playbook.NewService(catalog, runner, playbook.ServiceOptions{Settings: playbookSettings(cfg), Secrets: providerSecretValues(cfg), Observer: registry, ProviderName: cfg.OpenAIProvider, Timeout: 30 * time.Second})

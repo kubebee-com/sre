@@ -15,11 +15,11 @@ import (
 func TestCloudProviderUsesProviderWireShapeAndRedacts(t *testing.T) {
 	const secret = "cloud-provider-secret"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1beta/models/gemini-model:generateContent" {
-			t.Errorf("request path = %q, want Gemini generateContent path", r.URL.Path)
+		if r.URL.Path != "/v2/chat" {
+			t.Errorf("request path = %q, want Cohere chat path", r.URL.Path)
 		}
-		if got := r.Header.Get("x-goog-api-key"); got != secret {
-			t.Errorf("x-goog-api-key = %q, want configured key", got)
+		if got := r.Header.Get("Authorization"); got != "Bearer "+secret {
+			t.Errorf("Authorization = %q, want configured bearer key", got)
 		}
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -28,15 +28,15 @@ func TestCloudProviderUsesProviderWireShapeAndRedacts(t *testing.T) {
 		if strings.Contains(string(body), secret) {
 			t.Errorf("request body leaked API key: %s", body)
 		}
-		_, _ = io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"reply password=cloud-provider-secret"}]}}]}`)
+		_, _ = io.WriteString(w, `{"message":{"content":[{"text":"reply password=cloud-provider-secret"}]}}`)
 	}))
 	defer server.Close()
 
 	provider, err := NewCloudProvider(ProviderProfile{
-		Provider:          "gemini",
-		Endpoint:          server.URL + "/v1beta",
+		Provider:          "cohere",
+		Endpoint:          server.URL + "/v2",
 		EndpointAllowlist: []string{server.URL},
-		Model:             "gemini-model",
+		Model:             "command-r-plus",
 		APIKey:            secret,
 		SecretValues:      []string{secret},
 	})
@@ -136,8 +136,8 @@ func TestAzureExplainUsesExistingDiagnosisSystemPrompt(t *testing.T) {
 
 func TestCloudProviderRejectsUnallowlistedEndpoint(t *testing.T) {
 	_, err := NewCloudProvider(ProviderProfile{
-		Provider: "vertex",
-		Endpoint: "https://vertex.example.test/v1",
+		Provider: "oci",
+		Endpoint: "https://oci.example.test/v1",
 		Model:    "model",
 	})
 	if !errors.Is(err, ErrEndpointNotAllowed) {
@@ -155,21 +155,17 @@ func TestNewCloudProviderEnforcesProviderWireMatrix(t *testing.T) {
 		{name: "azure chat", provider: "azureopenai", wireAPI: WireAPIChat},
 		{name: "bedrock chat", provider: "bedrock", wireAPI: WireAPIChat},
 		{name: "cohere chat", provider: "cohere", wireAPI: WireAPIChat},
-		{name: "gemini chat", provider: "gemini", wireAPI: WireAPIChat},
 		{name: "huggingface chat", provider: "huggingface", wireAPI: WireAPIChat},
 		{name: "ibm chat", provider: "ibm", wireAPI: WireAPIChat},
 		{name: "oci chat", provider: "oci", wireAPI: WireAPIChat},
 		{name: "sagemaker chat", provider: "sagemaker", wireAPI: WireAPIChat},
-		{name: "vertex chat", provider: "vertex", wireAPI: WireAPIChat},
 		{name: "azure responses", provider: "azureopenai", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "bedrock responses", provider: "bedrock", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "cohere responses", provider: "cohere", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
-		{name: "gemini responses", provider: "gemini", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "huggingface responses", provider: "huggingface", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "ibm responses", provider: "ibm", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "oci responses", provider: "oci", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "sagemaker responses", provider: "sagemaker", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
-		{name: "vertex responses", provider: "vertex", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "azure omitted wire defaults to chat", provider: "azureopenai"},
 		{name: "non-cloud provider", provider: "openai", wireAPI: WireAPIChat, wantErr: ErrProviderValidation},
 		{name: "unknown provider", provider: "unknown-cloud", wireAPI: WireAPIChat, wantErr: ErrUnknownProvider},
@@ -236,22 +232,18 @@ func TestNewProviderFromProfileWithAWSEnforcesCloudProviderWireMatrix(t *testing
 	}{
 		{name: "azure chat", provider: "azureopenai", wireAPI: WireAPIChat, wantType: "cloud"},
 		{name: "cohere chat", provider: "cohere", wireAPI: WireAPIChat, wantType: "cloud"},
-		{name: "gemini chat", provider: "gemini", wireAPI: WireAPIChat, wantType: "cloud"},
 		{name: "huggingface chat", provider: "huggingface", wireAPI: WireAPIChat, wantType: "cloud"},
 		{name: "ibm chat", provider: "ibm", wireAPI: WireAPIChat, wantType: "cloud"},
 		{name: "oci chat", provider: "oci", wireAPI: WireAPIChat, wantType: "cloud"},
-		{name: "vertex chat", provider: "vertex", wireAPI: WireAPIChat, wantType: "cloud"},
 		{name: "bedrock HTTP chat", provider: "bedrock", wireAPI: WireAPIChat, wantType: "cloud"},
 		{name: "sagemaker HTTP chat", provider: "sagemaker", wireAPI: WireAPIChat, wantType: "cloud"},
 		{name: "bedrock native chat", provider: "bedrock", mode: ProviderModeAWS, wireAPI: WireAPIChat, wantType: "bedrock"},
 		{name: "sagemaker native chat", provider: "sagemaker", mode: ProviderModeAWS, wireAPI: WireAPIChat, wantType: "sagemaker"},
 		{name: "azure responses", provider: "azureopenai", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "cohere responses", provider: "cohere", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
-		{name: "gemini responses", provider: "gemini", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "huggingface responses", provider: "huggingface", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "ibm responses", provider: "ibm", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "oci responses", provider: "oci", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
-		{name: "vertex responses", provider: "vertex", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "bedrock HTTP responses", provider: "bedrock", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "sagemaker HTTP responses", provider: "sagemaker", wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
 		{name: "bedrock native responses", provider: "bedrock", mode: ProviderModeAWS, wireAPI: WireAPIResponses, wantErr: ErrProviderValidation},
