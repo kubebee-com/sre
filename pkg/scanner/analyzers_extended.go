@@ -55,7 +55,7 @@ func (s *ClusterScanner) scanPodLogs(ctx context.Context, namespace string) ([]*
 			if target.restartCount > 0 {
 				tasks = append(tasks,
 					logCheckTask{pod: pod, target: target, previous: true},
-					logCheckTask{pod: pod, target: target, previous: false},
+					logCheckTask{pod: pod, target: target, previous: false, sinceSeconds: activePodLogSinceSeconds},
 				)
 				continue
 			}

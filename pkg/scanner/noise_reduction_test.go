@@ -838,6 +838,9 @@ func (p optionAwareLogPods) GetLogs(name string, opts *corev1.PodLogOptions) *re
 	if opts != nil {
 		req.Param("container", opts.Container)
 		req.Param("previous", strconv.FormatBool(opts.Previous))
+		if opts.SinceSeconds != nil {
+			req.Param("sinceSeconds", strconv.FormatInt(*opts.SinceSeconds, 10))
+		}
 	}
 	return req
 }
@@ -922,5 +925,65 @@ func TestScanPodLogsDowngradesOnlyStaleReadyPreviousErrors(t *testing.T) {
 		if sevByPod[wantHigh] != SeverityHigh {
 			t.Errorf("%s PodLogError severity = %q, want HIGH", wantHigh, sevByPod[wantHigh])
 		}
+	}
+}
+
+func TestHighRestartFallsBackToRunningStartedAtWhenLastTerminatedMissing(t *testing.T) {
+	now := time.Now().UTC()
+	staleRunning := corev1.ContainerStatus{
+		Name:         "kube-vip",
+		Ready:        true,
+		RestartCount: 25,
+		State: corev1.ContainerState{
+			Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(now.Add(-8 * 24 * time.Hour))},
+		},
+		LastTerminationState: corev1.ContainerState{
+			Waiting: &corev1.ContainerStateWaiting{},
+		},
+	}
+	if got := classifyHighRestartSeverity(staleRunning, now); got != SeverityMedium {
+		t.Fatalf("stale running container with empty LastTerminationState.Terminated = %q, want MEDIUM", got)
+	}
+
+	recentRunning := staleRunning
+	recentRunning.State.Running = &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(now.Add(-2 * time.Hour))}
+	if got := classifyHighRestartSeverity(recentRunning, now); got != SeverityHigh {
+		t.Fatalf("recently restarted container = %q, want HIGH", got)
+	}
+}
+
+func TestScanPodLogsCurrentUsesSinceSecondsEvenWithRestarts(t *testing.T) {
+	now := time.Now().UTC()
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "longhorn-csi-plugin-test", Namespace: "longhorn-system"},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "longhorn-liveness-probe",
+				Ready:        true,
+				RestartCount: 7,
+				State: corev1.ContainerState{
+					Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(now.Add(-30 * 24 * time.Hour))},
+				},
+			}},
+		},
+	}
+	var currentSinceSeconds string
+	base, _ := url.Parse("http://logs.invalid")
+	client := optionAwareLogClient{
+		Interface: fake.NewSimpleClientset(pod),
+		base:      base,
+		httpClient: &http.Client{Transport: coverageRoundTripper(func(r *http.Request) (*http.Response, error) {
+			if r.URL.Query().Get("previous") != "true" {
+				currentSinceSeconds = r.URL.Query().Get("sinceSeconds")
+			}
+			return &http.Response{StatusCode: 200, Header: make(http.Header), Body: &coverageStringBody{strings.NewReader("all healthy\n")}}, nil
+		})},
+	}
+	if _, err := NewClusterScanner(client).scanPodLogs(context.Background(), "longhorn-system"); err != nil {
+		t.Fatalf("scanPodLogs() error = %v", err)
+	}
+	if currentSinceSeconds == "" || currentSinceSeconds == "0" {
+		t.Fatalf("expected non-zero sinceSeconds on current container logs with RestartCount>0, got %q", currentSinceSeconds)
 	}
 }

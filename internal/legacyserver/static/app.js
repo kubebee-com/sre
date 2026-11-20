@@ -3,6 +3,7 @@
 let currentTab = 'anomalies';
 let activeIssues = [];
 let cleanablePods = [];
+let agentSolverState = { enabled: false, defaultHarness: 'codex', harnesses: ['codex', 'agy'], runtimeClass: 'gvisor', mode: 'k8s-job' };
 const API_TOKEN_STORAGE_KEY = 'sre-agent-api-token';
 const THEME_STORAGE_KEY = 'sre-dashboard-theme';
 const THEME_VALUES = ['system', 'light', 'dark'];
@@ -91,6 +92,9 @@ function handleDashboardClick(event) {
     }
     case 'ask-ai':
       askAIAboutIssue(target.dataset.issueId);
+      break;
+    case 'solve-issue':
+      solveIssueWithAgent(target.dataset.issueId, target);
       break;
     case 'clean-pod':
       cleanSinglePod(target.dataset.namespace, target.dataset.podName);
@@ -371,6 +375,13 @@ function updateRuntimeSettings(data) {
   setDashboardText('settings-cache', cacheEnabled === true ? 'Enabled' : cacheEnabled === false ? 'Disabled' : undefined);
   const webhookConfigured = settings.webhook_configured ?? data.webhook_configured;
   setDashboardText('settings-webhook-status', webhookConfigured === true ? 'Configured' : webhookConfigured === false ? 'Not configured' : undefined);
+  agentSolverState = {
+    enabled: Boolean(settings.agent_solver_enabled),
+    defaultHarness: settings.agent_solver_default_harness || 'codex',
+    harnesses: Array.isArray(settings.agent_solver_harnesses) && settings.agent_solver_harnesses.length ? settings.agent_solver_harnesses : ['codex', 'agy'],
+    runtimeClass: settings.agent_solver_runtime_class || 'gvisor',
+    mode: settings.agent_solver_mode || 'k8s-job'
+  };
 }
 
 function parsePrometheusMetrics(text) {
@@ -495,11 +506,19 @@ async function loadProposals() {
         </div>
 
         <div class="p-3 bg-[#0d1117] rounded-md border border-[#30363d] space-y-2">
-          <div class="flex items-center justify-between text-xs">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
             <span class="text-gray-400 font-semibold">Action Plan (${escapeHtml(p.diagnosis.action_type)}):</span>
-            <span class="text-gray-500">Confidence: ${(p.diagnosis.confidence_score * 100).toFixed(0)}%</span>
+            <div class="flex items-center gap-2">
+              ${p.diagnosis.agent_harness ? `<span class="px-2 py-0.5 rounded bg-purple-600/30 text-purple-300 font-mono">agent:${escapeHtml(p.diagnosis.agent_harness)}</span>` : ''}
+              ${p.diagnosis.sandbox_runtime ? `<span class="px-2 py-0.5 rounded bg-sky-600/30 text-sky-300 font-mono">sandbox:${escapeHtml(p.diagnosis.sandbox_runtime)}</span>` : ''}
+              <span class="text-gray-500">Confidence: ${(p.diagnosis.confidence_score * 100).toFixed(0)}%</span>
+            </div>
           </div>
-          <div class="text-xs text-emerald-400 font-mono bg-black/40 p-2 rounded">${escapeHtml(p.diagnosis.proposed_command)}</div>
+          ${p.diagnosis.remediation_plan ? `<div class="text-xs text-gray-300 whitespace-pre-wrap">${escapeHtml(p.diagnosis.remediation_plan)}</div>` : ''}
+          <div class="text-xs text-emerald-400 font-mono bg-black/40 p-2 rounded whitespace-pre-wrap">${escapeHtml(Array.isArray(p.diagnosis.proposed_commands) && p.diagnosis.proposed_commands.length ? p.diagnosis.proposed_commands.join('\n') : p.diagnosis.proposed_command)}</div>
+          ${p.diagnosis.gitops_patch ? `<details class="text-xs text-gray-300"><summary class="cursor-pointer text-amber-300 font-semibold">GitOps Patch Preview</summary><pre class="mt-1 p-2 rounded bg-black/50 text-gray-200 overflow-x-auto">${escapeHtml(p.diagnosis.gitops_patch)}</pre></details>` : ''}
+          ${p.diagnosis.verification_plan ? `<div class="text-xs text-gray-400"><span class="text-gray-300 font-semibold">Verify:</span> ${escapeHtml(p.diagnosis.verification_plan)}</div>` : ''}
+          ${p.diagnosis.rollback_plan ? `<div class="text-xs text-gray-400"><span class="text-gray-300 font-semibold">Rollback:</span> ${escapeHtml(p.diagnosis.rollback_plan)}</div>` : ''}
         </div>
 
         <div class="flex items-center justify-between pt-2 border-t border-[#30363d]">
@@ -540,6 +559,39 @@ async function approveProposal(id) {
     }
   } catch (err) {
     alert(`Request failed: ${err.message}`);
+  }
+}
+
+async function solveIssueWithAgent(issueID, buttonEl) {
+  const select = document.querySelector(`[data-harness-select="${CSS.escape(issueID)}"]`);
+  const harness = (select && select.value) || agentSolverState.defaultHarness || 'codex';
+  const originalLabel = buttonEl ? buttonEl.textContent : 'Solve with AI';
+  if (buttonEl) {
+    buttonEl.disabled = true;
+    buttonEl.textContent = `Solving (${harness})...`;
+  }
+  try {
+    const res = await apiFetch(`/api/issues/${encodeURIComponent(issueID)}/solve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ harness })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(`AI Agent Solver error: ${data.error || res.statusText}`);
+      return;
+    }
+    alert(`AI agent (${harness}) created proposal ${data.id}. Review and Approve/Reject in Approvals.`);
+    switchTab('approvals');
+    loadProposals();
+    loadStatus();
+  } catch (err) {
+    alert(`AI Agent Solver request failed: ${err.message}`);
+  } finally {
+    if (buttonEl) {
+      buttonEl.disabled = false;
+      buttonEl.textContent = originalLabel;
+    }
   }
 }
 
@@ -674,6 +726,10 @@ function applyAnomalyFilters() {
           foldedBadge +
         '</button>' +
         '<div class="issue-row-actions">' + logButton +
+          '<select class="px-1.5 py-1 bg-gray-900 border border-gray-700 text-gray-200 rounded text-xs font-mono" data-harness-select="' + issueID + '" aria-label="AI agent harness">' +
+            agentSolverState.harnesses.map(h => '<option value="' + escapeHtml(h) + '"' + (h === agentSolverState.defaultHarness ? ' selected' : '') + '>' + escapeHtml(h) + '</option>').join('') +
+          '</select>' +
+          '<button type="button" data-action="solve-issue" data-issue-id="' + issueID + '" class="px-2 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/50 rounded text-xs">Solve with AI</button>' +
           '<button type="button" data-action="ask-ai" data-issue-id="' + issueID + '" class="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-400 border border-blue-500/50 rounded text-xs">Ask AI</button>' +
         '</div>' +
       '</div>' +

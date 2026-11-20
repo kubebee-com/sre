@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/kubebee-com/sre/pkg/agentharness"
 	"github.com/kubebee-com/sre/pkg/metrics"
 	"github.com/kubebee-com/sre/pkg/notifier"
 	"github.com/kubebee-com/sre/pkg/playbook"
@@ -30,6 +31,7 @@ var staticFS embed.FS
 
 type ServerOptions struct {
 	Playbooks             *playbook.Service
+	AgentSolver           agentharness.Runner
 	APIToken              string
 	RequireAPIToken       bool
 	AllowedOrigins        []string
@@ -77,27 +79,36 @@ type StatusSettings struct {
 	EventDebounce            string   `json:"event_debounce,omitempty"`
 	CacheEnabled             bool     `json:"cache_enabled"`
 	CacheConfigured          bool     `json:"cache_configured"`
-	WebhookConfigured        bool     `json:"webhook_configured"`
-	AlertmanagerConfigured   bool     `json:"alertmanager_configured"`
+	WebhookConfigured         bool     `json:"webhook_configured"`
+	AlertmanagerConfigured    bool     `json:"alertmanager_configured"`
+	AgentSolverEnabled        bool     `json:"agent_solver_enabled"`
+	AgentSolverDefaultHarness string   `json:"agent_solver_default_harness,omitempty"`
+	AgentSolverHarnesses      []string `json:"agent_solver_harnesses,omitempty"`
+	AgentSolverRuntimeClass   string   `json:"agent_solver_runtime_class,omitempty"`
+	AgentSolverMode           string   `json:"agent_solver_mode,omitempty"`
 }
 
 // RuntimeSettings is the sanitized configuration projection supplied by the
 // process owner. Secrets, custom headers, cache keys, and raw endpoint paths
 // are intentionally outside this type.
 type RuntimeSettings struct {
-	OpenAIProvider           string
-	OpenAIMode               string
-	OpenAIWireAPI            string
-	OpenAIModel              string
-	OpenAIAPIEndpointDisplay string
-	ScanInterval             string
-	ScanJitter               string
-	EventDrivenScanning      bool
-	EventQueueCapacity       int
-	EventDebounce            string
-	CacheEnabled             bool
-	CacheConfigured          bool
-	AlertmanagerConfigured   bool
+	OpenAIProvider            string
+	OpenAIMode                string
+	OpenAIWireAPI             string
+	OpenAIModel               string
+	OpenAIAPIEndpointDisplay  string
+	ScanInterval              string
+	ScanJitter                string
+	EventDrivenScanning       bool
+	EventQueueCapacity        int
+	EventDebounce             string
+	CacheEnabled              bool
+	CacheConfigured           bool
+	AlertmanagerConfigured    bool
+	AgentSolverEnabled        bool
+	AgentSolverDefaultHarness string
+	AgentSolverRuntimeClass   string
+	AgentSolverMode           string
 }
 
 type TokenUsageStatus struct {
@@ -125,6 +136,7 @@ type metricsScanner interface {
 
 type Server struct {
 	playbooks             *playbook.Service
+	agentSolver           agentharness.Runner
 	port                  int
 	scanner               Scanner
 	triage                triagepkg.TriageProvider
@@ -326,6 +338,7 @@ func NewServer(
 
 	return &Server{
 		playbooks:             opts.Playbooks,
+		agentSolver:           opts.AgentSolver,
 		port:                  port,
 		scanner:               scanner,
 		triage:                triage,
@@ -697,6 +710,7 @@ func (s *Server) newHandler() (http.Handler, error) {
 	mux.HandleFunc("/api/metrics/status", s.handleStatus)
 	mux.HandleFunc("/api/issues", s.handleListIssues)
 	mux.HandleFunc("/api/issues/categories", s.handleListIssueCategories)
+	mux.HandleFunc("/api/issues/", s.handleIssueAction)
 	mux.HandleFunc("/api/proposals", s.handleListProposals)
 	mux.HandleFunc("/api/proposals/", s.handleProposalAction)
 	mux.HandleFunc("/api/audit", s.handleAudit)

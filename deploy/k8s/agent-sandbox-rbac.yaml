@@ -1,0 +1,160 @@
+# Least-privilege RBAC & Network Isolation for Kubebee SRE Sandboxed AI Agent Jobs.
+# Phase 1 (Plan / Create Solution): runs with `sre-agent-solver-ro` (read-only cluster access, no Secrets).
+# Phase 2 (Apply / Human-Approved Execution): runs with `sre-agent-solver-exec` (scoped mutations, no Secrets).
+# Both phases run inside ephemeral Jobs with runtimeClassName: gvisor (or kata on KVM nodes).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sre-agent-solver-ro
+  namespace: sre
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sre-agent-solver-exec
+  namespace: sre
+---
+# Allow sre-agent control plane to spawn and inspect ephemeral solver Jobs/ConfigMaps in `sre`.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sre-agent-sandbox-launcher
+  namespace: sre
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sre-agent-sandbox-launcher
+  namespace: sre
+subjects:
+  - kind: ServiceAccount
+    name: sre-agent
+    namespace: sre
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sre-agent-sandbox-launcher
+---
+# Phase 1 (Read-Only): inspect workloads, services, events, logs, and Flux resources; NEVER Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sre-agent-solver-ro
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "endpoints", "events", "nodes", "namespaces", "configmaps", "persistentvolumeclaims", "persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io", "discovery.k8s.io"]
+    resources: ["ingresses", "networkpolicies", "endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io", "kustomize.toolkit.fluxcd.io", "source.toolkit.fluxcd.io"]
+    resources: ["helmreleases", "kustomizations", "gitrepositories"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sre-agent-solver-ro
+subjects:
+  - kind: ServiceAccount
+    name: sre-agent-solver-ro
+    namespace: sre
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sre-agent-solver-ro
+---
+# Phase 2 (Approval-Gated Execution): read cluster + perform bounded workload/job/node remediations; NEVER Secrets or ClusterRoleBindings.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sre-agent-solver-exec
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "endpoints", "events", "nodes", "namespaces", "configmaps", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets", "replicasets"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: ["networking.k8s.io", "discovery.k8s.io"]
+    resources: ["ingresses", "endpointslices"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io", "kustomize.toolkit.fluxcd.io", "source.toolkit.fluxcd.io"]
+    resources: ["helmreleases", "kustomizations", "gitrepositories"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sre-agent-solver-exec
+subjects:
+  - kind: ServiceAccount
+    name: sre-agent-solver-exec
+    namespace: sre
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sre-agent-solver-exec
+---
+# Network isolation: block lateral pod-to-pod access & cloud metadata (169.254.169.254).
+# Allow only DNS, Kubernetes API, and HTTPS egress (for LLM API & GitOps remote).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sre-agent-sandbox-egress
+  namespace: sre
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sre-agent-sandbox
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+              - 10.42.0.0/16

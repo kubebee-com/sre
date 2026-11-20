@@ -68,6 +68,20 @@ type Config struct {
 	OpenAIProxyURL             string
 	OpenAIHeaders              []string
 	HarnessCommand             string
+	AgentSolverEnabled         bool
+	AgentSolverHarness         string
+	AgentSolverMode            string
+	AgentSolverRuntimeClass    string
+	AgentSolverImage           string
+	AgentSolverNamespace       string
+	AgentSolverPlanSA          string
+	AgentSolverApplySA         string
+	AgentSolverOpenAISecret    string
+	AgentSolverGitOpsRepo      string
+	AgentSolverGitOpsSecret    string
+	AgentSolverTimeout         time.Duration
+	AgentSolverCodexBin        string
+	AgentSolverAgyBin          string
 	WebhookURL                 string
 	AlertmanagerURL            string
 	AlertmanagerMinSeverity    string
@@ -227,6 +241,22 @@ func LoadConfigArgs(args []string) *Config {
 	flags.Func("openai-headers", "Custom provider request headers in key:value form; repeat or comma-separate values", appendHeaders)
 	flags.Func("custom-headers", "Alias for --openai-headers", appendHeaders)
 	flags.StringVar(&cfg.HarnessCommand, "harness-command", getEnv("HARNESS_COMMAND", ""), "Command path for agent harness CLI")
+	cfg.AgentSolverEnabled = getEnvBool("SRE_AGENT_SOLVER_ENABLED", false)
+	flags.BoolVar(&cfg.AgentSolverEnabled, "agent-solver-enabled", cfg.AgentSolverEnabled, "Enable sandboxed AI agent harness (codex/agy) for solution creation and approval-gated execution")
+	flags.StringVar(&cfg.AgentSolverHarness, "agent-solver-harness", getEnv("SRE_AGENT_SOLVER_HARNESS", "codex"), "Default AI agent harness CLI: codex (default) or agy")
+	flags.StringVar(&cfg.AgentSolverMode, "agent-solver-mode", getEnv("SRE_AGENT_SOLVER_MODE", "k8s-job"), "AI agent sandbox execution mode: k8s-job or local")
+	flags.StringVar(&cfg.AgentSolverRuntimeClass, "agent-solver-runtime-class", getEnv("SRE_AGENT_SOLVER_RUNTIME_CLASS", "gvisor"), "Kubernetes RuntimeClassName for sandboxed agent Jobs (e.g. gvisor, kata, or empty for hardened pod)")
+	flags.StringVar(&cfg.AgentSolverImage, "agent-solver-image", getEnv("SRE_AGENT_SOLVER_IMAGE", "ghcr.io/kubebee-com/sre-agent-sandbox:latest"), "Container image containing codex/agy CLI and kubectl/git for sandboxed agent Jobs")
+	flags.StringVar(&cfg.AgentSolverNamespace, "agent-solver-namespace", getEnv("SRE_AGENT_SOLVER_NAMESPACE", "sre"), "Kubernetes namespace where ephemeral agent solver Jobs run")
+	flags.StringVar(&cfg.AgentSolverPlanSA, "agent-solver-plan-sa", getEnv("SRE_AGENT_SOLVER_PLAN_SA", "sre-agent-solver-ro"), "Read-only ServiceAccount for Phase 1 agent solution creation Jobs")
+	flags.StringVar(&cfg.AgentSolverApplySA, "agent-solver-apply-sa", getEnv("SRE_AGENT_SOLVER_APPLY_SA", "sre-agent-solver-exec"), "Execution ServiceAccount for Phase 2 human-approved remediation Jobs")
+	flags.StringVar(&cfg.AgentSolverOpenAISecret, "agent-solver-openai-secret", getEnv("SRE_AGENT_SOLVER_OPENAI_SECRET", "sre-openai-secrets"), "Kubernetes Secret containing OPENAI_API_KEY for agent solver Jobs")
+	flags.StringVar(&cfg.AgentSolverGitOpsRepo, "agent-solver-gitops-repo", getEnv("SRE_AGENT_SOLVER_GITOPS_REPO", ""), "Optional GitOps repository URL for agent-generated PRs/patches")
+	flags.StringVar(&cfg.AgentSolverGitOpsSecret, "agent-solver-gitops-secret", getEnv("SRE_AGENT_SOLVER_GITOPS_SECRET", ""), "Optional Kubernetes Secret containing GITOPS_TOKEN mounted only in approved apply Jobs")
+	cfg.AgentSolverTimeout = getEnvDuration("SRE_AGENT_SOLVER_TIMEOUT", 10*time.Minute)
+	flags.DurationVar(&cfg.AgentSolverTimeout, "agent-solver-timeout", cfg.AgentSolverTimeout, "Maximum runtime per sandboxed AI agent Job")
+	flags.StringVar(&cfg.AgentSolverCodexBin, "agent-solver-codex-bin", getEnv("SRE_AGENT_SOLVER_CODEX_BIN", "codex"), "Codex CLI binary name or path")
+	flags.StringVar(&cfg.AgentSolverAgyBin, "agent-solver-agy-bin", getEnv("SRE_AGENT_SOLVER_AGY_BIN", "agy"), "agy CLI binary name or path")
 	flags.StringVar(&cfg.WebhookURL, "webhook-url", getEnv("WEBHOOK_URL", ""), "Webhook URL for notifications (Slack/Discord)")
 	flags.StringVar(&cfg.AlertmanagerURL, "alertmanager-url", getEnv("SRE_ALERTMANAGER_URL", ""), "Alertmanager base URL for folded serious issue alerts")
 	flags.StringVar(&cfg.AlertmanagerMinSeverity, "alertmanager-min-severity", getEnv("SRE_ALERTMANAGER_MIN_SEVERITY", "HIGH"), "Minimum issue severity forwarded to Alertmanager (CRITICAL, HIGH, MEDIUM, LOW)")

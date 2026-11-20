@@ -436,7 +436,7 @@ func validSeverity(severity scanner.Severity) bool {
 func validAction(action ActionType) bool {
 	switch action {
 	case ActionRestartPod, ActionDeleteFailedPod, ActionScaleWorkload, ActionRolloutRestart,
-		ActionCordonNode, ActionCleanupPods, ActionBumpVersion, ActionUpgradeApp, ActionGitOpsPR, ActionManual:
+		ActionCordonNode, ActionCleanupPods, ActionBumpVersion, ActionUpgradeApp, ActionGitOpsPR, ActionAgentRemediation, ActionManual:
 		return true
 	default:
 		return false

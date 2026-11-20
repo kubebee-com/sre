@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/kubebee-com/sre/pkg/agentharness"
 	"github.com/kubebee-com/sre/pkg/buildinfo"
 	"github.com/kubebee-com/sre/pkg/falco"
 	"github.com/kubebee-com/sre/pkg/remediation"
@@ -244,9 +245,27 @@ func (s *Server) statusSettings() StatusSettings {
 		EventDrivenScanning:      s.runtime.EventDrivenScanning,
 		EventQueueCapacity:       s.runtime.EventQueueCapacity,
 		EventDebounce:            s.runtime.EventDebounce,
-		CacheEnabled:             s.runtime.CacheEnabled,
-		CacheConfigured:          s.runtime.CacheConfigured,
-		AlertmanagerConfigured:   s.runtime.AlertmanagerConfigured,
+		CacheEnabled:              s.runtime.CacheEnabled,
+		CacheConfigured:           s.runtime.CacheConfigured,
+		AlertmanagerConfigured:    s.runtime.AlertmanagerConfigured,
+		AgentSolverEnabled:        s.agentSolver != nil || s.runtime.AgentSolverEnabled,
+		AgentSolverDefaultHarness: s.runtime.AgentSolverDefaultHarness,
+		AgentSolverRuntimeClass:   s.runtime.AgentSolverRuntimeClass,
+		AgentSolverMode:           s.runtime.AgentSolverMode,
+	}
+	if s.agentSolver != nil {
+		cfg := s.agentSolver.Config().Normalized()
+		settings.AgentSolverEnabled = true
+		settings.AgentSolverDefaultHarness = string(cfg.DefaultHarness)
+		settings.AgentSolverRuntimeClass = cfg.RuntimeClassName
+		settings.AgentSolverMode = string(cfg.SandboxMode)
+		harnesses := make([]string, 0, len(cfg.AllowedHarnesses))
+		for _, h := range cfg.AllowedHarnesses {
+			harnesses = append(harnesses, string(h))
+		}
+		settings.AgentSolverHarnesses = harnesses
+	} else if settings.AgentSolverEnabled {
+		settings.AgentSolverHarnesses = []string{string(agentharness.HarnessCodex), string(agentharness.HarnessAgy)}
 	}
 	if s.notifier != nil {
 		settings.WebhookConfigured = s.notifier.HasWebhookURL()
@@ -409,6 +428,89 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, events)
+}
+
+func (s *Server) handleIssueAction(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	// Expected: /api/issues/{id}/solve
+	if len(parts) != 4 || parts[3] != "solve" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.agentSolver == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "AI agent solver is not enabled (set SRE_AGENT_SOLVER_ENABLED=true)")
+		return
+	}
+	if s.engine == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "remediation engine unavailable")
+		return
+	}
+	actor := requestActor(s, r)
+	if actor == "" {
+		s.writeError(w, http.StatusUnauthorized, "authenticated actor is required")
+		return
+	}
+
+	var req struct {
+		Harness string `json:"harness"`
+	}
+	if r.ContentLength != 0 {
+		if !requireJSONContentType(w, r) {
+			return
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+	}
+
+	harness, err := s.agentSolver.Config().ResolveHarness(req.Harness)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	issueID := parts[2]
+	issue := s.findActiveIssueByID(issueID)
+	if issue == nil {
+		s.writeError(w, http.StatusNotFound, "issue not found")
+		return
+	}
+
+	solution, err := s.agentSolver.CreateSolution(r.Context(), issue, harness)
+	if err != nil {
+		s.writeError(w, http.StatusBadGateway, s.redactor.SanitizeText(err.Error()))
+		return
+	}
+	diagnosis := solution.ToDiagnosis(issue)
+	proposal, err := s.engine.CreateProposalForActor(issue, diagnosis, actor)
+	if err != nil {
+		s.writeError(w, http.StatusConflict, s.redactor.SanitizeText(err.Error()))
+		return
+	}
+	s.writeJSON(w, http.StatusCreated, s.sanitizeProposalResponse(proposal))
+}
+
+func (s *Server) findActiveIssueByID(id string) *scanner.Issue {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	raw := s.issueSnapshot()
+	for _, issue := range scanner.FoldIssues(raw) {
+		if issue != nil && issue.ID == id {
+			return issue
+		}
+	}
+	for _, issue := range raw {
+		if issue != nil && issue.ID == id {
+			return issue
+		}
+	}
+	return nil
 }
 
 func (s *Server) handleProposalAction(w http.ResponseWriter, r *http.Request) {

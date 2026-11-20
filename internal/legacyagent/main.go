@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	server "github.com/kubebee-com/sre/internal/legacyserver"
+	"github.com/kubebee-com/sre/pkg/agentharness"
 	"github.com/kubebee-com/sre/pkg/buildinfo"
 	"github.com/kubebee-com/sre/pkg/cache"
 	"github.com/kubebee-com/sre/pkg/config"
@@ -322,7 +323,12 @@ func LegacyMain() {
 		verificationOptions.OutcomeObserverTimeout = time.Minute
 	}
 	log.Printf("Startup: Initializing remediation engine...")
-	remediationEngine := remediation.NewEngineWithVerificationOptions(k8sClient, remediation.EngineOptions{Store: proposalStore}, verificationOptions)
+	agentSolver := buildAgentSolver(cfg, k8sClient, redactionSecrets)
+	remediationExecutor := remediation.NewExecutorWithAgent(k8sClient, agentSolver)
+	remediationEngine := remediation.NewEngineWithVerificationOptions(k8sClient, remediation.EngineOptions{
+		Store:    proposalStore,
+		Executor: remediationExecutor,
+	}, verificationOptions)
 	if playbookService != nil {
 		playbookService.SetProposalCreator(remediationEngine)
 	}
@@ -366,20 +372,25 @@ func LegacyMain() {
 		Metrics:               metricsRegistry,
 		Alertmanager:          alertmanagerNotifier,
 		Playbooks:             playbookService,
+		AgentSolver:           agentSolver,
 		Runtime: server.RuntimeSettings{
-			OpenAIProvider:           cfg.OpenAIProvider,
-			OpenAIMode:               cfg.OpenAIMode,
-			OpenAIWireAPI:            effectiveWireAPI(cfg),
-			OpenAIModel:              cfg.OpenAIModel,
-			OpenAIAPIEndpointDisplay: runtimeEndpointDisplay(cfg.OpenAIAPIEndpoint),
-			ScanInterval:             cfg.ScanInterval.String(),
-			ScanJitter:               cfg.ScanJitter.String(),
-			EventDrivenScanning:      cfg.EventDrivenScanning,
-			EventQueueCapacity:       cfg.EventQueueCapacity,
-			EventDebounce:            cfg.EventDebounce.String(),
-			CacheEnabled:             strings.TrimSpace(cfg.CacheDir) != "" && strings.TrimSpace(cfg.CacheEncryptionKey) != "",
-			CacheConfigured:          strings.TrimSpace(cfg.CacheDir) != "",
-			AlertmanagerConfigured:   alertmanagerNotifier != nil && alertmanagerNotifier.Enabled(),
+			OpenAIProvider:            cfg.OpenAIProvider,
+			OpenAIMode:                cfg.OpenAIMode,
+			OpenAIWireAPI:             effectiveWireAPI(cfg),
+			OpenAIModel:               cfg.OpenAIModel,
+			OpenAIAPIEndpointDisplay:  runtimeEndpointDisplay(cfg.OpenAIAPIEndpoint),
+			ScanInterval:              cfg.ScanInterval.String(),
+			ScanJitter:                cfg.ScanJitter.String(),
+			EventDrivenScanning:       cfg.EventDrivenScanning,
+			EventQueueCapacity:        cfg.EventQueueCapacity,
+			EventDebounce:             cfg.EventDebounce.String(),
+			CacheEnabled:              strings.TrimSpace(cfg.CacheDir) != "" && strings.TrimSpace(cfg.CacheEncryptionKey) != "",
+			CacheConfigured:           strings.TrimSpace(cfg.CacheDir) != "",
+			AlertmanagerConfigured:    alertmanagerNotifier != nil && alertmanagerNotifier.Enabled(),
+			AgentSolverEnabled:        agentSolver != nil,
+			AgentSolverDefaultHarness: cfg.AgentSolverHarness,
+			AgentSolverRuntimeClass:   cfg.AgentSolverRuntimeClass,
+			AgentSolverMode:           cfg.AgentSolverMode,
 		},
 	})
 
@@ -476,6 +487,47 @@ func LegacyMain() {
 		_ = scanHistory.Close()
 	}
 	log.Println("Kubebee SRE Agent stopped cleanly.")
+}
+
+func buildAgentSolver(cfg *config.Config, k8sClient kubernetes.Interface, secretValues []string) agentharness.Runner {
+	if cfg == nil || !cfg.AgentSolverEnabled {
+		return nil
+	}
+	solverCfg := agentharness.Config{
+		Enabled:             true,
+		DefaultHarness:      agentharness.HarnessKind(cfg.AgentSolverHarness),
+		SandboxMode:         agentharness.SandboxMode(cfg.AgentSolverMode),
+		Namespace:           cfg.AgentSolverNamespace,
+		Image:               cfg.AgentSolverImage,
+		RuntimeClassName:    cfg.AgentSolverRuntimeClass,
+		PlanServiceAccount:  cfg.AgentSolverPlanSA,
+		ApplyServiceAccount: cfg.AgentSolverApplySA,
+		OpenAISecretName:    cfg.AgentSolverOpenAISecret,
+		GitOpsRepoURL:       cfg.AgentSolverGitOpsRepo,
+		GitOpsSecretName:    cfg.AgentSolverGitOpsSecret,
+		Timeout:             cfg.AgentSolverTimeout,
+		CodexBinary:         cfg.AgentSolverCodexBin,
+		AgyBinary:           cfg.AgentSolverAgyBin,
+		Model:               cfg.OpenAIModel,
+		ReasoningEffort:     cfg.OpenAIReasoningEffort,
+		APIEndpoint:         cfg.OpenAIAPIEndpoint,
+		SecretValues:        secretValues,
+	}.Normalized()
+	if err := solverCfg.Validate(); err != nil {
+		log.Printf("Warning: Agent solver disabled due to invalid config: %s", sanitizeLog(cfg, err.Error()))
+		return nil
+	}
+	switch solverCfg.SandboxMode {
+	case agentharness.SandboxModeLocal:
+		log.Printf("Startup: Agent solver enabled (mode=local, default_harness=%s)", solverCfg.DefaultHarness)
+		return agentharness.NewLocalRunner(solverCfg)
+	case agentharness.SandboxModeK8sJob:
+		log.Printf("Startup: Agent solver enabled (mode=k8s-job, default_harness=%s, runtime_class=%s, namespace=%s)",
+			solverCfg.DefaultHarness, solverCfg.RuntimeClassName, solverCfg.Namespace)
+		return agentharness.NewK8sJobRunner(k8sClient, solverCfg)
+	default:
+		return nil
+	}
 }
 
 func hasVersionFlag(args []string) bool {

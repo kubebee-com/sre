@@ -9,19 +9,26 @@ import (
 
 // SanitizedDiagnosis is the projection safe for proposals, APIs, and notifications.
 type SanitizedDiagnosis struct {
-	IssueID         string                    `json:"issue_id"`
-	Summary         string                    `json:"summary"`
-	RootCause       string                    `json:"root_cause"`
-	Severity        scanner.Severity          `json:"severity"`
-	RemediationPlan string                    `json:"remediation_plan"`
-	ActionType      ActionType                `json:"action_type"`
-	ProposedCommand string                    `json:"proposed_command"`
-	TargetImage     string                    `json:"target_image,omitempty"`
-	TargetVersion   string                    `json:"target_version,omitempty"`
-	TargetReplicas  *int32                    `json:"target_replicas,omitempty"`
-	ConfidenceScore float64                   `json:"confidence_score"`
-	ProviderName    string                    `json:"provider_name"`
-	Report          sanitizer.RedactionReport `json:"-"`
+	IssueID          string                    `json:"issue_id"`
+	Summary          string                    `json:"summary"`
+	RootCause        string                    `json:"root_cause"`
+	Severity         scanner.Severity          `json:"severity"`
+	RemediationPlan  string                    `json:"remediation_plan"`
+	ActionType       ActionType                `json:"action_type"`
+	ProposedCommand  string                    `json:"proposed_command"`
+	TargetImage      string                    `json:"target_image,omitempty"`
+	TargetVersion    string                    `json:"target_version,omitempty"`
+	TargetReplicas   *int32                    `json:"target_replicas,omitempty"`
+	ConfidenceScore  float64                   `json:"confidence_score"`
+	ProviderName     string                    `json:"provider_name"`
+	AgentHarness     string                    `json:"agent_harness,omitempty"`
+	SandboxRuntime   string                    `json:"sandbox_runtime,omitempty"`
+	ProposedCommands []string                  `json:"proposed_commands,omitempty"`
+	GitOpsPatch      string                    `json:"gitops_patch,omitempty"`
+	VerificationPlan string                    `json:"verification_plan,omitempty"`
+	RollbackPlan     string                    `json:"rollback_plan,omitempty"`
+	AgentJobName     string                    `json:"agent_job_name,omitempty"`
+	Report           sanitizer.RedactionReport `json:"-"`
 }
 
 // Sanitized returns a redacted copy of a diagnosis without changing the source.
@@ -51,6 +58,18 @@ func (d *Diagnosis) SanitizedWithRedactor(redactor *sanitizer.Redactor) *Sanitiz
 	result.TargetImage = sanitizeDiagnosisField(redactor, d.TargetImage, "target_image", &result.Report)
 	result.TargetVersion = sanitizeDiagnosisField(redactor, d.TargetVersion, "target_version", &result.Report)
 	result.ProviderName = sanitizeDiagnosisField(redactor, d.ProviderName, "provider_name", &result.Report)
+	result.AgentHarness = sanitizeDiagnosisField(redactor, d.AgentHarness, "agent_harness", &result.Report)
+	result.SandboxRuntime = sanitizeDiagnosisField(redactor, d.SandboxRuntime, "sandbox_runtime", &result.Report)
+	if len(d.ProposedCommands) > 0 {
+		result.ProposedCommands = make([]string, len(d.ProposedCommands))
+		for i, cmd := range d.ProposedCommands {
+			result.ProposedCommands[i] = sanitizeDiagnosisField(redactor, cmd, "proposed_commands", &result.Report)
+		}
+	}
+	result.GitOpsPatch = sanitizeDiagnosisField(redactor, d.GitOpsPatch, "gitops_patch", &result.Report)
+	result.VerificationPlan = sanitizeDiagnosisField(redactor, d.VerificationPlan, "verification_plan", &result.Report)
+	result.RollbackPlan = sanitizeDiagnosisField(redactor, d.RollbackPlan, "rollback_plan", &result.Report)
+	result.AgentJobName = sanitizeDiagnosisField(redactor, d.AgentJobName, "agent_job_name", &result.Report)
 	return result
 }
 
@@ -105,9 +124,16 @@ func (d *SanitizedDiagnosis) AsDiagnosis() *Diagnosis {
 		ProposedCommand: d.ProposedCommand,
 		TargetImage:     d.TargetImage,
 		TargetVersion:   d.TargetVersion,
-		TargetReplicas:  cloneInt32Pointer(d.TargetReplicas),
-		ConfidenceScore: d.ConfidenceScore,
-		ProviderName:    d.ProviderName,
+		TargetReplicas:   cloneInt32Pointer(d.TargetReplicas),
+		ConfidenceScore:  d.ConfidenceScore,
+		ProviderName:     d.ProviderName,
+		AgentHarness:     d.AgentHarness,
+		SandboxRuntime:   d.SandboxRuntime,
+		ProposedCommands: append([]string(nil), d.ProposedCommands...),
+		GitOpsPatch:      d.GitOpsPatch,
+		VerificationPlan: d.VerificationPlan,
+		RollbackPlan:     d.RollbackPlan,
+		AgentJobName:     d.AgentJobName,
 	}
 }
 

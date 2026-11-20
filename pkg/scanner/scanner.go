@@ -1450,10 +1450,17 @@ func makeID(namespace, kind, name, reason string) string {
 // ready containers to MEDIUM so old restart counters remain visible without
 // generating continuous HIGH Alertmanager pages.
 func classifyHighRestartSeverity(cs corev1.ContainerStatus, now time.Time) Severity {
-	if cs.Ready && cs.LastTerminationState.Terminated != nil {
-		finished := cs.LastTerminationState.Terminated.FinishedAt.Time
-		if !finished.IsZero() && now.Sub(finished) > 24*time.Hour {
-			return SeverityMedium
+	if cs.Ready {
+		if cs.LastTerminationState.Terminated != nil {
+			finished := cs.LastTerminationState.Terminated.FinishedAt.Time
+			if !finished.IsZero() && now.Sub(finished) > 24*time.Hour {
+				return SeverityMedium
+			}
+		} else if cs.State.Running != nil {
+			started := cs.State.Running.StartedAt.Time
+			if !started.IsZero() && now.Sub(started) > 24*time.Hour {
+				return SeverityMedium
+			}
 		}
 	}
 	return SeverityHigh

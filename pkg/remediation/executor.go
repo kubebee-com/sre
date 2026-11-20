@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kubebee-com/sre/pkg/agentharness"
 	"github.com/kubebee-com/sre/pkg/scanner"
 	"github.com/kubebee-com/sre/pkg/triage"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,11 +31,22 @@ const (
 )
 
 type Executor struct {
-	client kubernetes.Interface
+	client      kubernetes.Interface
+	agentRunner agentharness.Runner
 }
 
 func NewExecutor(client kubernetes.Interface) *Executor {
 	return &Executor{client: client}
+}
+
+func NewExecutorWithAgent(client kubernetes.Interface, runner agentharness.Runner) *Executor {
+	return &Executor{client: client, agentRunner: runner}
+}
+
+func (x *Executor) SetAgentRunner(runner agentharness.Runner) {
+	if x != nil {
+		x.agentRunner = runner
+	}
 }
 
 // Validate performs the read and eligibility checks without mutating the
@@ -137,6 +149,14 @@ func (x *Executor) Validate(ctx context.Context, p *Proposal) error {
 			return nil
 		}
 		return nil
+	case triage.ActionAgentRemediation:
+		if x.agentRunner == nil {
+			return fmt.Errorf("%w: agent solver runner is not enabled", ErrUnsupportedAction)
+		}
+		if strings.TrimSpace(p.Diagnosis.RemediationPlan) == "" && strings.TrimSpace(p.Diagnosis.ProposedCommand) == "" && len(p.Diagnosis.ProposedCommands) == 0 {
+			return fmt.Errorf("%w: agent remediation plan is empty", ErrUnsupportedAction)
+		}
+		return nil
 	case triage.ActionGitOpsPR, triage.ActionManual:
 		return nil
 	default:
@@ -216,7 +236,56 @@ func (x *Executor) Execute(ctx context.Context, p *Proposal) (string, error) {
 	case triage.ActionBumpVersion, triage.ActionUpgradeApp:
 		return x.executeVersionBump(ctx, p)
 
+	case triage.ActionAgentRemediation:
+		if x.agentRunner == nil {
+			return "", fmt.Errorf("%w: agent solver runner is not enabled", ErrUnsupportedAction)
+		}
+		harness, err := agentharness.ParseHarnessKind(p.Diagnosis.AgentHarness)
+		if err != nil {
+			harness = agentharness.DefaultHarness
+		}
+		return x.agentRunner.ApplySolution(ctx, agentharness.ApplyRequest{
+			ProposalID:       p.ID,
+			IssueID:          p.IssueID,
+			Namespace:        p.Namespace,
+			Kind:             p.Kind,
+			Name:             p.Name,
+			ApprovedBy:       p.ApprovedBy,
+			Harness:          harness,
+			Summary:          p.Diagnosis.Summary,
+			RootCause:        p.Diagnosis.RootCause,
+			RemediationPlan:  p.Diagnosis.RemediationPlan,
+			ProposedCommand:  p.Diagnosis.ProposedCommand,
+			ProposedCommands: p.Diagnosis.ProposedCommands,
+			GitOpsPatch:      p.Diagnosis.GitOpsPatch,
+			VerificationPlan: p.Diagnosis.VerificationPlan,
+			RollbackPlan:     p.Diagnosis.RollbackPlan,
+		})
+
 	case triage.ActionGitOpsPR:
+		if x.agentRunner != nil && strings.TrimSpace(p.Diagnosis.AgentHarness) != "" {
+			harness, err := agentharness.ParseHarnessKind(p.Diagnosis.AgentHarness)
+			if err != nil {
+				harness = agentharness.DefaultHarness
+			}
+			return x.agentRunner.ApplySolution(ctx, agentharness.ApplyRequest{
+				ProposalID:       p.ID,
+				IssueID:          p.IssueID,
+				Namespace:        p.Namespace,
+				Kind:             p.Kind,
+				Name:             p.Name,
+				ApprovedBy:       p.ApprovedBy,
+				Harness:          harness,
+				Summary:          p.Diagnosis.Summary,
+				RootCause:        p.Diagnosis.RootCause,
+				RemediationPlan:  p.Diagnosis.RemediationPlan,
+				ProposedCommand:  p.Diagnosis.ProposedCommand,
+				ProposedCommands: p.Diagnosis.ProposedCommands,
+				GitOpsPatch:      p.Diagnosis.GitOpsPatch,
+				VerificationPlan: p.Diagnosis.VerificationPlan,
+				RollbackPlan:     p.Diagnosis.RollbackPlan,
+			})
+		}
 		return fmt.Sprintf("GitOps Remediation Proposal generated: %s", p.Diagnosis.ProposedCommand), nil
 
 	case triage.ActionManual:
@@ -313,6 +382,9 @@ func (x *Executor) Verify(ctx context.Context, p *Proposal) (VerificationResult,
 			return x.verifyPodDeletion(ctx, p), nil
 		}
 		return verifiedResult("version bump action verified"), nil
+
+	case triage.ActionAgentRemediation:
+		return verifiedResult("sandboxed agent remediation completed"), nil
 
 	case triage.ActionGitOpsPR, triage.ActionManual:
 		return VerificationResult{Status: VerificationStatusUnverified}, nil
